@@ -206,8 +206,10 @@
       gap: 16px;
     }
 
+    /* IMPORTANT: fixed height so TradingView widgets are visible */
     .chart-container-embed {
-      min-height: 420px;
+      height: 420px;
+      position: relative;
       border-radius: 14px;
       overflow: hidden;
       border: 1px solid var(--border-soft);
@@ -328,8 +330,7 @@
           </thead>
           <tbody id="recent-trades-body">
             <tr>
-              <td colspan="3" class="text-muted">No trades yet.</td>
-            </tr>
+              <td colspan="3" class="text-muted">No trades yet.</td></tr>
           </tbody>
         </table>
       </div>
