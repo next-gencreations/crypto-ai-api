@@ -1,222 +1,183 @@
-from flask import Flask, jsonify, send_from_directory, request
-import requests
-from datetime import datetime, timedelta, timezonefrom flask import Flask, jsonify, send_from_directory, request
+from __future__ import annotations
+
 import csv
 import os
-import math
-import statistics
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Tuple
+
 import requests
+from flask import Flask, jsonify, request, send_from_directory
+
+# -----------------------------------------------------------------------------
+# App & file paths
+# -----------------------------------------------------------------------------
 
 app = Flask(__name__, static_folder="static")
 
-# Files written by the bot worker
-TRADE_FILE = "data/trades.csv"
-EQUITY_FILE = "data/equity_curve.csv"
-HEARTBEAT_FILE = "data/bot_heartbeat.txt"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# Where we store trades coming from the bot
+TRADE_FILE = os.path.join(DATA_DIR, "trades.csv")
+
+# Optional: future use if you ever want a separate equity log
+EQUITY_FILE = os.path.join(DATA_DIR, "equity_curve.csv")
+
+# Used so the dashboard can show bot "status" (running / idle / stopped)
+HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.txt")
+
+# Starting equity for equity-curve reconstruction
+START_EQUITY_USD = 1000.0
 
 
-# ---------------------------------------------------------
+# Make sure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+# -----------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-
-def parse_iso(ts: str):
-    """Parse ISO8601 string to aware UTC datetime."""
+def parse_iso(ts: str) -> datetime:
+    """
+    Parse an ISO timestamp into a timezone-aware datetime.
+    """
     if not ts:
-        return None
+        return datetime.now(timezone.utc)
+
     try:
-        # handle ...+00:00 and ...Z forms
-        if ts.endswith("Z"):
-            ts = ts.replace("Z", "+00:00")
-        return datetime.fromisoformat(ts).astimezone(timezone.utc)
+        # Python 3.11+ has fromisoformat with offset support
+        dt = datetime.fromisoformat(ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
     except Exception:
-        return None
+        return datetime.now(timezone.utc)
 
 
-def compute_metrics_from_trades(rows):
+def row_exit_time(row: Dict[str, Any]) -> datetime:
     """
-    rows: list of dicts from trades.csv
-    Returns a dict with stats & advanced metrics.
+    Helper to sort rows by exit_time (fallback to entry_time).
     """
-    total = len(rows)
+    ts = row.get("exit_time") or row.get("entry_time") or ""
+    return parse_iso(ts)
+
+
+def compute_equity_and_drawdown(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], float]:
+    """
+    Rebuild equity curve from trade PnL, starting from START_EQUITY_USD.
+    Returns (equity_curve, max_drawdown).
+    """
+    equity = START_EQUITY_USD
+    equity_curve: List[Dict[str, Any]] = []
+
+    # sort by time
+    sorted_rows = sorted(rows, key=row_exit_time)
+
+    peak = equity
+    max_dd = 0.0
+
+    for r in sorted_rows:
+        pnl = float(r.get("pnl_usd", 0.0) or 0.0)
+        t = row_exit_time(r)
+        equity += pnl
+
+        if equity > peak:
+            peak = equity
+
+        drawdown = peak - equity
+        if drawdown > max_dd:
+            max_dd = drawdown
+
+        equity_curve.append(
+            {
+                "time": t.isoformat(),
+                "equity_usd": round(equity, 4),
+            }
+        )
+
+    return equity_curve, max_dd
+
+
+def compute_metrics_from_trades(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Aggregate trades into summary stats and per-market performance.
+    """
+    total_events = len(rows)
     wins = 0
     losses = 0
-    pnl_list = []
-    durations = []
-    per_market = {}
+    total_pnl = 0.0
 
-    # For streaks
-    best_win_streak = 0
-    best_loss_streak = 0
-    current_streak_len = 0
-    current_streak_type = None  # "win" / "loss" / None
+    per_market: Dict[str, Dict[str, Any]] = {}
 
-    # Sort by exit_time for streaks + recent trades
-    def row_exit_time(r):
-        return parse_iso(r.get("exit_time") or r.get("entry_time") or "")
+    sorted_rows = sorted(rows, key=row_exit_time)
 
-    rows_sorted = sorted(rows, key=row_exit_time)
-
-    for r in rows_sorted:
-        pnl = float(r.get("pnl_usd", 0.0))
-        pnl_list.append(pnl)
-
-        dur = r.get("hold_minutes")
-        if dur is not None and dur != "":
-            try:
-                durations.append(float(dur))
-            except Exception:
-                pass
-
-        market = r.get("market", "UNKNOWN")
+    for r in sorted_rows:
+        pnl = float(r.get("pnl_usd", 0.0) or 0.0)
+        total_pnl += pnl
 
         if pnl > 0:
             wins += 1
-            if current_streak_type == "win":
-                current_streak_len += 1
-            else:
-                current_streak_type = "win"
-                current_streak_len = 1
-            best_win_streak = max(best_win_streak, current_streak_len)
         elif pnl < 0:
             losses += 1
-            if current_streak_type == "loss":
-                current_streak_len += 1
-            else:
-                current_streak_type = "loss"
-                current_streak_len = 1
-            best_loss_streak = max(best_loss_streak, current_streak_len)
-        else:
-            current_streak_type = None
-            current_streak_len = 0
 
-        pm = per_market.setdefault(
-            market, {"market": market, "trades": 0, "wins": 0, "pnl": 0.0}
-        )
-        pm["trades"] += 1
-        if pnl > 0:
-            pm["wins"] += 1
-        pm["pnl"] += pnl
-
-    total_pnl = sum(pnl_list) if pnl_list else 0.0
-    win_rate = (wins / total * 100.0) if total > 0 else 0.0
-    avg_pnl = (total_pnl / total) if total > 0 else 0.0
-    avg_dur = (sum(durations) / len(durations)) if durations else None
-
-    # Sharpe ratio (per trade) based on PnL list
-    sharpe = None
-    if len(pnl_list) > 1:
-        mean = statistics.mean(pnl_list)
-        stdev = statistics.stdev(pnl_list)
-        if stdev > 0:
-            sharpe = (mean / stdev) * math.sqrt(len(pnl_list))
-
-    # Current streak info
-    if current_streak_type is None or current_streak_len == 0:
-        current_streak = {"type": "none", "length": 0}
-    else:
-        current_streak = {"type": current_streak_type, "length": current_streak_len}
-
-    # Per-market stats list
-    per_market_list = []
-    best_market = None
-    worst_market = None
-
-    for m, pm in per_market.items():
-        trades = pm["trades"]
-        w = pm["wins"]
-        pnl = pm["pnl"]
-        wr = (w / trades * 100.0) if trades > 0 else 0.0
-        avg_pm = pnl / trades if trades > 0 else 0.0
-        per_market_list.append(
+        market = r.get("market") or "UNKNOWN"
+        bucket = per_market.setdefault(
+            market,
             {
-                "market": m,
-                "trades": trades,
-                "win_rate": wr,
-                "total_pnl_usd": pnl,
-                "avg_pnl_usd": avg_pm,
-            }
+                "market": market,
+                "trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "total_pnl_usd": 0.0,
+            },
         )
-        if (best_market is None) or (pnl > best_market["total_pnl_usd"]):
-            best_market = {
-                "market": m,
-                "total_pnl_usd": pnl,
-                "win_rate": wr,
-                "trades": trades,
-            }
-        if (worst_market is None) or (pnl < worst_market["total_pnl_usd"]):
-            worst_market = {
-                "market": m,
-                "total_pnl_usd": pnl,
-                "win_rate": wr,
-                "trades": trades,
-            }
+
+        bucket["trades"] += 1
+        bucket["total_pnl_usd"] += pnl
+        if pnl > 0:
+            bucket["wins"] += 1
+        elif pnl < 0:
+            bucket["losses"] += 1
+
+    win_rate = (wins / total_events) if total_events else 0.0
+    avg_pnl = (total_pnl / total_events) if total_events else 0.0
+
+    per_market_list: List[Dict[str, Any]] = []
+    for bucket in per_market.values():
+        t = bucket["trades"] or 1
+        bucket["win_rate"] = (bucket["wins"] / t) if t else 0.0
+        bucket["avg_pnl_usd"] = (bucket["total_pnl_usd"] / t) if t else 0.0
+        per_market_list.append(bucket)
 
     return {
-        "total_trades": total,
+        "rows_sorted": sorted_rows,
+        "total_events": total_events,
         "wins": wins,
         "losses": losses,
         "total_pnl_usd": total_pnl,
         "win_rate": win_rate,
         "avg_pnl_usd": avg_pnl,
-        "avg_trade_minutes": avg_dur,
-        "sharpe_ratio": sharpe,
-        "best_market": best_market,
-        "worst_market": worst_market,
         "per_market": per_market_list,
-        "current_streak": current_streak,
-        "best_win_streak": best_win_streak,
-        "best_loss_streak": best_loss_streak,
-        "rows_sorted": rows_sorted,
     }
 
 
-def compute_equity_and_drawdown():
-    equity_curve = []
-    if not os.path.exists(EQUITY_FILE):
-        return equity_curve, None
-
-    with open(EQUITY_FILE, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                t = parse_iso(row.get("time", ""))
-                eq = float(row.get("equity_usd", 0.0))
-                if t:
-                    equity_curve.append({"time": t, "equity": eq})
-            except Exception:
-                continue
-
-    equity_curve = sorted(equity_curve, key=lambda x: x["time"])
-
-    max_dd = None
-    if equity_curve:
-        peak = equity_curve[0]["equity"]
-        max_dd_val = 0.0
-        for point in equity_curve:
-            eq = point["equity"]
-            if eq > peak:
-                peak = eq
-            drawdown = (peak - eq) / peak * 100.0 if peak > 0 else 0.0
-            if drawdown > max_dd_val:
-                max_dd_val = drawdown
-        max_dd = max_dd_val
-
-    return equity_curve, max_dd
-
-
-def get_bot_status():
-    if not os.path.exists(HEARTBEAT_FILE):
-        return {"status": "unknown"}
-
+def get_bot_status() -> Dict[str, Any]:
+    """
+    Very simple status based on a heartbeat timestamp.
+    The worker should update HEARTBEAT_FILE whenever it sends a trade.
+    """
     try:
-        with open(HEARTBEAT_FILE, "r", encoding="utf-8") as f:
-            ts = f.read().strip()
-        hb = parse_iso(ts)
-        if not hb:
+        if not os.path.exists(HEARTBEAT_FILE):
             return {"status": "unknown"}
 
+        with open(HEARTBEAT_FILE, "r", encoding="utf-8") as f:
+            ts = f.read().strip()
+
+        if not ts:
+            return {"status": "unknown"}
+
+        hb = parse_iso(ts)
         now = datetime.now(timezone.utc)
         minutes = (now - hb).total_seconds() / 60.0
 
@@ -236,10 +197,9 @@ def get_bot_status():
         return {"status": "unknown"}
 
 
-# ---------------------------------------------------------
-# Routes
-# ---------------------------------------------------------
-
+# -----------------------------------------------------------------------------
+# Routes: Dashboard, health, data
+# -----------------------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -254,8 +214,8 @@ def health():
 
 @app.route("/data")
 def get_data():
-    # --- Trades / advanced metrics ---
-    trade_rows = []
+    # --- Load trades from CSV ---
+    trade_rows: List[Dict[str, Any]] = []
     if os.path.exists(TRADE_FILE):
         with open(TRADE_FILE, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -263,16 +223,175 @@ def get_data():
                 trade_rows.append(row)
 
     metrics = compute_metrics_from_trades(trade_rows)
-    equity_curve, max_dd = compute_equity_and_drawdown()
+    equity_curve, max_dd = compute_equity_and_drawdown(trade_rows)
     bot_status = get_bot_status()
 
-    # Prepare JSON-friendly versions
-    equity_json = [
-        {"time": p["time"].isoformat(), "equity": p["equity"]} for p in equity_curve
-    ]
-
-    recent_trades = []
-    for r in metrics["rows_sorted"][-20:]:  # last 20 trades
+    # Prepare recent trades (last 20, newest first)
+    recent_trades: List[Dict[str, Any]] = []
+    for r in metrics["rows_sorted"][-20:][::-1]:
         recent_trades.append(
             {
-                "
+                "time": (r.get("exit_time") or r.get("entry_time") or ""),
+                "market": r.get("market", ""),
+                "pnl_usd": float(r.get("pnl_usd", 0.0) or 0.0),
+            }
+        )
+
+    return jsonify(
+        {
+            "total_events": metrics["total_events"],
+            "wins": metrics["wins"],
+            "losses": metrics["losses"],
+            "total_pnl_usd": metrics["total_pnl_usd"],
+            "win_rate": metrics["win_rate"],
+            "avg_pnl_usd": metrics["avg_pnl_usd"],
+            "per_market": metrics["per_market"],
+            "equity_curve": equity_curve,
+            "recent_trades": recent_trades,
+            "bot_status": bot_status,
+            "max_drawdown": max_dd,
+        }
+    )
+
+
+# -----------------------------------------------------------------------------
+# Route: Training events from the bot
+# -----------------------------------------------------------------------------
+
+@app.route("/training-event", methods=["POST"])
+@app.route("/training-events", methods=["POST"])
+def training_event():
+    """
+    Endpoint for the worker bot to POST each closed trade.
+
+    Expects JSON with at least:
+    entry_time, exit_time, hold_minutes, market, entry_price, exit_price,
+    qty, pnl_usd, pnl_pct, take_profit_pct, stop_loss_pct, risk_mode
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    data = request.get_json(force=True, silent=True) or {}
+
+    fieldnames = [
+        "entry_time",
+        "exit_time",
+        "hold_minutes",
+        "market",
+        "entry_price",
+        "exit_price",
+        "qty",
+        "pnl_usd",
+        "pnl_pct",
+        "take_profit_pct",
+        "stop_loss_pct",
+        "risk_mode",
+    ]
+
+    file_exists = os.path.exists(TRADE_FILE)
+
+    with open(TRADE_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+
+        row = {field: str(data.get(field, "")) for field in fieldnames}
+        writer.writerow(row)
+
+    # Update heartbeat so the dashboard knows the bot is alive
+    with open(HEARTBEAT_FILE, "w", encoding="utf-8") as hb:
+        hb.write(datetime.now(timezone.utc).isoformat())
+
+    return jsonify({"status": "ok"})
+
+
+# -----------------------------------------------------------------------------
+# Routes: Candle data (Coinbase + KuCoin) for charts
+# -----------------------------------------------------------------------------
+
+def fetch_coinbase_candles(market: str = "BTC-USD", granularity: int = 300) -> List[Dict[str, Any]]:
+    """
+    Coinbase spot candles.
+
+    granularity (seconds) allowed values typically:
+    60, 300, 900, 3600, 21600, 86400
+    """
+    url = f"https://api.exchange.coinbase.com/products/{market}/candles?granularity={granularity}"
+    r = requests.get(url, timeout=10)
+
+    if r.status_code != 200:
+        return []
+
+    candles = r.json()
+
+    formatted: List[Dict[str, Any]] = []
+    for c in candles:
+        # [ time, low, high, open, close, volume ]
+        formatted.append(
+            {
+                "time": c[0],
+                "low": c[1],
+                "high": c[2],
+                "open": c[3],
+                "close": c[4],
+                "volume": c[5],
+            }
+        )
+    return formatted
+
+
+def fetch_kucoin_candles(market: str = "BTC-USDT", interval: str = "5min") -> List[Dict[str, Any]]:
+    """
+    KuCoin K-line candles.
+
+    interval examples:
+    1min, 5min, 15min, 1hour, 4hour, 1day
+    """
+    url = f"https://api.kucoin.com/api/v1/market/candles?type={interval}&symbol={market}"
+    r = requests.get(url, timeout=10)
+
+    if r.status_code != 200:
+        return []
+
+    candles = r.json().get("data", [])
+
+    formatted: List[Dict[str, Any]] = []
+    for c in candles:
+        # [ time(ms), open, close, high, low, volume, turnover ]
+        formatted.append(
+            {
+                "time": int(c[0]) / 1000,
+                "open": float(c[1]),
+                "close": float(c[2]),
+                "high": float(c[3]),
+                "low": float(c[4]),
+                "volume": float(c[5]),
+            }
+        )
+    return formatted
+
+
+@app.route("/candles")
+def get_candles():
+    """
+    GET /candles?market=BTC-USD&source=coinbase
+    GET /candles?market=BTC-USDT&source=kucoin
+    """
+    market = request.args.get("market", "BTC-USD")
+    source = request.args.get("source", "coinbase").lower()
+
+    if source == "kucoin":
+        # KuCoin uses BTC-USDT style, whereas Coinbase uses BTC-USD.
+        kucoin_market = market.replace("-USD", "-USDT")
+        data = fetch_kucoin_candles(kucoin_market, "5min")
+    else:
+        data = fetch_coinbase_candles(market, 300)
+
+    return jsonify({"market": market, "source": source, "candles": data})
+
+
+# -----------------------------------------------------------------------------
+# Local dev entrypoint (Render uses gunicorn, but this is handy locally)
+# -----------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
