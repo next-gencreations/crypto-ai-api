@@ -1,682 +1,776 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Crypto AI Bot Dashboard</title>
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+<head>
+  <meta charset="UTF-8" />
+  <title>Crypto AI Bot Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Simple dark theme with basic CSS only -->
-    <style>
-      :root {
-        --bg: #050814;
-        --bg-card: #101522;
-        --bg-card-soft: #141b2c;
-        --text-main: #f8fafc;
-        --text-muted: #9ca3af;
-        --accent: #22c55e;
-        --accent-red: #ef4444;
-        --border-soft: #1f2937;
-      }
+  <!-- Simple dark theme -->
+  <style>
+    :root {
+      --bg: #050814;
+      --bg-card: #0f172a;
+      --bg-card-soft: #111827;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent: #22c55e;
+      --accent-soft: rgba(34, 197, 94, 0.12);
+      --accent-red: #f97373;
+      --border-soft: #1f2937;
+    }
 
-      * {
-        box-sizing: border-box;
-      }
+    * {
+      box-sizing: border-box;
+    }
 
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-          sans-serif;
-        background: radial-gradient(circle at top, #111827, #020617);
-        color: var(--text-main);
-      }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top, #111827, #020617);
+      color: var(--text-main);
+    }
 
-      .page {
-        max-width: 1080px;
-        margin: 0 auto;
-        padding: 24px 16px 40px;
-      }
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
 
-      header {
-        margin-bottom: 24px;
-      }
+    header {
+      margin-bottom: 24px;
+    }
 
-      h1 {
-        margin: 0 0 4px;
-        font-size: 28px;
-        font-weight: 700;
-      }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 28px;
+      font-weight: 700;
+    }
 
-      header p {
-        margin: 0;
-        font-size: 13px;
-        color: var(--text-muted);
-      }
+    header p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
 
-      header a {
-        color: #38bdf8;
-        text-decoration: none;
-        margin-left: 4px;
-        margin-right: 4px;
-      }
+    header a {
+      color: #38bdf8;
+      text-decoration: none;
+      margin-left: 4px;
+      margin-right: 4px;
+    }
 
-      .cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-        gap: 12px;
-        margin-bottom: 24px;
-      }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
 
-      .card {
-        background: linear-gradient(145deg, var(--bg-card), #060b17);
-        border-radius: 14px;
-        padding: 14px 16px;
-        border: 1px solid var(--border-soft);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
-      }
+    .card {
+      background: linear-gradient(145deg, var(--bg-card), #060b17);
+      border-radius: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    }
 
-      .card h2 {
-        font-size: 13px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--text-muted);
-        margin: 0 0 8px;
-      }
+    .card h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin: 0 0 8px;
+    }
 
-      .metric-main {
-        font-size: 24px;
-        font-weight: 700;
-        margin-bottom: 4px;
-      }
+    .metric-main {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
 
-      .metric-sub {
-        font-size: 12px;
-        color: var(--text-muted);
-      }
+    .metric-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
 
-      .metric-main.positive {
-        color: var(--accent);
-      }
+    .metric-positive {
+      color: var(--accent);
+    }
 
-      .metric-main.negative {
-        color: var(--accent-red);
-      }
+    .metric-negative {
+      color: var(--accent-red);
+    }
 
-      .section {
-        background: radial-gradient(circle at top left, #111827, #020617);
-        border-radius: 16px;
-        padding: 16px 16px 18px;
-        border: 1px solid #111827;
-        margin-bottom: 18px;
-      }
+    .equity-card {
+      margin-bottom: 24px;
+    }
 
-      .section h2 {
-        margin: 0 0 4px;
-        font-size: 16px;
-      }
+    .equity-card h2 {
+      font-size: 14px;
+      margin: 0 0 8px;
+    }
 
-      .section p {
-        margin: 0 0 12px;
-        font-size: 13px;
-        color: var(--text-muted);
-      }
+    .equity-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
 
-      .section-subtitle {
-        margin-top: 4px;
-        font-size: 13px;
-        color: var(--text-muted);
-      }
+    canvas {
+      width: 100%;
+      height: 260px;
+    }
 
-      .equity-chart-wrapper {
-        position: relative;
-        width: 100%;
-        height: 260px;
-      }
+    .section {
+      margin-bottom: 24px;
+    }
 
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .section-header h2 {
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .section-header span {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th,
+    td {
+      padding: 6px 4px;
+      text-align: left;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.9);
+    }
+
+    th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+    }
+
+    tbody tr:hover {
+      background: rgba(15, 23, 42, 0.75);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: var(--text-muted);
+    }
+
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .pill-running {
+      border-color: rgba(34, 197, 94, 0.5);
+      color: var(--accent);
+    }
+
+    .pill-idle {
+      border-color: rgba(234, 179, 8, 0.4);
+      color: #facc15;
+    }
+
+    .pill-stopped {
+      border-color: rgba(248, 113, 113, 0.5);
+      color: #fca5a5;
+    }
+
+    footer {
+      margin-top: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Candlestick charts section */
+
+    .charts-card {
+      margin-top: 8px;
+    }
+
+    .chart-tabs {
+      display: inline-flex;
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 999px;
+      padding: 2px;
+      border: 1px solid rgba(51, 65, 85, 0.9);
+      margin-bottom: 8px;
+    }
+
+    .chart-tab {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .chart-tab.active {
+      background: rgba(15, 118, 110, 0.8);
+      color: #e5f9ff;
+    }
+
+    .chart-panels {
+      border-radius: 14px;
+      border: 1px solid var(--border-soft);
+      overflow: hidden;
+      background: radial-gradient(circle at top, #020617, #020617);
+    }
+
+    .chart-panel {
+      display: none;
+    }
+
+    .chart-panel.active {
+      display: block;
+    }
+
+    .tv-chart {
+      width: 100%;
+      height: 360px;
+    }
+
+    .tv-chart > div {
+      height: 360px;
+    }
+
+    .chart-caption {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    @media (max-width: 640px) {
       canvas {
-        width: 100% !important;
-        height: 100% !important;
+        height: 220px;
       }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
+      .tv-chart,
+      .tv-chart > div {
+        height: 320px;
       }
+    }
+  </style>
 
-      th,
-      td {
-        padding: 6px 4px;
-        text-align: left;
-      }
+  <!-- Chart.js for the equity curve -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-      th {
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--text-muted);
-        border-bottom: 1px solid #111827;
-      }
-
-      tr + tr td {
-        border-top: 1px solid #020617;
-      }
-
-      .text-right {
-        text-align: right;
-      }
-
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        padding: 1px 8px;
-        font-size: 11px;
-        border: 1px solid #1f2937;
-        background: rgba(15, 23, 42, 0.85);
-      }
-
-      .pill span {
-        margin-left: 5px;
-        color: var(--text-muted);
-      }
-
-      .pill-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 999px;
-        background: #22c55e;
-      }
-
-      .pnl-positive {
-        color: var(--accent);
-      }
-
-      .pnl-negative {
-        color: var(--accent-red);
-      }
-
-      .footer {
-        margin-top: 10px;
-        font-size: 12px;
-        color: var(--text-muted);
-        text-align: center;
-      }
-
-      .footer a {
-        color: #38bdf8;
-        text-decoration: none;
-      }
-
-      /* Candlestick chart area */
-
-      .chart-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 16px;
-        margin-top: 16px;
-      }
-
-      .chart-column h3 {
-        font-size: 15px;
-        margin: 0 0 8px;
-        color: var(--text-main);
-      }
-
-      .chart-card {
-        background: linear-gradient(145deg, var(--bg-card), #060b17);
-        border-radius: 14px;
-        border: 1px solid var(--border-soft);
-        padding: 8px 8px 4px;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
-        margin-bottom: 10px;
-      }
-
-      .chart-card h4 {
-        font-size: 13px;
-        margin: 0 0 4px;
-        color: var(--text-muted);
-      }
-
-      .tv-chart {
-        width: 100%;
-        height: 260px;
-      }
-
-      @media (max-width: 768px) {
-        h1 {
-          font-size: 24px;
-        }
-
-        .equity-chart-wrapper {
-          height: 220px;
-        }
-
-        .tv-chart {
-          height: 220px;
-        }
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="page">
-      <header>
-        <h1>Crypto AI Bot Dashboard</h1>
-        <p>
-          Paper-trading stats from Render —
-          <a href="/data" target="_blank" rel="noopener noreferrer">raw stats</a> |
-          <a href="/health" target="_blank" rel="noopener noreferrer">API status</a>
-        </p>
-      </header>
-
-      <!-- Top metric cards -->
-      <section class="cards">
-        <div class="card">
-          <h2>Total Trades</h2>
-          <div class="metric-main" id="totalTrades">0</div>
-          <div class="metric-sub" id="winsLosses">0 wins / 0 losses</div>
-        </div>
-
-        <div class="card">
-          <h2>Win Rate</h2>
-          <div class="metric-main" id="winRate">0.0%</div>
-          <div class="metric-sub" id="avgPnlText">Avg $0.00 per trade</div>
-        </div>
-
-        <div class="card">
-          <h2>PNL (Total)</h2>
-          <div class="metric-main" id="totalPnl">$0.00</div>
-          <div class="metric-sub">Based on closed trades only</div>
-        </div>
-      </section>
-
-      <!-- Equity curve -->
-      <section class="section">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div>
-            <h2>Equity Curve</h2>
-            <p>Based on closed trades only (last N points).</p>
-          </div>
-          <div class="pill" id="botStatusPill">
-            <div class="pill-dot"></div>
-            <span id="botStatusText">Checking bot status…</span>
-          </div>
-        </div>
-
-        <div class="equity-chart-wrapper">
-          <canvas id="equityChart"></canvas>
-        </div>
-      </section>
-
-      <!-- Per-market performance -->
-      <section class="section">
-        <h2>Per-Market Performance <span id="marketCount" style="font-size: 11px; color: var(--text-muted);"></span></h2>
-        <p>How the bot is doing on each market (paper trading).</p>
-
-        <div style="overflow-x: auto;">
-          <table id="marketTable">
-            <thead>
-              <tr>
-                <th>Market</th>
-                <th class="text-right">Trades</th>
-                <th class="text-right">Win Rate</th>
-                <th class="text-right">Total PNL</th>
-                <th class="text-right">Avg PNL</th>
-              </tr>
-            </thead>
-            <tbody id="marketTableBody">
-              <tr>
-                <td colspan="5" style="text-align: center; padding: 12px 4px; color: var(--text-muted);">
-                  Waiting for trades…
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Recent trades -->
-      <section class="section">
-        <h2>Recent Trades</h2>
-        <p>Showing last N trades.</p>
-
-        <div style="overflow-x: auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Market</th>
-                <th class="text-right">PNL (USD)</th>
-              </tr>
-            </thead>
-            <tbody id="recentTradesBody">
-              <tr>
-                <td colspan="3" style="text-align: center; padding: 12px 4px; color: var(--text-muted);">
-                  Waiting for trades…
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Market Candlestick Charts (TradingView) -->
-      <section class="section">
-        <h2>Market Candlestick Charts</h2>
-        <p class="section-subtitle">
-          Live price action from TradingView. These are external charts only – your bot is still paper trading.
-        </p>
-
-        <div class="chart-grid">
-          <!-- Coinbase -->
-          <div class="chart-column">
-            <h3>Coinbase</h3>
-
-            <div class="chart-card">
-              <h4>BTC / USD</h4>
-              <div id="chart-btc-coinbase" class="tv-chart"></div>
-            </div>
-
-            <div class="chart-card">
-              <h4>ETH / USD</h4>
-              <div id="chart-eth-coinbase" class="tv-chart"></div>
-            </div>
-
-            <div class="chart-card">
-              <h4>SOL / USD</h4>
-              <div id="chart-sol-coinbase" class="tv-chart"></div>
-            </div>
-          </div>
-
-          <!-- KuCoin -->
-          <div class="chart-column">
-            <h3>KuCoin (USDT)</h3>
-
-            <div class="chart-card">
-              <h4>BTC / USDT</h4>
-              <div id="chart-btc-kucoin" class="tv-chart"></div>
-            </div>
-
-            <div class="chart-card">
-              <h4>ETH / USDT</h4>
-              <div id="chart-eth-kucoin" class="tv-chart"></div>
-            </div>
-
-            <div class="chart-card">
-              <h4>SOL / USDT</h4>
-              <div id="chart-sol-kucoin" class="tv-chart"></div>
-            </div>
-          </div>
-
-          <!-- Crypto.com -->
-          <div class="chart-column">
-            <h3>Crypto.com</h3>
-
-            <div class="chart-card">
-              <h4>CRO / USD</h4>
-              <div id="chart-cro-crypto" class="tv-chart"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <p class="footer">
-        Bot is running on Render (paper trading only). Keep it training for 2–3 weeks before making AI changes.
+  <!-- TradingView for candlestick charts -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Crypto AI Bot Dashboard</h1>
+      <p>
+        Paper-trading stats from Render —
+        <a href="/data" target="_blank">raw stats</a> |
+        <a href="/health" target="_blank">API status</a>
       </p>
-    </div>
+    </header>
 
-    <!-- Chart.js for equity curve -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Top metrics -->
+    <section class="cards">
+      <article class="card">
+        <h2>Total Trades</h2>
+        <div class="metric-main" id="total-trades">0</div>
+        <div class="metric-sub" id="wins-losses">0 wins / 0 losses</div>
+      </article>
 
-    <script>
-      async function loadStats() {
-        try {
-          const res = await fetch("/data");
-          const data = await res.json();
+      <article class="card">
+        <h2>Win Rate</h2>
+        <div class="metric-main" id="win-rate">0.0%</div>
+        <div class="metric-sub" id="avg-pnl">Avg $0.00 per trade</div>
+      </article>
 
-          // ----- Top metrics -----
-          const totalTrades = data.total_events || 0;
-          const wins = data.wins || 0;
-          const losses = data.losses || 0;
-          const winRate = data.win_rate || 0; // already percentage in API
-          const totalPnl = data.total_pnl_usd || 0;
-          const avgPnl = data.avg_pnl_usd || 0;
+      <article class="card">
+        <h2>PNL (Total)</h2>
+        <div class="metric-main" id="total-pnl">$0.00</div>
+        <div class="metric-sub" id="pnl-note">
+          Based on closed trades only.
+        </div>
+      </article>
 
-          document.getElementById("totalTrades").textContent = totalTrades;
-          document.getElementById(
-            "winsLosses"
-          ).textContent = `${wins} wins / ${losses} losses`;
+      <article class="card">
+        <h2>Bot Status</h2>
+        <div class="metric-main" id="bot-status-text">Unknown</div>
+        <div class="metric-sub" id="bot-status-sub">
+          Waiting for heartbeat…
+        </div>
+      </article>
+    </section>
 
-          document.getElementById("winRate").textContent =
-            winRate.toFixed(1) + "%";
+    <!-- Equity curve -->
+    <section class="card equity-card">
+      <div class="section-header">
+        <h2>Equity Curve</h2>
+        <span id="equity-points-label">Based on closed trades only.</span>
+      </div>
+      <p class="equity-sub">
+        Tracks paper-trading balance over time (USD).
+      </p>
+      <canvas id="equityChart"></canvas>
+    </section>
 
-          document.getElementById(
-            "avgPnlText"
-          ).textContent = `Avg $${avgPnl.toFixed(2)} per trade`;
+    <!-- Per-market performance -->
+    <section class="card section">
+      <div class="section-header">
+        <h2>Per-Market Performance</h2>
+        <span id="market-count-label">No markets yet</span>
+      </div>
+      <p class="equity-sub">
+        How the bot is doing on each market (paper trading).
+      </p>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th>Trades</th>
+              <th>Win Rate</th>
+              <th>Total PNL</th>
+              <th>Avg PNL</th>
+            </tr>
+          </thead>
+          <tbody id="per-market-body">
+            <tr>
+              <td colspan="5" style="color: var(--text-muted); padding: 10px 4px;">
+                Waiting for trades…
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-          const pnlElem = document.getElementById("totalPnl");
-          const pnlStr = (totalPnl >= 0 ? "+" : "-") + "$" + Math.abs(totalPnl).toFixed(2);
-          pnlElem.textContent = pnlStr;
-          pnlElem.classList.remove("positive", "negative");
-          pnlElem.classList.add(totalPnl >= 0 ? "positive" : "negative");
+    <!-- Recent trades -->
+    <section class="card section">
+      <div class="section-header">
+        <h2>Recent Trades</h2>
+        <span id="recent-count-label">No trades yet</span>
+      </div>
+      <p class="equity-sub">
+        Showing the last 20 closed trades from paper-trading.
+      </p>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Market</th>
+              <th>PNL (USD)</th>
+            </tr>
+          </thead>
+          <tbody id="recent-trades-body">
+            <tr>
+              <td colspan="3" style="color: var(--text-muted); padding: 10px 4px;">
+                Waiting for trades…
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-          // ----- Equity curve -----
-          const eqData = Array.isArray(data.equity_curve)
-            ? data.equity_curve
-            : [];
+    <!-- Candlestick charts -->
+    <section class="card section charts-card">
+      <div class="section-header">
+        <h2>Market Candlestick Charts</h2>
+        <span>Live price action via TradingView</span>
+      </div>
+      <p class="equity-sub">
+        View BTC-USD candlesticks on your main venues. These are live charts
+        from TradingView — they do not place trades, only show price.
+      </p>
 
-          const labels = eqData.map((p) =>
-            new Date(p.time).toISOString().replace("T", " ").slice(0, 19)
-          );
-          const values = eqData.map((p) => p.equity_usd);
+      <div class="chart-tabs" id="chart-tabs">
+        <button class="chart-tab active" data-tab="coinbase">Coinbase</button>
+        <button class="chart-tab" data-tab="kucoin">KuCoin</button>
+        <button class="chart-tab" data-tab="cryptocom">Crypto.com</button>
+      </div>
 
-          const ctx = document.getElementById("equityChart").getContext("2d");
+      <div class="chart-panels">
+        <div class="chart-panel active" id="panel-coinbase">
+          <div class="tv-chart" id="tv-coinbase-btc"></div>
+          <p class="chart-caption">
+            COINBASE:BTCUSD — 1-hour candles.
+          </p>
+        </div>
 
-          new Chart(ctx, {
-            type: "line",
-            data: {
-              labels,
-              datasets: [
-                {
-                  label: "Equity (USD)",
-                  data: values,
-                  borderWidth: 2,
-                  pointRadius: 3,
-                  tension: 0.2
-                }
-              ]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              scales: {
-                x: {
-                  ticks: {
-                    maxTicksLimit: 6,
-                    color: "#9ca3af",
-                    font: { size: 11 }
-                  },
-                  grid: {
-                    display: false
-                  }
-                },
-                y: {
-                  ticks: {
-                    color: "#9ca3af",
-                    font: { size: 11 }
-                  },
-                  grid: {
-                    color: "#111827"
-                  }
-                }
+        <div class="chart-panel" id="panel-kucoin">
+          <div class="tv-chart" id="tv-kucoin-btc"></div>
+          <p class="chart-caption">
+            KUCOIN:BTCUSDT — 1-hour candles.
+          </p>
+        </div>
+
+        <div class="chart-panel" id="panel-cryptocom">
+          <div class="tv-chart" id="tv-cryptocom-btc"></div>
+          <p class="chart-caption">
+            CRYPTOCOM:BTCUSD — 1-hour candles.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Bot is running on Render (paper trading only). Keep it training for 2–3
+      weeks before making AI changes.
+    </footer>
+  </main>
+
+  <!-- Dashboard logic -->
+  <script>
+    let equityChart = null;
+
+    function formatMoney(value) {
+      const sign = value < 0 ? "-" : "";
+      const abs = Math.abs(value).toFixed(2);
+      return sign + "$" + abs;
+    }
+
+    function formatPercent(value) {
+      return value.toFixed(1) + "%";
+    }
+
+    function classifyPnl(element, value) {
+      element.classList.remove("metric-positive", "metric-negative");
+      if (value > 0.0001) {
+        element.classList.add("metric-positive");
+      } else if (value < -0.0001) {
+        element.classList.add("metric-negative");
+      }
+    }
+
+    function updateBotStatus(statusObj) {
+      const display = document.getElementById("bot-status-text");
+      const sub = document.getElementById("bot-status-sub");
+
+      const status = statusObj.status || "unknown";
+      const minutes = statusObj.minutes_since;
+      const last = statusObj.last_heartbeat;
+
+      let label = "Unknown";
+      let pillClass = "pill";
+      if (status === "running") {
+        label = "Running";
+        pillClass += " pill-running";
+      } else if (status === "idle") {
+        label = "Idle";
+        pillClass += " pill-idle";
+      } else if (status === "stopped") {
+        label = "Stopped";
+        pillClass += " pill-stopped";
+      }
+
+      display.innerHTML = `<span class="${pillClass}">
+        <span class="pill-dot"></span>${label}</span>`;
+
+      let subText = "";
+      if (typeof minutes === "number") {
+        subText += minutes.toFixed(1) + " min since last heartbeat";
+      }
+      if (last) {
+        subText += subText ? " · " : "";
+        subText += "Last: " + new Date(last).toLocaleString();
+      }
+      sub.textContent = subText || "Waiting for heartbeat…";
+    }
+
+    function renderEquity(data) {
+      const points = data.equity_curve || [];
+      const ctx = document.getElementById("equityChart").getContext("2d");
+      const labelEl = document.getElementById("equity-points-label");
+
+      if (!points.length) {
+        labelEl.textContent = "Waiting for trades…";
+        if (equityChart) {
+          equityChart.destroy();
+          equityChart = null;
+        }
+        return;
+      }
+
+      labelEl.textContent =
+        "Based on closed trades only (last " + points.length + " points).";
+
+      const labels = points.map((p) =>
+        new Date(p.time).toLocaleString()
+      );
+      const values = points.map((p) => p.equity_usd);
+
+      if (!equityChart) {
+        equityChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Equity (USD)",
+                data: values,
+                borderColor: "#38bdf8",
+                backgroundColor: "rgba(56, 189, 248, 0.06)",
+                borderWidth: 2,
+                tension: 0.3,
+                pointRadius: 2,
+                pointHitRadius: 6,
               },
-              plugins: {
-                legend: {
-                  display: false
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => formatMoney(ctx.parsed.y),
                 },
-                tooltip: {
-                  mode: "index",
-                  intersect: false
-                }
-              }
-            }
-          });
-
-          // ----- Bot status pill -----
-          if (data.bot_status) {
-            const status = data.bot_status.status || "unknown";
-            const minutesSince = data.bot_status.minutes_since ?? null;
-
-            const pill = document.getElementById("botStatusPill");
-            const dot = pill.querySelector(".pill-dot");
-            const text = document.getElementById("botStatusText");
-
-            let color = "#22c55e";
-            let label = "Running OK";
-
-            if (status === "idle") {
-              color = "#eab308";
-              label = "Idle recently";
-            } else if (status === "stopped" || status === "unknown") {
-              color = "#ef4444";
-              label = "No heartbeat";
-            }
-
-            dot.style.background = color;
-
-            if (minutesSince != null) {
-              text.textContent = `${label} · last heartbeat ${minutesSince} min ago`;
-            } else {
-              text.textContent = label;
-            }
-          }
-
-          // ----- Per-market table -----
-          const marketBody = document.getElementById("marketTableBody");
-          marketBody.innerHTML = "";
-
-          const perMarket = Array.isArray(data.per_market)
-            ? data.per_market
-            : [];
-
-          if (perMarket.length === 0) {
-            marketBody.innerHTML =
-              '<tr><td colspan="5" style="text-align:center; padding:12px 4px; color:var(--text-muted);">No data yet</td></tr>';
-          } else {
-            document.getElementById(
-              "marketCount"
-            ).textContent = `(${perMarket.length} markets)`;
-
-            perMarket.forEach((m) => {
-              const tr = document.createElement("tr");
-
-              const totalPnl = m.total_pnl_usd || 0;
-              const avgPnl = m.avg_pnl_usd || 0;
-
-              const pnlClass =
-                totalPnl > 0
-                  ? "pnl-positive"
-                  : totalPnl < 0
-                  ? "pnl-negative"
-                  : "";
-
-              tr.innerHTML = `
-                <td>${m.market}</td>
-                <td class="text-right">${m.trades}</td>
-                <td class="text-right">${(m.win_rate || 0).toFixed(1)}%</td>
-                <td class="text-right ${pnlClass}">$${totalPnl.toFixed(2)}</td>
-                <td class="text-right">$${avgPnl.toFixed(2)}</td>
-              `;
-              marketBody.appendChild(tr);
-            });
-          }
-
-          // ----- Recent trades -----
-          const recentBody = document.getElementById("recentTradesBody");
-          recentBody.innerHTML = "";
-
-          const recent = Array.isArray(data.recent_trades)
-            ? data.recent_trades
-            : [];
-
-          if (recent.length === 0) {
-            recentBody.innerHTML =
-              '<tr><td colspan="3" style="text-align:center; padding:12px 4px; color:var(--text-muted);">No trades yet.</td></tr>';
-          } else {
-            recent.forEach((t) => {
-              const pnl = t.pnl_usd || 0;
-              const pnlClass =
-                pnl > 0 ? "pnl-positive" : pnl < 0 ? "pnl-negative" : "";
-              const pnlStr = (pnl >= 0 ? "+" : "-") + "$" + Math.abs(pnl).toFixed(2);
-
-              const tr = document.createElement("tr");
-              tr.innerHTML = `
-                <td>${new Date(t.time)
-                  .toISOString()
-                  .replace("T", " ")
-                  .slice(0, 19)}</td>
-                <td>${t.market}</td>
-                <td class="text-right ${pnlClass}">${pnlStr}</td>
-              `;
-              recentBody.appendChild(tr);
-            });
-          }
-        } catch (err) {
-          console.error("Failed to load stats:", err);
-          const pillText = document.getElementById("botStatusText");
-          if (pillText) {
-            pillText.textContent = "Error loading stats";
-          }
-        }
-      }
-
-      loadStats();
-      // Optionally refresh every few minutes
-      setInterval(loadStats, 180000); // 3 minutes
-    </script>
-
-    <!-- TradingView candlestick charts -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-      function createChart(containerId, symbol) {
-        if (typeof TradingView === "undefined") {
-          console.warn("TradingView library not loaded");
-          return;
-        }
-
-        new TradingView.widget({
-          container_id: containerId,
-          autosize: true,
-          symbol: symbol,
-          interval: "60", // 1h candles
-          timezone: "Etc/UTC",
-          theme: "dark",
-          style: "1", // candles
-          locale: "en",
-          hide_side_toolbar: false,
-          hide_top_toolbar: false,
-          allow_symbol_change: true,
-          backgroundColor: "#050814"
+              },
+            },
+            scales: {
+              x: {
+                ticks: {
+                  maxTicksLimit: 6,
+                  color: "#9ca3af",
+                  font: { size: 11 },
+                },
+                grid: { display: false },
+              },
+              y: {
+                ticks: {
+                  color: "#9ca3af",
+                  font: { size: 11 },
+                },
+                grid: {
+                  color: "rgba(31, 41, 55, 0.7)",
+                },
+              },
+            },
+          },
         });
+      } else {
+        equityChart.data.labels = labels;
+        equityChart.data.datasets[0].data = values;
+        equityChart.update();
+      }
+    }
+
+    function renderTopMetrics(data) {
+      const totalTrades = data.total_events || 0;
+      const wins = data.wins || 0;
+      const losses = data.losses || 0;
+      const winRate = data.win_rate || 0;
+      const avgPnl = data.avg_pnl_usd || 0;
+      const totalPnl = data.total_pnl_usd || 0;
+
+      document.getElementById("total-trades").textContent = totalTrades;
+      document.getElementById("wins-losses").textContent =
+        wins + " wins / " + losses + " losses";
+
+      const winRateEl = document.getElementById("win-rate");
+      winRateEl.textContent = formatPercent(winRate);
+      classifyPnl(winRateEl, winRate - 50); // relative hint
+
+      const avgEl = document.getElementById("avg-pnl");
+      avgEl.textContent = "Avg " + formatMoney(avgPnl) + " per trade";
+      classifyPnl(avgEl, avgPnl);
+
+      const totalEl = document.getElementById("total-pnl");
+      totalEl.textContent = formatMoney(totalPnl);
+      classifyPnl(totalEl, totalPnl);
+    }
+
+    function renderPerMarket(data) {
+      const tbody = document.getElementById("per-market-body");
+      const markets = data.per_market || [];
+
+      if (!markets.length) {
+        tbody.innerHTML =
+          '<tr><td colspan="5" style="color: var(--text-muted); padding: 10px 4px;">No data yet.</td></tr>';
+        document.getElementById("market-count-label").textContent =
+          "No markets yet";
+        return;
       }
 
-      window.addEventListener("DOMContentLoaded", function () {
-        // Coinbase
-        createChart("chart-btc-coinbase", "COINBASE:BTCUSD");
-        createChart("chart-eth-coinbase", "COINBASE:ETHUSD");
-        createChart("chart-sol-coinbase", "COINBASE:SOLUSD");
+      document.getElementById("market-count-label").textContent =
+        markets.length + " markets";
 
-        // KuCoin
-        createChart("chart-btc-kucoin", "KUCOIN:BTCUSDT");
-        createChart("chart-eth-kucoin", "KUCOIN:ETHUSDT");
-        createChart("chart-sol-kucoin", "KUCOIN:SOLUSDT");
+      tbody.innerHTML = "";
+      markets.forEach((m) => {
+        const tr = document.createElement("tr");
 
-        // Crypto.com
-        createChart("chart-cro-crypto", "CRYPTOCOM:CROUSD");
+        const tdMarket = document.createElement("td");
+        tdMarket.textContent = m.market || "?";
+        tr.appendChild(tdMarket);
+
+        const tdTrades = document.createElement("td");
+        tdTrades.textContent = m.trades ?? 0;
+        tr.appendChild(tdTrades);
+
+        const tdWinRate = document.createElement("td");
+        tdWinRate.textContent = formatPercent(m.win_rate || 0);
+        tr.appendChild(tdWinRate);
+
+        const tdTotal = document.createElement("td");
+        tdTotal.textContent = formatMoney(m.total_pnl_usd || 0);
+        if ((m.total_pnl_usd || 0) > 0) {
+          tdTotal.style.color = "var(--accent)";
+        } else if ((m.total_pnl_usd || 0) < 0) {
+          tdTotal.style.color = "var(--accent-red)";
+        }
+        tr.appendChild(tdTotal);
+
+        const tdAvg = document.createElement("td");
+        tdAvg.textContent = formatMoney(m.avg_pnl_usd || 0);
+        if ((m.avg_pnl_usd || 0) > 0) {
+          tdAvg.style.color = "var(--accent)";
+        } else if ((m.avg_pnl_usd || 0) < 0) {
+          tdAvg.style.color = "var(--accent-red)";
+        }
+        tr.appendChild(tdAvg);
+
+        tbody.appendChild(tr);
       });
-    </script>
-  </body>
+    }
+
+    function renderRecentTrades(data) {
+      const tbody = document.getElementById("recent-trades-body");
+      const trades = data.recent_trades || [];
+
+      if (!trades.length) {
+        tbody.innerHTML =
+          '<tr><td colspan="3" style="color: var(--text-muted); padding: 10px 4px;">No trades yet.</td></tr>';
+        document.getElementById("recent-count-label").textContent =
+          "No trades yet";
+        return;
+      }
+
+      document.getElementById("recent-count-label").textContent =
+        "Showing last " + trades.length + " trades.";
+
+      tbody.innerHTML = "";
+      trades.forEach((t) => {
+        const tr = document.createElement("tr");
+
+        const tdTime = document.createElement("td");
+        tdTime.textContent = new Date(t.time).toLocaleString();
+        tr.appendChild(tdTime);
+
+        const tdMarket = document.createElement("td");
+        tdMarket.textContent = t.market || "?";
+        tr.appendChild(tdMarket);
+
+        const tdPnl = document.createElement("td");
+        tdPnl.textContent = formatMoney(t.pnl_usd || 0);
+        if ((t.pnl_usd || 0) > 0) {
+          tdPnl.style.color = "var(--accent)";
+        } else if ((t.pnl_usd || 0) < 0) {
+          tdPnl.style.color = "var(--accent-red)";
+        }
+        tr.appendChild(tdPnl);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function refreshDashboard() {
+      try {
+        const res = await fetch("/data");
+        const data = await res.json();
+
+        renderTopMetrics(data);
+        renderEquity(data);
+        renderPerMarket(data);
+        renderRecentTrades(data);
+
+        if (data.bot_status) {
+          updateBotStatus(data.bot_status);
+        }
+      } catch (err) {
+        console.error("Error loading /data:", err);
+      }
+    }
+
+    // TradingView candlestick widgets
+    function createTvChart(containerId, symbol) {
+      if (!window.TradingView) return;
+
+      new TradingView.widget({
+        autosize: true,
+        symbol: symbol,
+        interval: "60",
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "en",
+        toolbar_bg: "#0b1120",
+        enable_publishing: false,
+        hide_top_toolbar: false,
+        hide_legend: true,
+        withdateranges: true,
+        container_id: containerId,
+      });
+    }
+
+    function setupChartTabs() {
+      const tabs = document.querySelectorAll(".chart-tab");
+      const panels = document.querySelectorAll(".chart-panel");
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const target = tab.getAttribute("data-tab");
+
+          tabs.forEach((t) => t.classList.remove("active"));
+          panels.forEach((p) => p.classList.remove("active"));
+
+          tab.classList.add("active");
+          document
+            .getElementById("panel-" + target)
+            .classList.add("active");
+        });
+      });
+    }
+
+    function initTvCharts() {
+      // One BTC chart per venue
+      createTvChart("tv-coinbase-btc", "COINBASE:BTCUSD");
+      createTvChart("tv-kucoin-btc", "KUCOIN:BTCUSDT");
+      createTvChart("tv-cryptocom-btc", "CRYPTOCOM:BTCUSD");
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      setupChartTabs();
+      refreshDashboard();
+      setInterval(refreshDashboard, 30_000); // refresh every 30s
+      initTvCharts();
+    });
+  </script>
+</body>
 </html>
