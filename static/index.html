@@ -5,9 +5,7 @@
   <title>Crypto AI Bot Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Lightweight Charts for candlesticks -->
-  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-
+  <!-- Simple dark theme with basic CSS only -->
   <style>
     :root {
       --bg: #050814;
@@ -16,9 +14,12 @@
       --text-main: #f8fafc;
       --text-muted: #9ca3af;
       --accent: #22c55e;
-      --accent-soft: #22c55e33;
-      --accent-red: #ef4444;
+      --accent-red: #f44c4c;
       --border-soft: #1f2937;
+      --pill-ok: #16a34a;
+      --pill-warn: #f97316;
+      --pill-bad: #ef4444;
+      --pill-text: #0b1120;
     }
 
     * {
@@ -61,6 +62,30 @@
       margin-right: 4px;
     }
 
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+      color: var(--pill-text);
+    }
+
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      margin-right: 6px;
+      background: #22c55e;
+    }
+
+    .pill-ok { background: var(--pill-ok); }
+    .pill-warn { background: var(--pill-warn); }
+    .pill-bad { background: var(--pill-bad); }
+
+    /* Cards row */
     .cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -95,125 +120,48 @@
       color: var(--text-muted);
     }
 
-    .metric-sub span.bad {
-      color: var(--accent-red);
-    }
-
-    .metric-sub span.good {
+    .metric-good {
       color: var(--accent);
     }
 
-    .metric-sub span.neutral {
-      color: var(--text-muted);
+    .metric-bad {
+      color: var(--accent-red);
     }
 
-    /* Equity + Candles row */
-    .panels {
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr);
-      gap: 16px;
-      margin-bottom: 24px;
+    /* Sections */
+    .section {
+      background: radial-gradient(circle at top left, #0b1220, #020617);
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      padding: 18px 16px 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
     }
 
-    @media (min-width: 900px) {
-      .panels {
-        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr);
-      }
-    }
-
-    .panel-title-row {
+    .section-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      gap: 8px;
+      align-items: baseline;
+      margin-bottom: 10px;
     }
 
-    .panel-title-row h2 {
+    .section-header h3 {
       margin: 0;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 600;
     }
 
-    .selectors {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      font-size: 12px;
-      align-items: center;
-    }
-
-    .selectors label {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    select {
-      background-color: #020617;
-      color: var(--text-main);
-      border-radius: 8px;
-      border: 1px solid var(--border-soft);
-      padding: 4px 8px;
-      font-size: 12px;
-    }
-
-    .chart-container {
-      width: 100%;
-      height: 260px;
-      border-radius: 10px;
-      background: radial-gradient(circle at top left, #020617, #020617);
-      border: 1px solid #020617;
-      overflow: hidden;
-    }
-
-    #equityChart {
-      width: 100%;
-      height: 100%;
-    }
-
-    #candleContainer {
-      width: 100%;
-      height: 260px;
-    }
-
-    .trade-legend {
-      margin-top: 8px;
+    .section-header span {
       font-size: 11px;
       color: var(--text-muted);
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
     }
 
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      border: 1px solid var(--border-soft);
-      background: #02061788;
+    canvas {
+      width: 100%;
+      max-height: 260px;
     }
 
-    .pill-dot-win {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-    }
-
-    .pill-dot-loss {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--accent-red);
-    }
-
+    /* Tables */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -221,468 +169,410 @@
     }
 
     th, td {
-      padding: 6px 6px;
       text-align: left;
+      padding: 6px 4px;
     }
 
     th {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
       color: var(--text-muted);
-      border-bottom: 1px solid #111827;
+      font-weight: 500;
+      border-bottom: 1px solid #1f2937;
     }
 
     tbody tr:nth-child(even) {
-      background-color: rgba(15, 23, 42, 0.65);
-    }
-
-    tbody tr:nth-child(odd) {
-      background-color: rgba(15, 23, 42, 0.35);
-    }
-
-    td {
-      border-bottom: 1px solid #020617;
+      background: rgba(15, 23, 42, 0.4);
     }
 
     .text-right {
       text-align: right;
     }
 
-    .text-bad {
-      color: var(--accent-red);
-    }
-
-    .text-good {
-      color: var(--accent);
-    }
-
-    .muted {
+    .text-muted {
       color: var(--text-muted);
     }
 
-    footer {
-      margin-top: 24px;
+    .pnl-pos {
+      color: var(--accent);
+    }
+
+    .pnl-neg {
+      color: var(--accent-red);
+    }
+
+    /* Market candles section */
+    .markets-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .chart-container-embed {
+      min-height: 420px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border-soft);
+      background: #020617;
+    }
+
+    .chart-title {
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+    }
+
+    .footer-note {
+      margin-top: 16px;
       font-size: 11px;
       color: var(--text-muted);
       text-align: center;
     }
+
+    @media (min-width: 900px) {
+      .markets-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
   </style>
+
+  <!-- Chart.js for equity curve -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="page">
     <header>
-      <h1>Crypto AI Bot Dashboard</h1>
+      <h1>
+        Crypto AI Bot Dashboard
+        <span id="api-status-pill" class="pill pill-warn">
+          <span class="pill-dot"></span>
+          <span id="api-status-text">Checking API…</span>
+        </span>
+      </h1>
       <p>
         Paper-trading stats from Render —
-        <a href="/data" target="_blank" rel="noopener noreferrer">raw stats</a> |
-        <a href="/health" target="_blank" rel="noopener noreferrer">API status</a>
+        <a href="/data" target="_blank" rel="noreferrer">raw stats</a> |
+        <a href="/health" target="_blank" rel="noreferrer">API status JSON</a>
       </p>
     </header>
 
-    <!-- Top metrics -->
-    <div class="cards">
-      <div class="card">
+    <!-- Top metrics cards -->
+    <section class="cards">
+      <article class="card">
         <h2>Total Trades</h2>
-        <div class="metric-main" id="totalTrades">0</div>
-        <div class="metric-sub" id="winsLosses">0 wins / 0 losses</div>
-      </div>
-      <div class="card">
+        <div id="total-trades" class="metric-main">0</div>
+        <div id="wins-losses" class="metric-sub text-muted">0 wins / 0 losses</div>
+      </article>
+
+      <article class="card">
         <h2>Win Rate</h2>
-        <div class="metric-main" id="winRate">0.0%</div>
-        <div class="metric-sub">
-          Avg <span id="avgPnlPerTrade" class="neutral">$0.00</span> per trade
-        </div>
-      </div>
-      <div class="card">
+        <div id="win-rate" class="metric-main">0.0%</div>
+        <div id="avg-pnl" class="metric-sub text-muted">Avg $0.00 per trade</div>
+      </article>
+
+      <article class="card">
         <h2>PNL (Total)</h2>
-        <div class="metric-main" id="totalPnl">$0.00</div>
-        <div class="metric-sub">Based on closed trades only</div>
-      </div>
-    </div>
+        <div id="total-pnl" class="metric-main metric-bad">$0.00</div>
+        <div class="metric-sub text-muted">Based on closed trades only</div>
+      </article>
+    </section>
 
-    <!-- Equity + Candles -->
-    <div class="panels">
-      <!-- Equity Curve -->
-      <div class="card">
-        <div class="panel-title-row">
-          <h2>Equity Curve</h2>
-          <span class="muted" id="equityNote">Based on closed trades only.</span>
-        </div>
-        <div class="chart-container">
-          <canvas id="equityChart"></canvas>
-        </div>
+    <!-- Equity curve -->
+    <section class="section">
+      <div class="section-header">
+        <h3>Equity Curve</h3>
+        <span>Based on closed trades only (last 100 points).</span>
       </div>
+      <canvas id="equityChart"></canvas>
+    </section>
 
-      <!-- Candle Chart -->
-      <div class="card">
-        <div class="panel-title-row">
-          <h2>Market Candles + Bot Trades</h2>
-          <div class="selectors">
-            <label>
-              Exchange
-              <select id="exchangeSelect">
-                <option value="coinbase">Coinbase</option>
-                <option value="kucoin">KuCoin</option>
-              </select>
-            </label>
-            <label>
-              Market
-              <select id="marketSelect">
-                <option value="BTC-USD">BTC-USD</option>
-                <option value="ETH-USD">ETH-USD</option>
-                <option value="SOL-USD">SOL-USD</option>
-                <option value="ADA-USD">ADA-USD</option>
-                <option value="LTC-USD">LTC-USD</option>
-                <option value="BCH-USD">BCH-USD</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div id="candleContainer" class="chart-container"></div>
-        <div class="trade-legend">
-          <div class="pill">
-            <span class="pill-dot-win"></span> Win (arrow up, below bar)
-          </div>
-          <div class="pill">
-            <span class="pill-dot-loss"></span> Loss (arrow down, above bar)
-          </div>
-          <span id="tradeSummary" class="muted"></span>
-        </div>
+    <!-- Market performance -->
+    <section class="section">
+      <div class="section-header">
+        <h3>Per-Market Performance</h3>
+        <span id="market-summary-label">No data yet</span>
       </div>
-    </div>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th class="text-right">Trades</th>
+              <th class="text-right">Win Rate</th>
+              <th class="text-right">Total PnL</th>
+              <th class="text-right">Avg PnL</th>
+            </tr>
+          </thead>
+          <tbody id="per-market-body">
+            <tr>
+              <td colspan="5" class="text-muted">Waiting for trades…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-    <!-- Strategy + tables -->
-    <div class="cards" style="grid-template-columns: minmax(0,1.3fr) minmax(0,1.2fr)">
-      <!-- Per-Market Performance -->
-      <div class="card">
-        <h2>Per-Market Performance</h2>
-        <p class="muted" id="perMarketCaption">How the bot is doing on each market (paper trading).</p>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>Market</th>
-                <th class="text-right">Trades</th>
-                <th class="text-right">Win Rate</th>
-                <th class="text-right">Total PnL</th>
-                <th class="text-right">Avg PnL</th>
-              </tr>
-            </thead>
-            <tbody id="perMarketBody">
-              <tr><td colspan="5" class="muted">Waiting for trades…</td></tr>
-            </tbody>
-          </table>
-        </div>
+    <!-- Recent trades -->
+    <section class="section">
+      <div class="section-header">
+        <h3>Recent Trades</h3>
+        <span>Showing last 20 trades.</span>
+      </div>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Market</th>
+              <th class="text-right">PnL (USD)</th>
+            </tr>
+          </thead>
+          <tbody id="recent-trades-body">
+            <tr>
+              <td colspan="3" class="text-muted">No trades yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Market candles (Coinbase + KuCoin) -->
+    <section class="section">
+      <div class="section-header">
+        <h3>Market Candles</h3>
+        <span>Live BTC candles from Coinbase & KuCoin (TradingView widgets).</span>
       </div>
 
-      <!-- Recent Trades -->
-      <div class="card">
-        <h2>Recent Trades</h2>
-        <p class="muted" id="recentCaption">Showing last trades.</p>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Market</th>
-                <th class="text-right">PnL (USD)</th>
-              </tr>
-            </thead>
-            <tbody id="recentTradesBody">
-              <tr><td colspan="3" class="muted">No trades yet.</td></tr>
-            </tbody>
-          </table>
+      <div class="markets-grid">
+        <!-- Coinbase chart -->
+        <div>
+          <div class="chart-title">Coinbase BTC-USD</div>
+          <div id="coinbase-chart" class="chart-container-embed"></div>
+        </div>
+
+        <!-- KuCoin chart -->
+        <div>
+          <div class="chart-title">KuCoin BTC-USDT</div>
+          <div id="kucoin-chart" class="chart-container-embed"></div>
         </div>
       </div>
-    </div>
 
-    <footer>
-      Bot is running on Render (paper trading only). Keep it training for 2–3 weeks before making AI changes.
-    </footer>
+      <div class="footer-note">
+        Bot is running on Render (paper trading only). Keep it training for 2–3 weeks before making AI changes.
+      </div>
+    </section>
   </div>
 
-  <!-- Simple equity line chart using Canvas 2D -->
+  <!-- TradingView script for candlestick charts -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="text/javascript">
+    // Coinbase BTC-USD chart
+    new TradingView.widget({
+      autosize: true,
+      symbol: "COINBASE:BTCUSD",
+      interval: "60",
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      toolbar_bg: "#0b1120",
+      enable_publishing: false,
+      hide_top_toolbar: false,
+      hide_legend: false,
+      container_id: "coinbase-chart"
+    });
+
+    // KuCoin BTC-USDT chart
+    new TradingView.widget({
+      autosize: true,
+      symbol: "KUCOIN:BTCUSDT",
+      interval: "60",
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      toolbar_bg: "#0b1120",
+      enable_publishing: false,
+      hide_top_toolbar: false,
+      hide_legend: false,
+      container_id: "kucoin-chart"
+    });
+  </script>
+
+  <!-- Dashboard logic: load /data and draw equity + tables -->
   <script>
-    let statsCache = null;
-    let equityChartCtx = null;
-    let candleChart = null;
-    let candleSeries = null;
+    let equityChart = null;
 
-    async function loadStats() {
-      try {
-        const res = await fetch('/data');
-        const data = await res.json();
-        statsCache = data;
-        updateTopCards(data);
-        renderEquityCurve(data);
-        renderTables(data);
-        updateTradeSummary();
-        await loadCandles(); // load initial candles once stats are ready
-      } catch (err) {
-        console.error('Error loading /data:', err);
+    function formatUsd(value) {
+      const num = Number(value || 0);
+      const sign = num >= 0 ? "" : "-";
+      return sign + "$" + Math.abs(num).toFixed(2);
+    }
+
+    function updateApiStatus(botStatus) {
+      const pill = document.getElementById("api-status-pill");
+      const text = document.getElementById("api-status-text");
+
+      let statusText = "Unknown";
+      let klass = "pill-warn";
+
+      if (botStatus && botStatus.status) {
+        statusText = botStatus.status;
+        if (botStatus.status === "running") klass = "pill-ok";
+        else if (botStatus.status === "idle") klass = "pill-warn";
+        else klass = "pill-bad";
       }
+
+      pill.classList.remove("pill-ok", "pill-warn", "pill-bad");
+      pill.classList.add(klass);
+      text.textContent = "Bot: " + statusText;
     }
 
-    function fmtMoney(x) {
-      const n = Number(x || 0);
-      const sign = n < 0 ? "-" : "";
-      const abs = Math.abs(n).toFixed(2);
-      return sign + "$" + abs;
-    }
+    function drawEquityCurve(equityCurve) {
+      const ctx = document.getElementById("equityChart").getContext("2d");
+      const labels = equityCurve.map(p => new Date(p.time).toLocaleString());
+      const data = equityCurve.map(p => Number(p.equity_usd || p.equity || 0));
 
-    function updateTopCards(data) {
-      const total = data.total_events || 0;
-      const wins = data.wins || 0;
-      const losses = data.losses || 0;
-      const winRate = data.win_rate != null ? data.win_rate * 100 : 0;
-      const avgPnl = data.avg_pnl_usd || 0;
-      const totalPnl = data.total_pnl_usd || 0;
-
-      document.getElementById('totalTrades').textContent = total;
-      document.getElementById('winsLosses').textContent = `${wins} wins / ${losses} losses`;
-      document.getElementById('winRate').textContent = `${winRate.toFixed(1)}%`;
-
-      const avgElem = document.getElementById('avgPnlPerTrade');
-      avgElem.textContent = fmtMoney(avgPnl);
-      avgElem.className = avgPnl > 0 ? 'good' : avgPnl < 0 ? 'bad' : 'neutral';
-
-      const totalElem = document.getElementById('totalPnl');
-      totalElem.textContent = fmtMoney(totalPnl);
-      totalElem.className = 'metric-main ' + (totalPnl > 0 ? 'text-good' : totalPnl < 0 ? 'text-bad' : '');
-    }
-
-    function renderEquityCurve(data) {
-      const points = (data.equity_curve || []).slice().sort((a, b) => new Date(a.time) - new Date(b.time));
-      const canvas = document.getElementById('equityChart');
-
-      if (!canvas) return;
-
-      const ctx = canvas.getContext('2d');
-      equityChartCtx = ctx;
-
-      const width = canvas.clientWidth || canvas.parentElement.clientWidth || 400;
-      const height = canvas.clientHeight || 260;
-      canvas.width = width * window.devicePixelRatio;
-      canvas.height = height * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-
-      ctx.clearRect(0, 0, width, height);
-
-      if (!points.length) {
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px system-ui';
-        ctx.fillText('Waiting for trades…', 12, height / 2);
+      if (equityChart) {
+        equityChart.data.labels = labels;
+        equityChart.data.datasets[0].data = data;
+        equityChart.update();
         return;
       }
 
-      const values = points.map(p => Number(p.equity_usd));
-      const minV = Math.min(...values);
-      const maxV = Math.max(...values);
-      const pad = (maxV - minV || 1) * 0.1;
-      const yMin = minV - pad;
-      const yMax = maxV + pad;
-
-      const xStep = width / Math.max(points.length - 1, 1);
-
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#22c55e';
-      points.forEach((p, i) => {
-        const x = i * xStep;
-        const y = height - ((Number(p.equity_usd) - yMin) / (yMax - yMin)) * height;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      equityChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Equity (USD)",
+            data: data,
+            tension: 0.25,
+            borderWidth: 2,
+            pointRadius: 2,
+            borderColor: "#22c55e",
+            backgroundColor: "rgba(34,197,94,0.08)",
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", maxRotation: 0, autoSkip: true },
+              grid: { color: "rgba(31,41,55,0.6)" }
+            },
+            y: {
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(31,41,55,0.6)" }
+            }
+          }
+        }
       });
-      ctx.stroke();
-
-      const last = points[points.length - 1];
-      ctx.fillStyle = '#9ca3af';
-      ctx.font = '11px system-ui';
-      ctx.fillText(`Last equity: ${fmtMoney(last.equity_usd)}`, 10, 16);
     }
 
-    function renderTables(data) {
-      // Per-market
-      const perMarketBody = document.getElementById('perMarketBody');
-      perMarketBody.innerHTML = '';
+    function populatePerMarket(perMarket) {
+      const tbody = document.getElementById("per-market-body");
+      tbody.innerHTML = "";
 
-      const perMarket = data.per_market || [];
-      if (!perMarket.length) {
-        perMarketBody.innerHTML = '<tr><td colspan="5" class="muted">Waiting for trades…</td></tr>';
-      } else {
-        perMarket.forEach(m => {
-          const tr = document.createElement('tr');
-          const winRate = (m.win_rate || 0) * 100;
-          const totalPnl = Number(m.total_pnl_usd || 0);
-          const avgPnl = Number(m.avg_pnl_usd || 0);
-
-          tr.innerHTML = `
-            <td>${m.market}</td>
-            <td class="text-right">${m.trades}</td>
-            <td class="text-right">${winRate.toFixed(1)}%</td>
-            <td class="text-right ${totalPnl > 0 ? 'text-good' : totalPnl < 0 ? 'text-bad' : ''}">${fmtMoney(totalPnl)}</td>
-            <td class="text-right ${avgPnl > 0 ? 'text-good' : avgPnl < 0 ? 'text-bad' : ''}">${fmtMoney(avgPnl)}</td>
-          `;
-          perMarketBody.appendChild(tr);
-        });
-      }
-
-      // Recent trades
-      const recentBody = document.getElementById('recentTradesBody');
-      recentBody.innerHTML = '';
-
-      const trades = data.recent_trades || [];
-      if (!trades.length) {
-        recentBody.innerHTML = '<tr><td colspan="3" class="muted">No trades yet.</td></tr>';
-      } else {
-        trades
-          .slice()
-          .sort((a, b) => new Date(b.time) - new Date(a.time))
-          .forEach(t => {
-            const tr = document.createElement('tr');
-            const pnl = Number(t.pnl_usd || 0);
-            const cls = pnl > 0 ? 'text-good' : pnl < 0 ? 'text-bad' : '';
-
-            tr.innerHTML = `
-              <td>${new Date(t.time).toLocaleString()}</td>
-              <td>${t.market}</td>
-              <td class="text-right ${cls}">${fmtMoney(pnl)}</td>
-            `;
-            recentBody.appendChild(tr);
-          });
-      }
-    }
-
-    function updateTradeSummary() {
-      const elem = document.getElementById('tradeSummary');
-      if (!statsCache || !statsCache.recent_trades || !statsCache.recent_trades.length) {
-        elem.textContent = 'No trade markers yet – waiting for closed trades.';
+      if (!perMarket || perMarket.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Waiting for trades…</td></tr>';
+        document.getElementById("market-summary-label").textContent = "No data yet";
         return;
       }
-      const market = document.getElementById('marketSelect').value;
-      const trades = statsCache.recent_trades.filter(t => t.market === market);
-      if (!trades.length) {
-        elem.textContent = `No recent trades in ${market} yet.`;
-        return;
-      }
-      const wins = trades.filter(t => Number(t.pnl_usd || 0) >= 0).length;
-      const losses = trades.length - wins;
-      elem.textContent = `${trades.length} trades in ${market}: ${wins} wins / ${losses} losses (markers on chart).`;
+
+      let totalTrades = 0;
+      perMarket.forEach(row => {
+        totalTrades += row.trades || 0;
+        const tr = document.createElement("tr");
+
+        const winRate = (row.win_rate || 0) * 100;
+        const totalPnl = Number(row.total_pnl_usd || 0);
+        const avgPnl = Number(row.avg_pnl_usd || 0);
+
+        tr.innerHTML = `
+          <td>${row.market}</td>
+          <td class="text-right">${row.trades}</td>
+          <td class="text-right">${winRate.toFixed(1)}%</td>
+          <td class="text-right ${totalPnl >= 0 ? "pnl-pos" : "pnl-neg"}">${formatUsd(totalPnl)}</td>
+          <td class="text-right ${avgPnl >= 0 ? "pnl-pos" : "pnl-neg"}">${formatUsd(avgPnl)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("market-summary-label").textContent =
+        `${perMarket.length} market${perMarket.length > 1 ? "s" : ""}, ${totalTrades} trade${totalTrades === 1 ? "" : "s"}`;
     }
 
-    async function loadCandles() {
-      const exchange = document.getElementById('exchangeSelect').value;
-      const market = document.getElementById('marketSelect').value;
+    function populateRecentTrades(recentTrades) {
+      const tbody = document.getElementById("recent-trades-body");
+      tbody.innerHTML = "";
 
+      if (!recentTrades || recentTrades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-muted">No trades yet.</td></tr>';
+        return;
+      }
+
+      recentTrades.forEach(t => {
+        const tr = document.createElement("tr");
+        const pnl = Number(t.pnl_usd || 0);
+
+        tr.innerHTML = `
+          <td>${new Date(t.time).toLocaleString()}</td>
+          <td>${t.market}</td>
+          <td class="text-right ${pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${formatUsd(pnl)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadDashboard() {
       try {
-        const url = `/candles?exchange=${encodeURIComponent(exchange)}&market=${encodeURIComponent(market)}`;
-        const res = await fetch(url);
-        const json = await res.json();
+        const res = await fetch("/data");
+        const data = await res.json();
 
-        if (!json || !json.candles) {
-          console.warn('No candles from backend:', json);
-          return;
+        // Top metrics
+        const totalTrades = data.total_events || 0;
+        const wins = data.wins || 0;
+        const losses = data.losses || 0;
+        const winRate = (data.win_rate || 0) * 100;
+        const avgPnl = data.avg_pnl_usd || 0;
+        const totalPnl = data.total_pnl_usd || 0;
+
+        document.getElementById("total-trades").textContent = totalTrades;
+        document.getElementById("wins-losses").textContent = `${wins} wins / ${losses} losses`;
+        document.getElementById("win-rate").textContent = `${winRate.toFixed(1)}%`;
+        document.getElementById("avg-pnl").textContent =
+          `Avg ${formatUsd(avgPnl)} per trade`;
+
+        const pnlEl = document.getElementById("total-pnl");
+        pnlEl.textContent = formatUsd(totalPnl);
+        pnlEl.classList.toggle("metric-good", totalPnl > 0);
+        pnlEl.classList.toggle("metric-bad", totalPnl <= 0);
+
+        // Equity curve
+        if (data.equity_curve && data.equity_curve.length > 0) {
+          drawEquityCurve(data.equity_curve.slice(-100));
         }
 
-        const raw = json.candles;
-        const candles = raw.map(c => ({
-          time: typeof c.time === 'number'
-            ? c.time
-            : Math.floor(new Date(c.time).getTime() / 1000),
-          open: Number(c.open),
-          high: Number(c.high),
-          low: Number(c.low),
-          close: Number(c.close)
-        }));
+        // Market + trades
+        populatePerMarket(data.per_market || []);
+        populateRecentTrades(data.recent_trades || []);
 
-        renderCandleChart(candles, market);
-        updateTradeSummary();
+        // Bot status (optional field from /data)
+        updateApiStatus(data.bot_status || null);
       } catch (err) {
-        console.error('Error loading candles:', err);
+        console.error("Failed to load /data", err);
+        updateApiStatus({status: "offline"});
       }
     }
 
-    function renderCandleChart(candles, market) {
-      const container = document.getElementById('candleContainer');
-
-      if (!candleChart) {
-        candleChart = LightweightCharts.createChart(container, {
-          layout: {
-            background: { color: '#020617' },
-            textColor: '#e5e7eb',
-          },
-          grid: {
-            vertLines: { color: '#111827' },
-            horzLines: { color: '#111827' },
-          },
-          rightPriceScale: {
-            borderVisible: false,
-          },
-          timeScale: {
-            borderVisible: false,
-          },
-          crosshair: {
-            mode: LightweightCharts.CrosshairMode.Normal,
-          },
-        });
-
-        candleSeries = candleChart.addCandlestickSeries({
-          upColor: '#22c55e',
-          downColor: '#ef4444',
-          borderDownColor: '#ef4444',
-          borderUpColor: '#22c55e',
-          wickDownColor: '#ef4444',
-          wickUpColor: '#22c55e',
-        });
-      }
-
-      candleSeries.setData(candles);
-
-      // Add markers from recent trades on this market
-      if (statsCache && statsCache.recent_trades) {
-        const markers = statsCache.recent_trades
-          .filter(t => t.market === market)
-          .map(t => {
-            const ts = Math.floor(new Date(t.time).getTime() / 1000);
-            const pnl = Number(t.pnl_usd || 0);
-            const win = pnl >= 0;
-
-            return {
-              time: ts,
-              position: win ? 'belowBar' : 'aboveBar',
-              color: win ? '#22c55e' : '#ef4444',
-              shape: win ? 'arrowUp' : 'arrowDown',
-              text: `${win ? 'Win' : 'Loss'} ${fmtMoney(pnl)}`,
-            };
-          });
-
-        candleSeries.setMarkers(markers);
-      }
-
-      candleChart.timeScale().fitContent();
-    }
-
-    // Resize charts on window resize
-    window.addEventListener('resize', () => {
-      const canvas = document.getElementById('equityChart');
-      if (canvas && equityChartCtx) {
-        renderEquityCurve(statsCache || { equity_curve: [] });
-      }
-      if (candleChart) {
-        const container = document.getElementById('candleContainer');
-        candleChart.resize(container.clientWidth, container.clientHeight);
-      }
-    });
-
-    document.getElementById('exchangeSelect').addEventListener('change', loadCandles);
-    document.getElementById('marketSelect').addEventListener('change', () => {
-      updateTradeSummary();
-      loadCandles();
-    });
-
-    // Kick things off
-    loadStats();
+    // Initial load + refresh every 60 seconds
+    loadDashboard();
+    setInterval(loadDashboard, 60000);
   </script>
 </body>
 </html>
