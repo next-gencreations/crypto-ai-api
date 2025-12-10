@@ -135,4 +135,347 @@
 
     th,
     td {
-      padding: 6px
+      padding: 6px 4px;
+      text-align: left;
+      border-bottom: 1px solid #0b1220;
+      white-space: nowrap;
+    }
+
+    th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .pnl-positive {
+      color: var(--accent);
+    }
+
+    .pnl-negative {
+      color: var(--accent-red);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid #1f2937;
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--text-muted);
+      margin-left: 6px;
+    }
+
+    footer {
+      margin-top: 32px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+
+  <!-- Chart.js via CDN for equity curve -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Crypto AI Bot Dashboard</h1>
+      <p>
+        Paper-trading stats from Render —
+        <a href="/data" target="_blank">raw stats</a> |
+        <a href="/health" target="_blank">API status</a>
+      </p>
+    </header>
+
+    <!-- Top metrics -->
+    <div class="cards">
+      <div class="card">
+        <h2>Total Trades</h2>
+        <div class="metric-main" id="total-trades">0</div>
+        <div class="metric-sub" id="wins-losses">0 wins / 0 losses</div>
+      </div>
+      <div class="card">
+        <h2>Win Rate</h2>
+        <div class="metric-main" id="win-rate">0.0%</div>
+        <div class="metric-sub" id="avg-pnl">Avg $0.00 per trade</div>
+      </div>
+      <div class="card">
+        <h2>PNL (Total)</h2>
+        <div class="metric-main" id="total-pnl">$0.00</div>
+        <div class="metric-sub">Based on closed trades only</div>
+      </div>
+    </div>
+
+    <!-- Equity curve -->
+    <div class="panel">
+      <div class="section-title">Equity Curve</div>
+      <div class="section-sub" id="equity-caption">
+        Waiting for trades…
+      </div>
+      <canvas id="equityChart"></canvas>
+    </div>
+
+    <!-- Strategy snapshot / per-market performance -->
+    <div class="panel">
+      <div class="section-title">
+        Per-Market Performance
+        <span class="pill" id="market-pill">No data yet</span>
+      </div>
+      <div class="section-sub">
+        How the bot is doing on each market (paper trading).
+      </div>
+      <table id="market-table">
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Trades</th>
+            <th>Win rate</th>
+            <th>Total PnL</th>
+            <th>Avg PnL</th>
+          </tr>
+        </thead>
+        <tbody id="market-body">
+          <tr>
+            <td colspan="5">Loading…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Recent trades -->
+    <div class="panel">
+      <div class="section-title">Recent Trades</div>
+      <div class="section-sub" id="recent-caption">
+        Waiting for trades…
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Market</th>
+            <th>PNL (USD)</th>
+          </tr>
+        </thead>
+        <tbody id="recent-body">
+          <tr>
+            <td colspan="3">Loading…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer>
+      Bot is running on Render (paper trading only). Keep it training for 2–3
+      weeks before making AI changes.
+    </footer>
+  </div>
+
+  <script>
+    let equityChart = null;
+
+    function formatMoney(v) {
+      const sign = v < 0 ? "-" : "";
+      const abs = Math.abs(v);
+      return sign + "$" + abs.toFixed(2);
+    }
+
+    function formatPct(v) {
+      return (v * 100).toFixed(1) + "%";
+    }
+
+    function updateTopCards(data) {
+      const total = data.total_events || 0;
+      const wins = data.wins || 0;
+      const losses = data.losses || 0;
+      const totalPnl = data.total_pnl_usd || 0;
+      const avgPnl = data.avg_pnl_usd || 0;
+      const winRate = data.win_rate || 0;
+
+      document.getElementById("total-trades").textContent = total;
+      document.getElementById(
+        "wins-losses"
+      ).textContent = `${wins} wins / ${losses} losses`;
+
+      const winRateEl = document.getElementById("win-rate");
+      winRateEl.textContent = formatPct(winRate);
+
+      const avgPnlEl = document.getElementById("avg-pnl");
+      avgPnlEl.textContent = `Avg ${formatMoney(avgPnl)} per trade`;
+
+      const totalPnlEl = document.getElementById("total-pnl");
+      totalPnlEl.textContent = formatMoney(totalPnl);
+      totalPnlEl.classList.remove("positive", "negative");
+      if (totalPnl > 0) totalPnlEl.classList.add("positive");
+      else if (totalPnl < 0) totalPnlEl.classList.add("negative");
+    }
+
+    function updateEquityCurve(data) {
+      const curve = data.equity_curve || [];
+      const caption = document.getElementById("equity-caption");
+
+      if (!curve.length) {
+        caption.textContent = "Waiting for trades…";
+        if (equityChart) equityChart.destroy();
+        return;
+      }
+
+      caption.textContent = `Based on closed trades only (last ${curve.length} points).`;
+
+      const labels = curve.map((p) => p.time || "");
+      const values = curve.map((p) => p.equity_usd || 0);
+
+      const ctx = document.getElementById("equityChart").getContext("2d");
+      if (equityChart) equityChart.destroy();
+      equityChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Equity (USD)",
+              data: values,
+              borderWidth: 2,
+              tension: 0.25,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 6, color: "#9ca3af" },
+              grid: { display: false },
+            },
+            y: {
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(55,65,81,0.3)" },
+            },
+          },
+        },
+      });
+    }
+
+    function updatePerMarket(data) {
+      const markets = data.per_market || [];
+      const body = document.getElementById("market-body");
+      const pill = document.getElementById("market-pill");
+
+      body.innerHTML = "";
+
+      if (!markets.length) {
+        pill.textContent = "No data yet";
+        const row = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.textContent = "Waiting for trades…";
+        body.appendChild(row).appendChild(td);
+        return;
+      }
+
+      pill.textContent = markets.length + " markets";
+
+      markets.forEach((m) => {
+        const tr = document.createElement("tr");
+
+        const tdMarket = document.createElement("td");
+        tdMarket.textContent = m.market || "-";
+
+        const tdTrades = document.createElement("td");
+        tdTrades.textContent = m.trades ?? 0;
+
+        const tdWinRate = document.createElement("td");
+        tdWinRate.textContent = formatPct(m.win_rate || 0);
+
+        const tdTotalPnl = document.createElement("td");
+        tdTotalPnl.textContent = formatMoney(m.total_pnl_usd || 0);
+        if ((m.total_pnl_usd || 0) > 0) tdTotalPnl.classList.add("pnl-positive");
+        else if ((m.total_pnl_usd || 0) < 0)
+          tdTotalPnl.classList.add("pnl-negative");
+
+        const tdAvgPnl = document.createElement("td");
+        tdAvgPnl.textContent = formatMoney(m.avg_pnl_usd || 0);
+        if ((m.avg_pnl_usd || 0) > 0) tdAvgPnl.classList.add("pnl-positive");
+        else if ((m.avg_pnl_usd || 0) < 0)
+          tdAvgPnl.classList.add("pnl-negative");
+
+        tr.appendChild(tdMarket);
+        tr.appendChild(tdTrades);
+        tr.appendChild(tdWinRate);
+        tr.appendChild(tdTotalPnl);
+        tr.appendChild(tdAvgPnl);
+        body.appendChild(tr);
+      });
+    }
+
+    function updateRecentTrades(data) {
+      const trades = data.recent_trades || [];
+      const body = document.getElementById("recent-body");
+      const caption = document.getElementById("recent-caption");
+
+      body.innerHTML = "";
+
+      if (!trades.length) {
+        caption.textContent = "Waiting for trades…";
+        const row = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 3;
+        td.textContent = "No trades yet.";
+        body.appendChild(row).appendChild(td);
+        return;
+      }
+
+      caption.textContent = `Showing last ${trades.length} trades.`;      
+
+      trades
+        .slice()
+        .reverse()
+        .forEach((t) => {
+          const tr = document.createElement("tr");
+
+          const tdTime = document.createElement("td");
+          tdTime.textContent = t.time || "";
+
+          const tdMarket = document.createElement("td");
+          tdMarket.textContent = t.market || "-";
+
+          const tdPnl = document.createElement("td");
+          const pnl = t.pnl_usd || 0;
+          tdPnl.textContent = formatMoney(pnl);
+          if (pnl > 0) tdPnl.classList.add("pnl-positive");
+          else if (pnl < 0) tdPnl.classList.add("pnl-negative");
+
+          tr.appendChild(tdTime);
+          tr.appendChild(tdMarket);
+          tr.appendChild(tdPnl);
+          body.appendChild(tr);
+        });
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch("/data");
+        const data = await res.json();
+
+        updateTopCards(data);
+        updateEquityCurve(data);
+        updatePerMarket(data);
+        updateRecentTrades(data);
+      } catch (e) {
+        console.error("Failed to load data", e);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadData();
+      // Refresh every 60 seconds
+      setInterval(loadData, 60000);
+    });
+  </script>
+</body>
+</html>
