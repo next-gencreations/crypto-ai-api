@@ -1,4 +1,5 @@
 flask
-python-dotenv
+gunicorn
 requests
 pandas
+numpy
