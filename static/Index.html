@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Crypto AI Bot Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Simple dark theme with basic CSS only -->
+    <style>
+      :root {
+        --bg: #050814;
+        --bg-card: #101522;
+        --bg-card-soft: #141b2c;
+        --text-main: #f8fafc;
+        --text-muted: #9ca3af;
+        --accent: #22c55e;
+        --accent-red: #ef4444;
+        --border-soft: #1f2937;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: radial-gradient(circle at top, #111827, #020617);
+        color: var(--text-main);
+      }
+
+      .page {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      header {
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+
+      header p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      header a {
+        color: #38bdf8;
+        text-decoration: none;
+        margin-left: 4px;
+        margin-right: 4px;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .card {
+        background: linear-gradient(145deg, var(--bg-card), #060b17);
+        border-radius: 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--border-soft);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      }
+
+      .card h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+      }
+
+      .metric-main {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .metric-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .metric-sub span {
+        display: inline-block;
+        margin-right: 6px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 7px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid var(--border-soft);
+        background: rgba(15, 23, 42, 0.85);
+      }
+
+      .pill span.dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-right: 5px;
+      }
+
+      .pill.ok span.dot {
+        background: var(--accent);
+      }
+
+      .pill.bad span.dot {
+        background: var(--accent-red);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      h3.section-title {
+        margin: 0 0 10px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      canvas {
+        width: 100%;
+        height: 220px;
+        background: radial-gradient(circle at top, #1f2937, #020617);
+        border-radius: 12px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      thead {
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      th,
+      td {
+        padding: 6px 4px;
+        border-bottom: 1px solid #111827;
+      }
+
+      tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.4);
+      }
+
+      .pnl-pos {
+        color: var(--accent);
+      }
+
+      .pnl-neg {
+        color: var(--accent-red);
+      }
+
+      .badge {
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.9);
+        border: 1px solid #1f2937;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+      }
+
+      footer {
+        margin-top: 20px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+      }
+
+      .muted {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+    </style>
+
+    <!-- Chart.js from CDN (for equity curve) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+
+  <body>
+    <div class="page">
+      <header>
+        <h1>Crypto AI Bot Dashboard</h1>
+        <p>
+          Paper-trading stats from Render —
+          <a href="/data" target="_blank">raw stats</a> |
+          <a href="/health" target="_blank">API status</a>
+        </p>
+      </header>
+
+      <!-- TOP SUMMARY CARDS -->
+      <div class="cards">
+        <div class="card">
+          <h2>Total Trades</h2>
+          <div class="metric-main" id="metric-trades">0</div>
+          <div class="metric-sub">
+            <span id="metric-wl">0 wins / 0 losses</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Win Rate</h2>
+          <div class="metric-main" id="metric-winrate">0.0%</div>
+          <div class="metric-sub">
+            <span id="metric-avgpnl">Avg $0.00 per trade</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>PNL (Total)</h2>
+          <div class="metric-main" id="metric-totalpnl">$0.00</div>
+          <div class="metric-sub">
+            <span class="pill" id="metric-trend-pill">
+              <span class="dot"></span>
+              <span id="metric-trend-label">Waiting for data…</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- EQUITY & STRATEGY SNAPSHOT -->
+      <div class="layout">
+        <div class="card">
+          <h3 class="section-title">Equity Curve</h3>
+          <canvas id="equityChart"></canvas>
+          <div class="muted" id="equity-note">
+            Based on closed trades only.
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title">Strategy Snapshot</h3>
+          <div class="muted" id="snapshot-body">
+            Waiting for trades…
+          </div>
+        </div>
+      </div>
+
+      <!-- PER-MARKET PERFORMANCE -->
+      <div class="card" style="margin-bottom: 18px">
+        <h3 class="section-title">
+          Per-Market Performance
+          <span class="badge" id="market-badge">No data yet</span>
+        </h3>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th align="left">Market</th>
+                <th align="right">Trades</th>
+                <th align="right">Win Rate</th>
+                <th align="right">Total PnL</th>
+                <th align="right">Avg PnL</th>
+              </tr>
+            </thead>
+            <tbody id="market-body">
+              <tr>
+                <td colspan="5" class="muted">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RECENT TRADES -->
+      <div class="card">
+        <h3 class="section-title">Recent Trades</h3>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th align="left">Time</th>
+                <th align="left">Market</th>
+                <th align="right">PnL (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="trades-body">
+              <tr>
+                <td colspan="3" class="muted">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer>
+        Bot is running on Render (paper trading only). Keep it training for 2–3
+        weeks before making AI changes.
+      </footer>
+    </div>
+
+    <script>
+      async function fetchStats() {
+        try {
+          const res = await fetch("/data", { cache: "no-store" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return await res.json();
+        } catch (err) {
+          console.error("Failed to fetch /data", err);
+          return null;
+        }
+      }
+
+      function formatMoney(value) {
+        const n = Number(value || 0);
+        return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+      }
+
+      function formatPct(value) {
+        return (Number(value || 0) * 100).toFixed(1) + "%";
+      }
+
+      function setSummary(stats) {
+        const totalTrades = stats.total_trades || 0;
+        const wins = stats.wins || 0;
+        const losses = stats.losses || 0;
+        const winRate = stats.win_rate || 0;
+        const totalPnl = stats.total_pnl_usd || 0;
+        const avgPnl = stats.avg_pnl_usd || 0;
+
+        document.getElementById("metric-trades").textContent = totalTrades;
+        document.getElementById(
+          "metric-wl"
+        ).textContent = `${wins} wins / ${losses} losses`;
+        document.getElementById("metric-winrate").textContent = formatPct(
+          winRate
+        );
+        document.getElementById("metric-totalpnl").textContent =
+          formatMoney(totalPnl);
+        document.getElementById(
+          "metric-avgpnl"
+        ).textContent = `Avg ${formatMoney(avgPnl)} per trade`;
+
+        const pill = document.getElementById("metric-trend-pill");
+        const label = document.getElementById("metric-trend-label");
+        const dot = pill.querySelector(".dot");
+
+        if (totalTrades === 0) {
+          pill.classList.remove("ok", "bad");
+          label.textContent = "Waiting for data…";
+          dot.style.background = "#4b5563";
+        } else if (totalPnl >= 0) {
+          pill.classList.add("ok");
+          pill.classList.remove("bad");
+          label.textContent = "Up overall";
+        } else {
+          pill.classList.add("bad");
+          pill.classList.remove("ok");
+          label.textContent = "Down overall";
+        }
+      }
+
+      function setEquityCurve(equityCurve) {
+        const ctx = document.getElementById("equityChart").getContext("2d");
+
+        if (!equityCurve || equityCurve.length === 0) {
+          document.getElementById("equity-note").textContent =
+            "No equity data yet – waiting for first closed trade.";
+          // Draw a flat line
+          new Chart(ctx, {
+            type: "line",
+            data: {
+              labels: ["0"],
+              datasets: [
+                {
+                  data: [0],
+                },
+              ],
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { display: false },
+                y: { display: false },
+              },
+            },
+          });
+          return;
+        }
+
+        const labels = equityCurve.map((p) =>
+          (p.time || "").replace("T", " ").slice(5, 16)
+        );
+        const values = equityCurve.map((p) => p.equity_usd || 0);
+
+        new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                data: values,
+                tension: 0.3,
+                borderWidth: 2,
+                pointRadius: 0,
+              },
+            ],
+          },
+          options: {
+            plugins: { legend: { display: false } },
+            elements: { line: { borderColor: "#22c55e" } },
+            scales: {
+              x: {
+                ticks: { maxTicksLimit: 6, color: "#6b7280" },
+                grid: { display: false },
+              },
+              y: {
+                ticks: { color: "#6b7280" },
+                grid: { color: "#111827" },
+              },
+            },
+          },
+        });
+      }
+
+      function setPerMarket(byMarket) {
+        const tbody = document.getElementById("market-body");
+        const badge = document.getElementById("market-badge");
+
+        tbody.innerHTML = "";
+
+        if (!byMarket || byMarket.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="5" class="muted">No trades yet.</td></tr>';
+          badge.textContent = "0 markets";
+          return;
+        }
+
+        // Sort by best total PnL descending
+        const sorted = [...byMarket].sort(
+          (a, b) => (b.total_pnl_usd || 0) - (a.total_pnl_usd || 0)
+        );
+
+        sorted.forEach((m) => {
+          const tr = document.createElement("tr");
+
+          const winRate = m.win_rate || 0;
+          const cls = (m.total_pnl_usd || 0) >= 0 ? "pnl-pos" : "pnl-neg";
+
+          tr.innerHTML = `
+            <td>${m.market}</td>
+            <td align="right">${m.trades}</td>
+            <td align="right">${formatPct(winRate)}</td>
+            <td align="right" class="${cls}">${formatMoney(
+            m.total_pnl_usd
+          )}</td>
+            <td align="right">${formatMoney(m.avg_pnl_usd)}</td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+
+        badge.textContent = `${byMarket.length} markets`;
+      }
+
+      function setRecentTrades(recentTrades) {
+        const tbody = document.getElementById("trades-body");
+        tbody.innerHTML = "";
+
+        if (!recentTrades || recentTrades.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="3" class="muted">No closed trades yet.</td></tr>';
+          return;
+        }
+
+        recentTrades.forEach((t) => {
+          const tr = document.createElement("tr");
+          const cls = (t.pnl_usd || 0) >= 0 ? "pnl-pos" : "pnl-neg";
+
+          tr.innerHTML = `
+            <td>${(t.time || "").replace("T", " ").slice(0, 19)}</td>
+            <td>${t.market}</td>
+            <td align="right" class="${cls}">${formatMoney(t.pnl_usd)}</td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+      }
+
+      function setSnapshot(stats, byMarket) {
+        const el = document.getElementById("snapshot-body");
+        const totalTrades = stats.total_trades || 0;
+
+        if (!totalTrades) {
+          el.textContent =
+            "No trades yet. Leave the bot running so it can learn about each market.";
+          return;
+        }
+
+        const markets = byMarket || [];
+        if (markets.length === 0) {
+          el.textContent =
