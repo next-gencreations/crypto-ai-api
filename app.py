@@ -1,210 +1,171 @@
 import os
-import json
 import csv
+import json
 from datetime import datetime, timezone
-from flask import Flask, jsonify, request, send_from_directory, abort
+from typing import Any, Dict, List, Optional
 
-app = Flask(__name__, static_folder="static")
+from flask import Flask, jsonify, send_from_directory, request, abort
 
-# Render disk (for THIS web service)
-DATA_DIR = os.environ.get("DATA_DIR", "/opt/render/project/src/data")
-os.makedirs(DATA_DIR, exist_ok=True)
 
+# =========================================================
+# CONFIG
+# =========================================================
+
+DATA_DIR = os.getenv("DATA_DIR", "/opt/render/project/src/data").rstrip("/")
 TRADES_FILE = os.path.join(DATA_DIR, "trades.csv")
 EQUITY_FILE = os.path.join(DATA_DIR, "equity_curve.csv")
-TRAINING_FILE = os.path.join(DATA_DIR, "training_events.csv")
 HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.json")
+TRAINING_FILE = os.path.join(DATA_DIR, "training_events.csv")
 
-INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "").strip()  # optional shared secret
+# Optional simple auth for ingestion endpoints
+INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
+
+# Flask app serves dashboard from /static/index.html (NO JINJA templates)
+app = Flask(__name__, static_folder="static")
 
 
-def _utc_now():
+# =========================================================
+# HELPERS
+# =========================================================
+
+def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _to_float(x: Any, default: Optional[float] = 0.0) -> Optional[float]:
+    try:
+        if x is None or x == "":
+            return default
+        return float(x)
+    except Exception:
+        return default
 
-def _require_token_if_set():
+def _read_csv(path: str) -> List[Dict[str, Any]]:
+    if not os.path.exists(path):
+        return []
+    rows: List[Dict[str, Any]] = []
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                rows.append(dict(r))
+    except Exception:
+        return []
+    return rows
+
+def _append_csv(path: str, fieldnames: List[str], row: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    exists = os.path.exists(path)
+    with open(path, "a", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        if not exists:
+            w.writeheader()
+        w.writerow(row)
+
+def _read_json(path: str) -> Optional[Dict[str, Any]]:
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def _require_ingest_token():
     if not INGEST_TOKEN:
         return
     token = request.headers.get("X-INGEST-TOKEN", "")
     if token != INGEST_TOKEN:
         abort(401)
 
-
-def _safe_read_json(path: str):
+def _safe_round(x: Optional[float], n: int = 2) -> float:
     try:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+        return round(float(x), n)
     except Exception:
-        pass
-    return None
+        return 0.0
 
 
-def _append_csv(path: str, fieldnames: list[str], row: dict):
-    file_exists = os.path.exists(path)
-    with open(path, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            w.writeheader()
-        # keep only known fields
-        w.writerow({k: row.get(k, "") for k in fieldnames})
-
-
-def _read_csv(path: str):
-    if not os.path.exists(path):
-        return []
-    out = []
-    try:
-        with open(path, "r", newline="", encoding="utf-8") as f:
-            r = csv.DictReader(f)
-            for row in r:
-                out.append(row)
-    except Exception:
-        return []
-    return out
-
-
-def _to_float(x, default=0.0):
-    try:
-        return float(x)
-    except Exception:
-        return default
-
+# =========================================================
+# ROUTES (DASHBOARD)
+# =========================================================
 
 @app.get("/")
 def home():
-    # Serve dashboard HTML directly
+    """
+    Serve the dashboard page from static/index.html.
+    This avoids TemplateNotFound errors completely.
+    """
     return send_from_directory(app.static_folder, "index.html")
 
-
-@app.get("/health")
-def health():
-    return jsonify({"ok": True, "time_utc": _utc_now()})
-
-
-# -----------------------
-# Ingest endpoints (worker posts here)
-# -----------------------
-
-@app.post("/ingest/heartbeat")
-def ingest_heartbeat():
-    _require_token_if_set()
-    payload = request.get_json(silent=True) or {}
-    payload.setdefault("time_utc", _utc_now())
-    payload.setdefault("status", "running")
-
-    with open(HEARTBEAT_FILE, "w", encoding="utf-8") as f:
-        json.dump(payload, f)
-
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/trade")
-def ingest_trade():
-    _require_token_if_set()
-    row = request.get_json(silent=True) or {}
-
-    fields = [
-        "time_utc", "market", "side",
-        "entry_price", "exit_price",
-        "qty", "pnl_usd", "pnl_pct",
-        "reason"
-    ]
-    row.setdefault("time_utc", _utc_now())
-    _append_csv(TRADES_FILE, fields, row)
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/equity")
-def ingest_equity():
-    _require_token_if_set()
-    row = request.get_json(silent=True) or {}
-
-    fields = ["time_utc", "equity_usd"]
-    row.setdefault("time_utc", _utc_now())
-    _append_csv(EQUITY_FILE, fields, row)
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/training_event")
-def ingest_training_event():
-    _require_token_if_set()
-    row = request.get_json(silent=True) or {}
-
-    # flexible schema – keep it simple
-    fields = ["time_utc", "event_type", "market", "payload_json"]
-    row.setdefault("time_utc", _utc_now())
-    if "payload_json" not in row:
-        row["payload_json"] = json.dumps(row.get("payload", {}))
-    _append_csv(TRAINING_FILE, fields, row)
-    return jsonify({"ok": True})
-
-
-# -----------------------
-# Dashboard data endpoint
-# -----------------------
+@app.get("/raw")
+def raw_dashboard_file():
+    """
+    Handy debug: fetch the index.html directly.
+    """
+    return send_from_directory(app.static_folder, "index.html")
 
 @app.get("/data")
 def data():
-    hb = _safe_read_json(HEARTBEAT_FILE) or {}
-    status = hb.get("status", "unknown")
-    last_heartbeat = hb.get("time_utc")
-
-    trades = _read_csv(TRADES_FILE)
+    """
+    Dashboard JSON: reads from Render Disk CSV/JSON.
+    """
+    trades_rows = _read_csv(TRADES_FILE)
     equity_rows = _read_csv(EQUITY_FILE)
+    training_rows = _read_csv(TRAINING_FILE)
 
-    # Compute trade metrics
-    total_trades = len(trades)
+    hb = _read_json(HEARTBEAT_FILE) or {}
+    status = hb.get("status", "unknown")
+    last_heartbeat = hb.get("time_utc", None)
+
+    # Recent trades (latest 20)
+    # trades.csv has: time_utc,market,side,entry_price,exit_price,qty,pnl_usd,pnl_pct,reason
+    def _trade_time_key(r: Dict[str, Any]) -> str:
+        return r.get("time_utc") or ""
+
+    trades_rows_sorted = sorted(trades_rows, key=_trade_time_key, reverse=True)
+    recent_trades = trades_rows_sorted[:20]
+
+    # Win/loss + pnl
+    total_trades = len(trades_rows)
     wins = 0
     losses = 0
     pnl_total = 0.0
-
-    per_market_map = {}
-
     pnl_wins_sum = 0.0
     pnl_losses_sum = 0.0
     best_trade = 0.0
     worst_trade = 0.0
 
-    recent_trades = []
-    for t in trades[-20:]:
-        recent_trades.append({
-            "time_utc": t.get("time_utc"),
-            "market": t.get("market"),
-            "pnl_usd": _to_float(t.get("pnl_usd"), 0.0),
-            "pnl_pct": _to_float(t.get("pnl_pct"), 0.0),
-            "side": t.get("side"),
-            "reason": t.get("reason"),
-        })
-
-    for t in trades:
-        m = t.get("market", "UNKNOWN")
-        p = _to_float(t.get("pnl_usd"), 0.0)
-        pnl_total += p
-
-        if p > 0:
+    for r in trades_rows:
+        pnl = _to_float(r.get("pnl_usd"), 0.0) or 0.0
+        pnl_total += pnl
+        best_trade = max(best_trade, pnl)
+        worst_trade = min(worst_trade, pnl)
+        if pnl > 0:
             wins += 1
-            pnl_wins_sum += p
-        elif p < 0:
+            pnl_wins_sum += pnl
+        elif pnl < 0:
             losses += 1
-            pnl_losses_sum += p  # negative
+            pnl_losses_sum += pnl
 
-        best_trade = max(best_trade, p)
-        worst_trade = min(worst_trade, p)
+    win_rate = (wins / total_trades) * 100.0 if total_trades else 0.0
 
+    # Per market performance
+    per_market_map: Dict[str, Dict[str, Any]] = {}
+    for r in trades_rows:
+        m = (r.get("market") or "").upper()
+        if not m:
+            continue
+        pnl = _to_float(r.get("pnl_usd"), 0.0) or 0.0
         pm = per_market_map.setdefault(m, {"market": m, "trades": 0, "wins": 0, "losses": 0, "total_pnl": 0.0})
         pm["trades"] += 1
-        pm["total_pnl"] += p
-        if p > 0:
+        pm["total_pnl"] += pnl
+        if pnl > 0:
             pm["wins"] += 1
-        elif p < 0:
+        elif pnl < 0:
             pm["losses"] += 1
-
-    win_rate = (wins / total_trades) if total_trades else 0.0
 
     per_market = []
     for m, pm in per_market_map.items():
-        wr = (pm["wins"] / pm["trades"]) if pm["trades"] else 0.0
+        wr = (pm["wins"] / pm["trades"]) * 100.0 if pm["trades"] else 0.0
         per_market.append({
             "market": m,
             "trades": pm["trades"],
@@ -214,9 +175,10 @@ def data():
         })
     per_market.sort(key=lambda x: x["total_pnl"], reverse=True)
 
-    # Equity curve & drawdown
+    # Equity curve + max drawdown
     equity_curve = []
     equity_values = []
+
     for r in equity_rows:
         e = _to_float(r.get("equity_usd"), None)
         if e is None:
@@ -244,34 +206,109 @@ def data():
         "wins": wins,
         "losses": losses,
         "win_rate": win_rate,
-        "total_pnl_usd": pnl_total,
+        "total_pnl_usd": _safe_round(pnl_total, 2),
         "bot_status": {
             "status": status,
             "last_heartbeat": last_heartbeat,
         },
         "advanced_metrics": {
             "profit_factor": profit_factor,
-            "avg_win_usd": avg_win,
-            "avg_loss_usd": abs(avg_loss),
-            "best_trade_usd": best_trade,
-            "worst_trade_usd": worst_trade,
-            "max_drawdown_usd": max_drawdown,
+            "avg_win_usd": _safe_round(avg_win, 2),
+            "avg_loss_usd": _safe_round(abs(avg_loss), 2),
+            "best_trade_usd": _safe_round(best_trade, 2),
+            "worst_trade_usd": _safe_round(worst_trade, 2),
+            "max_drawdown_usd": _safe_round(max_drawdown, 2),
             "recovery_factor": None,
             "sharpe_ratio": None,
         },
         "equity_curve": equity_curve,
         "per_market": per_market,
         "recent_trades": recent_trades,
-        "total_events": len(_read_csv(TRAINING_FILE)),
+        "total_events": len(training_rows),
+        "server_time_utc": utc_now_iso(),
+        "data_dir": DATA_DIR,
+        "files_found": {
+            "trades_csv": os.path.exists(TRADES_FILE),
+            "equity_csv": os.path.exists(EQUITY_FILE),
+            "heartbeat_json": os.path.exists(HEARTBEAT_FILE),
+            "training_csv": os.path.exists(TRAINING_FILE),
+        }
     }
 
     return jsonify(payload)
 
 
+# =========================================================
+# ROUTES (INGEST) - OPTIONAL, SAFE
+# =========================================================
+
+@app.post("/ingest/heartbeat")
+def ingest_heartbeat():
+    _require_ingest_token()
+    hb = request.get_json(silent=True) or {}
+    hb.setdefault("time_utc", utc_now_iso())
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(HEARTBEAT_FILE, "w", encoding="utf-8") as f:
+        json.dump(hb, f, ensure_ascii=False, indent=2)
+    return jsonify({"ok": True})
+
+@app.post("/ingest/equity")
+def ingest_equity():
+    _require_ingest_token()
+    obj = request.get_json(silent=True) or {}
+    row = {
+        "time_utc": obj.get("time_utc") or utc_now_iso(),
+        "equity_usd": obj.get("equity_usd", 0.0),
+    }
+    _append_csv(EQUITY_FILE, ["time_utc", "equity_usd"], row)
+    return jsonify({"ok": True})
+
+@app.post("/ingest/trade")
+def ingest_trade():
+    _require_ingest_token()
+    obj = request.get_json(silent=True) or {}
+    row = {
+        "time_utc": obj.get("time_utc") or utc_now_iso(),
+        "market": obj.get("market", ""),
+        "side": obj.get("side", ""),
+        "entry_price": obj.get("entry_price", ""),
+        "exit_price": obj.get("exit_price", ""),
+        "qty": obj.get("qty", ""),
+        "pnl_usd": obj.get("pnl_usd", ""),
+        "pnl_pct": obj.get("pnl_pct", ""),
+        "reason": obj.get("reason", ""),
+    }
+    _append_csv(TRADES_FILE,
+                ["time_utc", "market", "side", "entry_price", "exit_price", "qty", "pnl_usd", "pnl_pct", "reason"],
+                row)
+    return jsonify({"ok": True})
+
+@app.post("/ingest/training_event")
+def ingest_training_event():
+    _require_ingest_token()
+    obj = request.get_json(silent=True) or {}
+    row = {
+        "time_utc": obj.get("time_utc") or utc_now_iso(),
+        "event_type": obj.get("event_type", ""),
+        "market": obj.get("market", ""),
+        "payload_json": json.dumps(obj.get("payload_json", {}), ensure_ascii=False),
+    }
+    _append_csv(TRAINING_FILE, ["time_utc", "event_type", "market", "payload_json"], row)
+    return jsonify({"ok": True})
+
+
+# =========================================================
+# STATIC FILES
+# =========================================================
+
 @app.get("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(app.static_folder, filename)
 
+
+# =========================================================
+# ENTRY
+# =========================================================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
