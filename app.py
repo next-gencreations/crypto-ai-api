@@ -1,34 +1,40 @@
 from __future__ import annotations
 
+import csv
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-import pandas as pd
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, send_from_directory
 
-app = Flask(__name__, static_folder="static", template_folder=".")
+app = Flask(__name__, static_folder="static")
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/opt/render/project/src/data"))
+
 TRADES_FILE = DATA_DIR / "trades.csv"
 TRAINING_FILE = DATA_DIR / "training_events.csv"
 EQUITY_FILE = DATA_DIR / "equity_curve.csv"
 HEARTBEAT_FILE = DATA_DIR / "heartbeat.json"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def safe_read_csv(path: Path) -> pd.DataFrame:
+def read_csv_rows(path: Path) -> List[Dict[str, str]]:
     if not path.exists():
-        return pd.DataFrame()
+        return []
     try:
-        return pd.read_csv(path)
+        with path.open("r", newline="") as f:
+            reader = csv.DictReader(f)
+            return [dict(r) for r in reader]
     except Exception:
-        return pd.DataFrame()
+        return []
+
+
+def to_float(x: Any, default: float = 0.0) -> float:
+    try:
+        return float(x)
+    except Exception:
+        return default
 
 
 def compute_bot_status() -> Dict[str, Any]:
@@ -36,9 +42,7 @@ def compute_bot_status() -> Dict[str, Any]:
         return {"status": "unknown", "last_heartbeat": None, "minutes_since": None}
 
     try:
-        with HEARTBEAT_FILE.open() as f:
-            data = json.load(f)
-
+        data = json.loads(HEARTBEAT_FILE.read_text())
         last_str = data.get("last_heartbeat")
         if not last_str:
             return {"status": "unknown", "last_heartbeat": None, "minutes_since": None}
@@ -64,203 +68,135 @@ def compute_bot_status() -> Dict[str, Any]:
 
 
 def compute_equity_curve() -> List[Dict[str, Any]]:
-    df = safe_read_csv(EQUITY_FILE)
-    if df.empty:
-        return []
-
+    rows = read_csv_rows(EQUITY_FILE)
     out: List[Dict[str, Any]] = []
-    for _, row in df.iterrows():
-        out.append(
-            {
-                "time": row["time"],
-                "equity": float(row["equity"]),
-            }
-        )
+    for r in rows:
+        out.append({"time": r.get("time"), "equity": to_float(r.get("equity"))})
     return out
 
 
-def compute_advanced_metrics() -> Dict[str, Any]:
-    df = safe_read_csv(TRAINING_FILE)
-    if df.empty:
-        return {
-            "avg_win_usd": 0.0,
-            "avg_loss_usd": 0.0,
-            "best_trade_usd": 0.0,
-            "worst_trade_usd": 0.0,
-            "max_drawdown_usd": 0.0,
-            "profit_factor": None,
-            "recovery_factor": None,
-            "sharpe_ratio": None,
-        }
-
-    df = df.copy()
-    df["pnl_usd"] = pd.to_numeric(df["pnl_usd"], errors="coerce").fillna(0.0)
-
-    # Basic wins / losses
-    wins = df[df["pnl_usd"] > 0]
-    losses = df[df["pnl_usd"] < 0]
-
-    avg_win = wins["pnl_usd"].mean() if not wins.empty else 0.0
-    avg_loss = losses["pnl_usd"].mean() if not losses.empty else 0.0
-    best_trade = df["pnl_usd"].max()
-    worst_trade = df["pnl_usd"].min()
-
-    gross_profit = wins["pnl_usd"].sum()
-    gross_loss = losses["pnl_usd"].sum()  # negative
-
-    profit_factor = None
-    if gross_loss < 0:
-        profit_factor = float(gross_profit / abs(gross_loss)) if abs(gross_loss) > 0 else None
-
-    # Equity curve for drawdown metrics
-    eq_df = safe_read_csv(EQUITY_FILE)
-    max_drawdown_usd = 0.0
-    recovery_factor = None
-    if not eq_df.empty:
-        eq_df = eq_df.copy()
-        eq_df["equity"] = pd.to_numeric(eq_df["equity"], errors="coerce").fillna(0.0)
-        peak = eq_df["equity"].iloc[0]
-        max_dd = 0.0
-        for v in eq_df["equity"]:
-            peak = max(peak, v)
-            dd = peak - v
-            max_dd = max(max_dd, dd)
-        max_drawdown_usd = float(max_dd)
-        total_pnl = df["pnl_usd"].sum()
-        if max_dd > 0:
-            recovery_factor = float(total_pnl / max_dd)
-
-    # Sharpe ratio (per-trade)
-    sharpe_ratio = None
-    returns = df["pnl_usd"]
-    if len(returns) > 1:
-        mean_ret = returns.mean()
-        std_ret = returns.std(ddof=1)
-        if std_ret > 0:
-            sharpe_ratio = float((mean_ret / std_ret) * (len(returns) ** 0.5))
-
+def compute_summary(training_rows: List[Dict[str, str]]) -> Dict[str, Any]:
+    pnl = [to_float(r.get("pnl_usd")) for r in training_rows]
+    wins = sum(1 for x in pnl if x > 0)
+    losses = sum(1 for x in pnl if x < 0)
+    total = len(pnl)
+    total_pnl = sum(pnl)
+    win_rate = (wins / total * 100.0) if total else 0.0
     return {
-        "avg_win_usd": float(avg_win if pd.notna(avg_win) else 0.0),
-        "avg_loss_usd": float(avg_loss if pd.notna(avg_loss) else 0.0),
-        "best_trade_usd": float(best_trade if pd.notna(best_trade) else 0.0),
-        "worst_trade_usd": float(worst_trade if pd.notna(worst_trade) else 0.0),
-        "max_drawdown_usd": float(max_drawdown_usd),
-        "profit_factor": profit_factor,
-        "recovery_factor": recovery_factor,
-        "sharpe_ratio": sharpe_ratio,
+        "total_events": total,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": win_rate,
+        "total_pnl_usd": total_pnl,
     }
 
 
-def compute_summary_stats() -> Dict[str, Any]:
-    df = safe_read_csv(TRAINING_FILE)
-    if df.empty:
-        return {
-            "total_events": 0,
-            "wins": 0,
-            "losses": 0,
-            "win_rate": 0.0,
-            "total_pnl_usd": 0.0,
-        }
+def compute_per_market(training_rows: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+    by_market: Dict[str, List[float]] = {}
+    for r in training_rows:
+        m = r.get("market", "UNKNOWN")
+        by_market.setdefault(m, []).append(to_float(r.get("pnl_usd")))
 
-    df = df.copy()
-    df["pnl_usd"] = pd.to_numeric(df["pnl_usd"], errors="coerce").fillna(0.0)
-
-    wins = (df["pnl_usd"] > 0).sum()
-    losses = (df["pnl_usd"] < 0).sum()
-    total = len(df)
-    total_pnl = df["pnl_usd"].sum()
-
-    win_rate = (wins / total * 100.0) if total > 0 else 0.0
-
-    return {
-        "total_events": int(total),
-        "wins": int(wins),
-        "losses": int(losses),
-        "win_rate": float(win_rate),
-        "total_pnl_usd": float(total_pnl),
-    }
-
-
-def compute_per_market_stats() -> List[Dict[str, Any]]:
-    df = safe_read_csv(TRAINING_FILE)
-    if df.empty:
-        return []
-
-    df = df.copy()
-    df["pnl_usd"] = pd.to_numeric(df["pnl_usd"], errors="coerce").fillna(0.0)
-
-    grouped = df.groupby("market")
     out: List[Dict[str, Any]] = []
-    for market, g in grouped:
-        trades = len(g)
-        wins = (g["pnl_usd"] > 0).sum()
-        losses = (g["pnl_usd"] < 0).sum()
-        win_rate = (wins / trades * 100.0) if trades > 0 else 0.0
-        total_pnl = g["pnl_usd"].sum()
-        avg_pnl = g["pnl_usd"].mean() if trades > 0 else 0.0
+    for market, pnls in by_market.items():
+        trades = len(pnls)
+        wins = sum(1 for x in pnls if x > 0)
+        losses = sum(1 for x in pnls if x < 0)
+        win_rate = (wins / trades * 100.0) if trades else 0.0
+        total_pnl = sum(pnls)
+        avg_pnl = (total_pnl / trades) if trades else 0.0
         out.append(
             {
                 "market": market,
-                "trades": int(trades),
-                "wins": int(wins),
-                "losses": int(losses),
-                "win_rate": float(win_rate),
-                "total_pnl": float(total_pnl),
-                "avg_pnl": float(avg_pnl),
+                "trades": trades,
+                "wins": wins,
+                "losses": losses,
+                "win_rate": win_rate,
+                "total_pnl": total_pnl,
+                "avg_pnl": avg_pnl,
             }
         )
     out.sort(key=lambda x: x["market"])
     return out
 
 
-def get_recent_trades(limit: int = 20) -> List[Dict[str, Any]]:
-    df = safe_read_csv(TRADES_FILE)
-    if df.empty:
-        return []
+def compute_advanced(training_rows: List[Dict[str, str]]) -> Dict[str, Any]:
+    pnls = [to_float(r.get("pnl_usd")) for r in training_rows]
+    wins = [x for x in pnls if x > 0]
+    losses = [x for x in pnls if x < 0]
 
-    df = df.tail(limit).copy()
-    df["pnl_usd"] = pd.to_numeric(df["pnl_usd"], errors="coerce").fillna(0.0)
+    avg_win = sum(wins) / len(wins) if wins else 0.0
+    avg_loss = sum(losses) / len(losses) if losses else 0.0
+    best_trade = max(pnls) if pnls else 0.0
+    worst_trade = min(pnls) if pnls else 0.0
 
-    out: List[Dict[str, Any]] = []
-    for _, row in df.iterrows():
+    gross_profit = sum(wins)
+    gross_loss = sum(losses)  # negative
+    profit_factor = (gross_profit / abs(gross_loss)) if gross_loss < 0 else None
+
+    # Max drawdown from equity curve
+    eq = compute_equity_curve()
+    max_dd = 0.0
+    if eq:
+        peak = eq[0]["equity"]
+        for p in eq:
+            e = float(p["equity"])
+            if e > peak:
+                peak = e
+            dd = peak - e
+            if dd > max_dd:
+                max_dd = dd
+
+    recovery_factor = None
+    total_pnl = sum(pnls)
+    if max_dd > 0:
+        recovery_factor = total_pnl / max_dd
+
+    return {
+        "avg_win_usd": avg_win,
+        "avg_loss_usd": avg_loss,
+        "best_trade_usd": best_trade,
+        "worst_trade_usd": worst_trade,
+        "max_drawdown_usd": max_dd,
+        "profit_factor": profit_factor,
+        "recovery_factor": recovery_factor,
+        "sharpe_ratio": None,  # can add later once we have lots of trades
+    }
+
+
+def recent_trades(limit: int = 20) -> List[Dict[str, Any]]:
+    rows = read_csv_rows(TRADES_FILE)
+    rows = rows[-limit:]
+    out = []
+    for r in reversed(rows):
         out.append(
             {
-                "entry_time": row["entry_time"],
-                "exit_time": row["exit_time"],
-                "market": row["market"],
-                "pnl_usd": float(row["pnl_usd"]),
+                "entry_time": r.get("entry_time"),
+                "exit_time": r.get("exit_time"),
+                "market": r.get("market"),
+                "pnl_usd": to_float(r.get("pnl_usd")),
             }
         )
-    # Sort newest first
-    out.sort(key=lambda x: x["exit_time"], reverse=True)
     return out
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 @app.route("/")
 def index():
-    # index.html lives in the repo root
-    return render_template("index.html")
+    # Serve the dashboard html from /static/index.html (most reliable on Render)
+    return send_from_directory("static", "index.html")
 
 
 @app.route("/data")
 def data():
-    advanced = compute_advanced_metrics()
-    summary = compute_summary_stats()
-    bot_status = compute_bot_status()
-    equity_curve = compute_equity_curve()
-    per_market = compute_per_market_stats()
-    recent_trades = get_recent_trades()
+    training_rows = read_csv_rows(TRAINING_FILE)
+    summary = compute_summary(training_rows)
 
     payload = {
-        "advanced_metrics": advanced,
-        "bot_status": bot_status,
-        "equity_curve": equity_curve,
-        "per_market": per_market,
-        "recent_trades": recent_trades,
+        "advanced_metrics": compute_advanced(training_rows),
+        "bot_status": compute_bot_status(),
+        "equity_curve": compute_equity_curve(),
+        "per_market": compute_per_market(training_rows),
+        "recent_trades": recent_trades(),
         "total_events": summary["total_events"],
         "wins": summary["wins"],
         "losses": summary["losses"],
@@ -268,12 +204,6 @@ def data():
         "total_pnl_usd": summary["total_pnl_usd"],
     }
     return jsonify(payload)
-
-
-# Optional endpoint if you ever want to POST events directly
-@app.route("/event", methods=["POST"])
-def receive_event():
-    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
