@@ -1,311 +1,470 @@
-from flask import Flask, jsonify, send_from_directory
-import csv
 import os
-from datetime import datetime, timezone
+import csv
+import json
 import math
+from datetime import datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+from statistics import mean
+from typing import Any, Dict, List, Optional, Tuple
 
-app = Flask(__name__, static_folder="static")
+from flask import Flask, jsonify, request, send_from_directory
 
-# -------------------------------------------------------------------
-# File locations (adjust names if your bot uses different ones)
-# -------------------------------------------------------------------
-DATA_DIR = "data"
+# ---------------------------------------------------------------------
+# Config / paths
+# ---------------------------------------------------------------------
 
-# Main trades CSV written by your bot
-TRADE_FILE = os.path.join(DATA_DIR, "trades.csv")          # <-- change to training_events.csv if needed
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"  # IMPORTANT: mount Render disk here
 
-# Optional heartbeat file written periodically by your bot
-HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.txt")
+TRADE_FILE = DATA_DIR / "trades.csv"
+EQUITY_FILE = DATA_DIR / "equity_curve.csv"
+TRAINING_FILE = DATA_DIR / "training_events.csv"
+HEARTBEAT_FILE = DATA_DIR / "heartbeat.json"
+
+app = Flask(
+    __name__,
+    static_folder=str(BASE_DIR / "static"),
+    static_url_path="",
+)
 
 
-# -------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Helpers
-# -------------------------------------------------------------------
-def parse_iso(ts: str):
+# ---------------------------------------------------------------------
+
+
+def ensure_data_files_exist() -> None:
+    """
+    Make sure the data directory and CSVs exist.
+    This is defensive: the worker also initialises these, but the API
+    should not crash if it starts first.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not TRADE_FILE.exists():
+        with open(TRADE_FILE, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "entry_time",
+                    "exit_time",
+                    "hold_minutes",
+                    "market",
+                    "entry_price",
+                    "exit_price",
+                    "qty",
+                    "pnl_usd",
+                    "pnl_pct",
+                    "take_profit_pct",
+                    "stop_loss_pct",
+                    "risk_mode",
+                    "trend_strength",
+                    "rsi",
+                    "volatility",
+                ]
+            )
+
+    if not EQUITY_FILE.exists():
+        with open(EQUITY_FILE, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["time", "equity_usd"])
+
+    if not TRAINING_FILE.exists():
+        with open(TRAINING_FILE, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "entry_time",
+                    "exit_time",
+                    "hold_minutes",
+                    "market",
+                    "entry_price",
+                    "exit_price",
+                    "qty",
+                    "pnl_usd",
+                    "pnl_pct",
+                    "take_profit_pct",
+                    "stop_loss_pct",
+                    "risk_mode",
+                    "trend_strength",
+                    "rsi",
+                    "volatility",
+                ]
+            )
+
+
+def parse_iso(ts: str) -> datetime:
     """Parse ISO timestamp safely."""
-    if not ts:
-        return None
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+def safe_decimal(value: Any) -> Decimal:
     try:
-        # Handle plain ISO or ISO with offset
-        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return Decimal(str(value))
     except Exception:
-        return None
+        return Decimal("0")
 
 
-def compute_equity_and_drawdown(rows, starting_equity: float = 1000.0):
+# ---------------------------------------------------------------------
+# Metrics from trades / equity
+# ---------------------------------------------------------------------
+
+
+def compute_equity_drawdown(equity_rows: List[Dict[str, Any]]) -> Decimal:
     """
-    Build equity curve from per-trade PnL and compute max drawdown.
-    Equity is not stored in CSV; we derive it by cumulative PnL.
+    Compute max drawdown from equity curve.
+    equity_rows: list of {"time": datetime, "equity_usd": Decimal}
     """
-    equity = starting_equity
-    peak = starting_equity
-    max_dd = 0.0
-    curve = []
+    if not equity_rows:
+        return Decimal("0")
 
-    for row in rows:
-        pnl = float(row.get("pnl_usd", 0) or 0)
-        t_raw = row.get("time") or row.get("timestamp")
-        t = parse_iso(t_raw)
+    peak = equity_rows[0]["equity_usd"]
+    max_dd = Decimal("0")
 
-        equity += pnl
-        if equity > peak:
-            peak = equity
-
-        drawdown = equity - peak  # <= 0
-        if drawdown < max_dd:
+    for row in equity_rows:
+        eq = row["equity_usd"]
+        if eq > peak:
+            peak = eq
+        drawdown = peak - eq
+        if drawdown > max_dd:
             max_dd = drawdown
 
-        curve.append(
-            {
-                "time": (t or datetime.now(timezone.utc)).isoformat(),
-                "equity_usd": round(equity, 2),
-            }
-        )
-
-    return curve, round(max_dd, 2)
+    return max_dd
 
 
-def compute_advanced_metrics(pnl_values, total_pnl, wins, losses):
-    """Profit factor, avg win/loss, best/worst, Sharpe, recovery factor, max loss."""
-    if not pnl_values:
+def compute_advanced_metrics(pnls: List[Decimal], equity_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Profit factor, avg win/loss, best/worst trade, recovery factor, Sharpe-ish ratio."""
+    if not pnls:
         return {
             "profit_factor": None,
-            "avg_win_usd": 0.0,
-            "avg_loss_usd": 0.0,
-            "best_trade_usd": 0.0,
-            "worst_trade_usd": 0.0,
-            "sharpe_ratio": None,
+            "avg_win_usd": Decimal("0"),
+            "avg_loss_usd": Decimal("0"),
+            "best_trade_usd": Decimal("0"),
+            "worst_trade_usd": Decimal("0"),
+            "max_drawdown_usd": Decimal("0"),
             "recovery_factor": None,
+            "sharpe_ratio": None,
         }
 
-    wins_list = [p for p in pnl_values if p > 0]
-    losses_list = [p for p in pnl_values if p < 0]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
 
-    avg_win = sum(wins_list) / len(wins_list) if wins_list else 0.0
-    avg_loss = sum(losses_list) / len(losses_list) if losses_list else 0.0
-    best_trade = max(pnl_values)
-    worst_trade = min(pnl_values)
+    total_win = sum(wins) if wins else Decimal("0")
+    total_loss = sum(losses) if losses else Decimal("0")  # negative
 
-    # Profit factor = gross profit / gross loss
-    gross_profit = sum(wins_list)
-    gross_loss = sum(losses_list)  # negative
     profit_factor = None
-    if gross_loss < 0:
-        profit_factor = gross_profit / abs(gross_loss)
+    if total_loss < 0:
+        profit_factor = float(total_win / abs(total_loss)) if total_win > 0 else 0.0
 
-    # Per-trade Sharpe: mean / std * sqrt(N)
-    mean_pnl = total_pnl / len(pnl_values)
-    variance = sum((p - mean_pnl) ** 2 for p in pnl_values) / len(pnl_values)
-    std = math.sqrt(variance)
-    sharpe = None
-    if std > 0:
-        sharpe = (mean_pnl / std) * math.sqrt(len(pnl_values))
+    avg_win = mean(wins) if wins else Decimal("0")
+    avg_loss = mean(losses) if losses else Decimal("0")
+    best_trade = max(pnls)
+    worst_trade = min(pnls)
 
-    # Recovery factor = total net profit / |max drawdown|
-    # (actual max drawdown is computed separately & injected later)
+    max_dd = compute_equity_drawdown(equity_rows)
+
+    recovery_factor = None
+    if max_dd > 0:
+        recovery_factor = float((total_win + total_loss) / max_dd)
+
+    # very rough Sharpe-style metric: mean / std of PnL
+    sharpe_ratio = None
+    if len(pnls) > 1:
+        mean_pnl = sum(pnls) / Decimal(len(pnls))
+        var = sum((p - mean_pnl) ** 2 for p in pnls) / Decimal(len(pnls) - 1)
+        std = var.sqrt()
+        if std > 0:
+            sharpe_ratio = float(mean_pnl / std)
+
     return {
-        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
-        "avg_win_usd": round(avg_win, 2),
-        "avg_loss_usd": round(avg_loss, 2),
-        "best_trade_usd": round(best_trade, 2),
-        "worst_trade_usd": round(worst_trade, 2),
-        "sharpe_ratio": round(sharpe, 2) if sharpe is not None else None,
-        # recovery_factor will be filled in get_data once we know max drawdown
-        "recovery_factor": None,
+        "profit_factor": profit_factor,
+        "avg_win_usd": float(avg_win),
+        "avg_loss_usd": float(avg_loss),
+        "best_trade_usd": float(best_trade),
+        "worst_trade_usd": float(worst_trade),
+        "max_drawdown_usd": float(max_dd),
+        "recovery_factor": recovery_factor,
+        "sharpe_ratio": sharpe_ratio,
     }
 
 
-def compute_metrics_from_trades(rows):
+def compute_metrics_from_trades(rows: List[Dict[str, Any]], equity_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Core metrics from the trades CSV.
-    Expect columns: time, market, pnl_usd (others are ignored if present).
+    Compute total trades, win rate, per-market stats, recent trades, advanced metrics.
     """
-    total_events = len(rows)
-    wins = 0
-    losses = 0
-    total_pnl = 0.0
-    pnl_values = []
-    per_market = {}
+    if not rows:
+        return {
+            "wins": 0,
+            "losses": 0,
+            "total_events": 0,
+            "win_rate": 0.0,
+            "avg_pnl_usd": 0.0,
+            "total_pnl_usd": 0.0,
+            "per_market": [],
+            "recent_trades": [],
+            "advanced_metrics": compute_advanced_metrics([], equity_rows),
+        }
 
-    for row in rows:
-        pnl = float(row.get("pnl_usd", 0) or 0)
-        market = (row.get("market") or "UNKNOWN").upper()
+    pnls = [safe_decimal(r.get("pnl_usd", "0")) for r in rows]
+    wins_list = [p for p in pnls if p > 0]
+    losses_list = [p for p in pnls if p < 0]
 
-        total_pnl += pnl
-        pnl_values.append(pnl)
+    wins = len(wins_list)
+    losses = len(losses_list)
+    total = wins + losses
 
-        m = per_market.setdefault(
+    total_pnl = sum(pnls)
+    avg_pnl = total_pnl / Decimal(total) if total > 0 else Decimal("0")
+
+    win_rate = float(wins * 100.0 / total) if total > 0 else 0.0
+
+    # per-market aggregation
+    per_market: Dict[str, Dict[str, Any]] = {}
+    for r, pnl in zip(rows, pnls):
+        market = r.get("market", "UNKNOWN")
+        stats = per_market.setdefault(
             market,
-            {
-                "market": market,
-                "trades": 0,
-                "wins": 0,
-                "losses": 0,
-                "total_pnl_usd": 0.0,
-            },
+            {"market": market, "trades": 0, "wins": 0, "losses": 0, "pnl_list": []},
         )
-        m["trades"] += 1
-        m["total_pnl_usd"] += pnl
-
+        stats["trades"] += 1
+        stats["pnl_list"].append(pnl)
         if pnl > 0:
-            wins += 1
-            m["wins"] += 1
+            stats["wins"] += 1
         elif pnl < 0:
-            losses += 1
-            m["losses"] += 1
+            stats["losses"] += 1
 
-    win_rate = (wins / total_events * 100.0) if total_events else 0.0
-    avg_pnl = (total_pnl / total_events) if total_events else 0.0
+    per_market_list: List[Dict[str, Any]] = []
+    for m, stats in per_market.items():
+        trades = stats["trades"]
+        wins_m = stats["wins"]
+        pnl_list = stats["pnl_list"]
+        total_pnl_m = sum(pnl_list)
+        avg_pnl_m = total_pnl_m / Decimal(trades) if trades > 0 else Decimal("0")
+        win_rate_m = float(wins_m * 100.0 / trades) if trades > 0 else 0.0
 
-    # Per-market derived fields
-    per_market_list = []
-    for m in per_market.values():
-        t = m["trades"]
-        m["win_rate"] = (m["wins"] / t * 100.0) if t else 0.0
-        m["avg_pnl_usd"] = (m["total_pnl_usd"] / t) if t else 0.0
-        per_market_list.append(m)
+        per_market_list.append(
+            {
+                "market": m,
+                "trades": trades,
+                "wins": wins_m,
+                "losses": stats["losses"],
+                "win_rate": win_rate_m,
+                "total_pnl_usd": float(total_pnl_m),
+                "avg_pnl_usd": float(avg_pnl_m),
+            }
+        )
 
-    per_market_list.sort(key=lambda mm: mm["total_pnl_usd"], reverse=True)
+    # sort by total PnL descending for nicer display
+    per_market_list.sort(key=lambda x: x["total_pnl_usd"], reverse=True)
 
-    advanced = compute_advanced_metrics(pnl_values, total_pnl, wins, losses)
+    # recent trades (last 20 by exit_time)
+    def row_exit_time(r: Dict[str, Any]) -> datetime:
+        try:
+            return parse_iso(r["exit_time"])
+        except Exception:
+            return datetime.fromtimestamp(0, tz=timezone.utc)
+
+    sorted_rows = sorted(rows, key=row_exit_time)
+    recent_rows = sorted_rows[-20:]
+
+    recent_trades = [
+        {
+            "time": r.get("exit_time"),
+            "market": r.get("market"),
+            "pnl_usd": float(safe_decimal(r.get("pnl_usd", "0"))),
+        }
+        for r in recent_rows
+    ]
+
+    advanced = compute_advanced_metrics(pnls, equity_rows)
 
     return {
-        "total_events": total_events,
         "wins": wins,
         "losses": losses,
-        "total_pnl_usd": round(total_pnl, 2),
-        "win_rate": round(win_rate, 1),
-        "avg_pnl_usd": round(avg_pnl, 2),
+        "total_events": total,
+        "win_rate": win_rate,
+        "avg_pnl_usd": float(avg_pnl),
+        "total_pnl_usd": float(total_pnl),
         "per_market": per_market_list,
+        "recent_trades": recent_trades,
         "advanced_metrics": advanced,
     }
 
 
-def get_bot_status():
+def get_bot_status() -> Dict[str, Any]:
     """
-    Read heartbeat file written by your trading bot.
-    File should contain an ISO timestamp of the last heartbeat.
+    Read heartbeat.json written by the worker and classify
+    running / idle / stopped / unknown.
     """
-    if not os.path.exists(HEARTBEAT_FILE):
-        return {
-            "status": "unknown",
-            "last_heartbeat": None,
-            "minutes_since": None,
-        }
-
     try:
+        if not HEARTBEAT_FILE.exists():
+            return {"status": "unknown", "last_heartbeat": None, "minutes_since": None}
+
         with open(HEARTBEAT_FILE, "r", encoding="utf-8") as f:
-            raw = f.read().strip()
+            data = json.load(f)
+
+        hb_raw = data.get("heartbeat_time")
+        if not hb_raw:
+            return {"status": "unknown", "last_heartbeat": None, "minutes_since": None}
+
+        hb = parse_iso(hb_raw)
+        now = datetime.now(timezone.utc)
+        minutes = (now - hb).total_seconds() / 60.0
+
+        if minutes <= 10:
+            status = "running"
+        elif minutes <= 60:
+            status = "idle"
+        else:
+            status = "stopped"
+
+        return {
+            "status": status,
+            "last_heartbeat": hb.isoformat(),
+            "minutes_since": minutes,
+        }
     except Exception:
-        return {
-            "status": "unknown",
-            "last_heartbeat": None,
-            "minutes_since": None,
-        }
-
-    hb = parse_iso(raw)
-    if not hb:
-        return {
-            "status": "unknown",
-            "last_heartbeat": raw,
-            "minutes_since": None,
-        }
-
-    now = datetime.now(timezone.utc)
-    minutes = (now - hb).total_seconds() / 60.0
-
-    if minutes <= 10:
-        status = "running"
-    elif minutes <= 60:
-        status = "idle"
-    else:
-        status = "stopped"
-
-    return {
-        "status": status,
-        "last_heartbeat": hb.isoformat(),
-        "minutes_since": round(minutes, 1),
-    }
+        return {"status": "unknown", "last_heartbeat": None, "minutes_since": None}
 
 
-# -------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Routes
-# -------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
+
 @app.route("/")
-def index():
-    # Serve the static dashboard HTML
-    return send_from_directory("static", "index.html")
+def index() -> Any:
+    """Serve the dashboard HTML."""
+    return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/health")
-def health():
+def health() -> Any:
     return jsonify({"status": "ok"})
 
 
-@app.route("/data")
-def get_data():
-    # ---- Trades + metrics ----
-    trade_rows = []
+@app.route("/api/training-event", methods=["POST"])
+def receive_training_event() -> Any:
+    """
+    Called by the worker each time a trade closes.
+    We append JSON to training_events.csv (for your future AI training).
+    """
+    ensure_data_files_exist()
 
-    if os.path.exists(TRADE_FILE):
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body provided"}), 400
+
+    # Make sure all expected keys exist (fill with empty strings)
+    keys = [
+        "entry_time",
+        "exit_time",
+        "hold_minutes",
+        "market",
+        "entry_price",
+        "exit_price",
+        "qty",
+        "pnl_usd",
+        "pnl_pct",
+        "take_profit_pct",
+        "stop_loss_pct",
+        "risk_mode",
+        "trend_strength",
+        "rsi",
+        "volatility",
+    ]
+    row = [str(data.get(k, "")) for k in keys]
+
+    try:
+        # Append to training CSV
+        with open(TRAINING_FILE, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(row)
+
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to write training event: {e}"}), 500
+
+
+@app.route("/data")
+def get_data() -> Any:
+    """
+    Main data endpoint for the dashboard.
+    Reads trades.csv, equity_curve.csv, heartbeat.json
+    and returns aggregated metrics + series.
+    """
+    ensure_data_files_exist()
+
+    # --- Load equity curve ---
+    equity_rows: List[Dict[str, Any]] = []
+    if EQUITY_FILE.exists():
+        with open(EQUITY_FILE, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    equity_rows.append(
+                        {
+                            "time": parse_iso(row["time"]),
+                            "equity_usd": safe_decimal(row["equity_usd"]),
+                        }
+                    )
+                except Exception:
+                    continue
+
+    # JSON friendly version of last N points
+    equity_json = [
+        {"time": r["time"].isoformat(), "equity_usd": float(r["equity_usd"])}
+        for r in equity_rows[-100:]  # keep it light
+    ]
+
+    # --- Load trades ---
+    trade_rows: List[Dict[str, Any]] = []
+    if TRADE_FILE.exists():
         with open(TRADE_FILE, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 trade_rows.append(row)
 
-    metrics = compute_metrics_from_trades(trade_rows)
-    equity_curve, max_dd = compute_equity_and_drawdown(trade_rows)
-
-    # Fill recovery factor now that we know max drawdown
-    adv = metrics["advanced_metrics"]
-    if max_dd < 0:
-        adv["recovery_factor"] = round(
-            metrics["total_pnl_usd"] / abs(max_dd), 2
-        )
-    else:
-        adv["recovery_factor"] = None
-
-    # JSON-friendly equity curve (limit to last 120 pts)
-    MAX_POINTS = 120
-    equity_json = equity_curve[-MAX_POINTS:]
-
-    # Recent trades (last 20, newest first)
-    recent_trades = []
-    for row in trade_rows[-20:]:
-        t_raw = row.get("time") or row.get("timestamp")
-        t = parse_iso(t_raw)
-        recent_trades.append(
-            {
-                "time": (t or datetime.now(timezone.utc)).isoformat(),
-                "market": (row.get("market") or "UNKNOWN").upper(),
-                "pnl_usd": round(float(row.get("pnl_usd", 0) or 0), 2),
-            }
-        )
-    recent_trades.reverse()
-
+    metrics = compute_metrics_from_trades(trade_rows, equity_rows)
     bot_status = get_bot_status()
 
     payload = {
-        "total_events": metrics["total_events"],
         "wins": metrics["wins"],
         "losses": metrics["losses"],
-        "total_pnl_usd": metrics["total_pnl_usd"],
+        "total_events": metrics["total_events"],
         "win_rate": metrics["win_rate"],
         "avg_pnl_usd": metrics["avg_pnl_usd"],
+        "total_pnl_usd": metrics["total_pnl_usd"],
         "per_market": metrics["per_market"],
-        "advanced_metrics": adv,
+        "recent_trades": metrics["recent_trades"],
         "equity_curve": equity_json,
-        "max_drawdown_usd": max_dd,
-        "recent_trades": recent_trades,
         "bot_status": bot_status,
+        "advanced_metrics": metrics["advanced_metrics"],
     }
-
     return jsonify(payload)
 
 
-# -------------------------------------------------------------------
-# Entry point
-# -------------------------------------------------------------------
+# For debugging raw CSV, if you ever want it:
+@app.route("/raw/trades")
+def raw_trades() -> Any:
+    if not TRADE_FILE.exists():
+        return jsonify([])
+    with open(TRADE_FILE, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return jsonify(list(reader))
+
+
+@app.route("/raw/equity")
+def raw_equity() -> Any:
+    if not EQUITY_FILE.exists():
+        return jsonify([])
+    with open(EQUITY_FILE, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return jsonify(list(reader))
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    # Local dev only – on Render use gunicorn: `gunicorn app:app`
+    ensure_data_files_exist()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=True)
