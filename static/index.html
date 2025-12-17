@@ -4,15 +4,16 @@
     <meta charset="UTF-8" />
     <title>Crypto AI Bot Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
     <style>
       :root {
         --bg: #050814;
         --bg-card: #101522;
+        --bg-card-soft: #141b2c;
         --text-main: #f8f4fc;
         --text-muted: #9ca3af;
         --accent: #22c55e;
         --accent-red: #ef4444;
+        --accent-blue: #3b82f6;
         --border-soft: #1f2937;
       }
 
@@ -34,12 +35,19 @@
         padding: 24px 16px 40px;
       }
 
+      header {
+        margin-bottom: 24px;
+      }
+
       h1 {
         margin: 0 0 4px;
         font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
       }
 
       header p {
+        margin: 0;
         font-size: 13px;
         color: var(--text-muted);
       }
@@ -47,6 +55,8 @@
       header a {
         color: #38bdf8;
         text-decoration: none;
+        margin-left: 4px;
+        margin-right: 4px;
       }
 
       .cards {
@@ -67,12 +77,20 @@
       .card h2 {
         font-size: 13px;
         text-transform: uppercase;
+        letter-spacing: 0.08em;
         color: var(--text-muted);
+        margin: 0 0 8px;
       }
 
       .metric-main {
         font-size: 24px;
         font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .metric-sub {
+        font-size: 12px;
+        color: var(--text-muted);
       }
 
       .metric-main.positive {
@@ -83,122 +101,350 @@
         color: var(--accent-red);
       }
 
-      .metric-sub {
+      .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
         font-size: 12px;
         color: var(--text-muted);
       }
 
-      /* ==============================
-         Tamagotchi Pet
-      ============================== */
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        background: rgba(15, 23, 42, 0.8);
+      }
 
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+
+      .status-running {
+        background-color: #22c55e;
+      }
+
+      .status-idle {
+        background-color: #eab308;
+      }
+
+      .status-stopped {
+        background-color: #ef4444;
+      }
+
+      .status-unknown {
+        background-color: #6b7280;
+      }
+
+      .section-title {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+      }
+
+      .section-subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: 0 0 12px;
+      }
+
+      .section-card {
+        margin-bottom: 24px;
+      }
+
+      .chart-container {
+        height: 260px;
+        background: radial-gradient(circle at top, #020617, #020617);
+        border-radius: 14px;
+        border: 1px solid var(--border-soft);
+        overflow: hidden;
+      }
+
+      .chart-inner {
+        width: 100%;
+        height: 100%;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      thead {
+        background: rgba(15, 23, 42, 0.9);
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        text-align: left;
+      }
+
+      th {
+        font-weight: 500;
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      tbody tr:nth-child(odd) {
+        background: rgba(15, 23, 42, 0.4);
+      }
+
+      tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.1);
+      }
+
+      tbody tr:hover {
+        background: rgba(55, 65, 81, 0.4);
+      }
+
+      .text-right {
+        text-align: right;
+      }
+
+      .muted {
+        color: var(--text-muted);
+      }
+
+      .section-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
+        gap: 16px;
+      }
+
+      @media (max-width: 900px) {
+        .section-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .advanced-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px 14px;
+        margin-top: 6px;
+      }
+
+      .adv-label {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      .adv-value {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      /* TradingView area */
+      .tv-tabs {
+        display: inline-flex;
+        background: rgba(15, 23, 42, 0.9);
+        border-radius: 999px;
+        padding: 2px;
+        margin-bottom: 8px;
+      }
+
+      .tv-tab {
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .tv-tab.active {
+        background: #0f172a;
+        color: var(--text-main);
+      }
+
+      .footer {
+        margin-top: 18px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+      }
+
+      /* ---------------------------
+         BOT PET (Tamagotchi-ish)
+      --------------------------- */
       .pet-wrap {
         display: flex;
         gap: 12px;
         align-items: center;
       }
 
-      .pet-box {
-        width: 92px;
-        height: 72px;
-        border-radius: 14px;
-        background: radial-gradient(circle at top, #0b1226, #050814);
+      .pet-stage {
+        width: 86px;
+        height: 60px;
+        border-radius: 12px;
         border: 1px solid var(--border-soft);
+        background: radial-gradient(circle at 30% 20%, #111827, #050814);
         position: relative;
         overflow: hidden;
       }
 
-      .pet-floor {
-        position: absolute;
-        bottom: 0;
-        height: 14px;
-        width: 100%;
-        background: rgba(15, 23, 42, 0.9);
-        border-top: 1px solid var(--border-soft);
-      }
-
       .pet {
+        width: 36px;
+        height: 36px;
+        border-radius: 14px;
+        background: linear-gradient(145deg, #111827, #060b17);
+        border: 1px solid rgba(255, 255, 255, 0.06);
         position: absolute;
+        top: 12px;
         left: 8px;
-        bottom: 12px;
-        width: 40px;
-        height: 40px;
-      }
-
-      .pet-body {
-        width: 40px;
-        height: 32px;
-        border-radius: 16px;
-        background: rgba(148, 163, 184, 0.25);
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        position: relative;
+        display: grid;
+        place-items: center;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+        transform: translateX(0);
       }
 
       .pet-face {
-        position: absolute;
-        left: 8px;
-        right: 8px;
-        top: 10px;
-        display: flex;
-        justify-content: space-between;
+        width: 18px;
+        height: 14px;
+        position: relative;
       }
 
       .pet-eye {
-        width: 6px;
-        height: 6px;
-        background: white;
-        border-radius: 50%;
+        width: 4px;
+        height: 4px;
+        border-radius: 99px;
+        background: rgba(248, 244, 252, 0.9);
+        position: absolute;
+        top: 2px;
+      }
+
+      .pet-eye.left {
+        left: 2px;
+      }
+      .pet-eye.right {
+        right: 2px;
       }
 
       .pet-mouth {
-        position: absolute;
-        left: 50%;
-        bottom: 6px;
         width: 12px;
         height: 6px;
-        transform: translateX(-50%);
-        border-bottom: 2px solid white;
-        border-radius: 0 0 12px 12px;
-      }
-
-      .pet-bubble {
         position: absolute;
-        right: 6px;
-        top: 6px;
-        font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 999px;
-        background: rgba(15, 23, 42, 0.9);
-        opacity: 0;
-        transition: all 0.3s;
+        left: 50%;
+        top: 7px;
+        transform: translateX(-50%);
+        border-radius: 0 0 10px 10px;
+        border: 2px solid rgba(248, 244, 252, 0.75);
+        border-top: 0;
       }
 
-      .pet-bubble.show {
+      .pet.sad .pet-mouth {
+        top: 9px;
+        border-radius: 10px 10px 0 0;
+        border: 2px solid rgba(248, 244, 252, 0.6);
+        border-bottom: 0;
+      }
+
+      .pet.neutral .pet-mouth {
+        width: 10px;
+        height: 0;
+        border: 0;
+        border-top: 2px solid rgba(248, 244, 252, 0.6);
+        top: 10px;
+        border-radius: 0;
+      }
+
+      .pet-halo {
+        position: absolute;
+        left: 50%;
+        top: -6px;
+        width: 24px;
+        height: 10px;
+        transform: translateX(-50%);
+        border-radius: 999px;
+        border: 2px solid rgba(34, 197, 94, 0.55);
+        opacity: 0;
+      }
+
+      .pet.happy .pet-halo {
         opacity: 1;
       }
 
       @keyframes pace {
-        0% { transform: translateX(0); }
-        50% { transform: translateX(36px); }
-        100% { transform: translateX(0); }
+        0% {
+          transform: translateX(0);
+        }
+        50% {
+          transform: translateX(34px);
+        }
+        100% {
+          transform: translateX(0);
+        }
       }
 
-      @keyframes bounce {
-        0% { transform: translateY(0); }
-        50% { transform: translateY(-4px); }
-        100% { transform: translateY(0); }
+      @keyframes bob {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-2px);
+        }
       }
 
-      @keyframes sad {
-        0% { transform: rotate(0); }
-        50% { transform: rotate(-3deg); }
-        100% { transform: rotate(0); }
+      .pet.pacing {
+        animation: pace 4.5s ease-in-out infinite;
       }
 
-      .waiting { animation: pace 2.5s infinite; }
-      .happy { animation: bounce 0.7s infinite; }
-      .sad { animation: sad 0.9s infinite; }
+      .pet.bobbing {
+        animation: bob 1.4s ease-in-out infinite;
+      }
 
+      .pet-status {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .pet-status .pet-title {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .pet-status .pet-mood {
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .pet-status .pet-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .error-banner {
+        display: none;
+        margin: 10px 0 18px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        background: rgba(239, 68, 68, 0.08);
+        color: rgba(248, 244, 252, 0.92);
+        font-size: 12px;
+      }
     </style>
   </head>
 
@@ -207,11 +453,17 @@
       <header>
         <h1>Crypto AI Bot Dashboard</h1>
         <p>
-          Paper trading stats —
-          <a href="/data" target="_blank">raw stats</a>
+          Paper-trading stats from Render —
+          <a href="/data" target="_blank">raw stats</a> |
+          <a href="/health" target="_blank">API status</a>
         </p>
       </header>
 
+      <div class="error-banner" id="error-banner">
+        Something went wrong loading the dashboard scripts. (Charts may be missing.)
+      </div>
+
+      <!-- Top KPIs -->
       <section class="cards">
         <div class="card">
           <h2>Total Trades</h2>
@@ -225,91 +477,272 @@
         <div class="card">
           <h2>Win Rate</h2>
           <div class="metric-main" id="metric-win-rate">0%</div>
+          <div class="metric-sub">
+            Avg <span id="metric-avg-pnl">-$0.00</span> per trade
+          </div>
         </div>
 
         <div class="card">
-          <h2>Total PnL</h2>
+          <h2>PNL (Total)</h2>
           <div class="metric-main negative" id="metric-total-pnl">$0.00</div>
+          <div class="metric-sub">Based on closed trades only.</div>
         </div>
 
+        <div class="card">
+          <h2>Bot Status</h2>
+          <div class="card-row" style="margin-bottom: 6px">
+            <div class="status-pill" id="bot-status-pill">
+              <span class="status-dot status-unknown" id="bot-status-dot"></span>
+              <span id="bot-status-label">Unknown</span>
+            </div>
+            <span class="muted" id="bot-status-minutes"></span>
+          </div>
+          <div class="metric-sub" id="bot-status-last">Waiting for heartbeat…</div>
+        </div>
+
+        <!-- NEW: Bot Pet card -->
         <div class="card">
           <h2>Bot Pet</h2>
           <div class="pet-wrap">
-            <div class="pet-box">
-              <div class="pet-bubble" id="pet-bubble">…</div>
-              <div class="pet waiting" id="pet">
-                <div class="pet-body">
-                  <div class="pet-face">
-                    <span class="pet-eye"></span>
-                    <span class="pet-eye"></span>
-                  </div>
+            <div class="pet-stage">
+              <div class="pet" id="pet" aria-label="Bot pet">
+                <div class="pet-halo"></div>
+                <div class="pet-face">
+                  <div class="pet-eye left"></div>
+                  <div class="pet-eye right"></div>
                   <div class="pet-mouth"></div>
                 </div>
               </div>
-              <div class="pet-floor"></div>
             </div>
-            <div>
-              <div id="pet-mood">Waiting…</div>
-              <div class="metric-sub">Watching the market</div>
+            <div class="pet-status">
+              <div class="pet-title">Mood</div>
+              <div class="pet-mood" id="pet-mood">Watching…</div>
+              <div class="pet-sub" id="pet-sub">Waiting for trades</div>
             </div>
           </div>
         </div>
       </section>
+
+      <!-- Advanced Analytics -->
+      <section class="card section-card">
+        <div class="card-row" style="margin-bottom: 6px">
+          <div>
+            <div class="section-title">Advanced Analytics</div>
+            <div class="section-subtitle">Deeper stats from your closed trades.</div>
+          </div>
+        </div>
+
+        <div class="advanced-grid">
+          <div>
+            <div class="adv-label">Profit Factor</div>
+            <div class="adv-value" id="adv-profit-factor">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Avg Win (USD)</div>
+            <div class="adv-value" id="adv-avg-win">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Avg Loss (USD)</div>
+            <div class="adv-value" id="adv-avg-loss">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Best Trade (USD)</div>
+            <div class="adv-value" id="adv-best-trade">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Worst Trade (USD)</div>
+            <div class="adv-value" id="adv-worst-trade">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Max Drawdown (USD)</div>
+            <div class="adv-value" id="adv-max-dd">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Recovery Factor</div>
+            <div class="adv-value" id="adv-recovery-factor">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Sharpe Ratio</div>
+            <div class="adv-value" id="adv-sharpe">—</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Equity + tables -->
+      <section class="section-grid">
+        <div>
+          <div class="section-title">Equity Curve</div>
+          <div class="section-subtitle">Tracks paper-trading balance over time (USD).</div>
+          <div class="chart-container">
+            <canvas id="equity-chart" class="chart-inner"></canvas>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-card">
+            <div class="section-title">Per-Market Performance</div>
+            <div class="section-subtitle">How the bot is doing on each market (paper trading).</div>
+            <div class="card" style="padding: 0">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Market</th>
+                    <th class="text-right">Trades</th>
+                    <th class="text-right">Win Rate</th>
+                    <th class="text-right">Total PnL</th>
+                    <th class="text-right">Avg PnL</th>
+                  </tr>
+                </thead>
+                <tbody id="per-market-body">
+                  <tr>
+                    <td colspan="5" class="muted">No markets yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">Recent Trades</div>
+            <div class="section-subtitle">Showing last 20 closed trades.</div>
+            <div class="card" style="padding: 0">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Market</th>
+                    <th class="text-right">PnL (USD)</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-trades-body">
+                  <tr>
+                    <td colspan="3" class="muted">No trades yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TradingView candlesticks -->
+      <section class="section-card">
+        <div class="section-title">Market Candlestick Charts</div>
+        <div class="section-subtitle">
+          Live BTC-USD candlesticks on your main venues. Charts are from TradingView only (they do not place trades).
+        </div>
+
+        <div class="card">
+          <div class="card-row" style="margin-bottom: 10px">
+            <div>Venue</div>
+            <div class="tv-tabs">
+              <button class="tv-tab active" data-symbol="COINBASE:BTCUSD">Coinbase</button>
+              <button class="tv-tab" data-symbol="KUCOIN:BTCUSDT">KuCoin</button>
+              <button class="tv-tab" data-symbol="CRYPTOCOM:BTCUSD">Crypto.com</button>
+            </div>
+          </div>
+
+          <div class="tradingview-widget-container" style="height: 400px">
+            <div id="tv-chart"></div>
+          </div>
+
+          <div class="section-subtitle" style="margin-top: 10px">
+            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML
+            (e.g. <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
+          </div>
+        </div>
+      </section>
+
+      <div class="footer">
+        Bot is running on Render (paper trading only). Keep it training for 2–3 weeks before making AI changes.
+      </div>
     </div>
 
+    <!-- Chart.js for equity curve -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- TradingView widget -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+
     <script>
-      let lastTradeKey = null;
+      // Show errors on-screen (helps on mobile where console is awkward)
+      window.addEventListener("error", (e) => {
+        const b = document.getElementById("error-banner");
+        b.style.display = "block";
+        b.textContent = "Dashboard script error: " + (e?.message || "Unknown error");
+      });
 
-      function setPet(mode, text) {
-        const pet = document.getElementById("pet");
-        const bubble = document.getElementById("pet-bubble");
-        const mood = document.getElementById("pet-mood");
-
-        pet.className = "pet " + mode;
-        mood.textContent =
-          mode === "happy"
-            ? "Happy 😄"
-            : mode === "sad"
-            ? "Sad 😟"
-            : "Waiting…";
-
-        bubble.textContent = text;
-        bubble.classList.add("show");
-        setTimeout(() => bubble.classList.remove("show"), 1200);
+      function $(id) {
+        return document.getElementById(id);
       }
 
-      async function refresh() {
-        const res = await fetch("/data");
-        const data = await res.json();
+      function formatUsd(v) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        const sign = v < 0 ? "-" : "";
+        const abs = Math.abs(v);
+        return (
+          sign +
+          "$" +
+          abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        );
+      }
 
-        document.getElementById("metric-total-trades").textContent =
-          data.total_events ?? 0;
-        document.getElementById("metric-wins").textContent =
-          (data.wins ?? 0) + " wins";
-        document.getElementById("metric-losses").textContent =
-          (data.losses ?? 0) + " losses";
-        document.getElementById("metric-win-rate").textContent =
-          (data.win_rate ?? 0).toFixed(1) + "%";
+      function formatPercent(v, digits = 1) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        return v.toFixed(digits).replace(/^-0\.0+$/, "0.0") + "%";
+      }
 
-        const pnl = data.total_pnl_usd ?? 0;
-        const pnlEl = document.getElementById("metric-total-pnl");
-        pnlEl.textContent = "$" + pnl.toFixed(2);
-        pnlEl.className =
-          "metric-main " + (pnl >= 0 ? "positive" : "negative");
+      function formatNumber(v, digits = 2) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        return v.toFixed(digits);
+      }
 
-        const t = data.recent_trades?.[0];
-        if (t) {
-          const key = t.time + t.market + t.pnl_usd;
-          if (key !== lastTradeKey) {
-            lastTradeKey = key;
-            if (t.pnl_usd > 0) setPet("happy", "Yum 🍎");
-            else if (t.pnl_usd < 0) setPet("sad", "Ouch 💔");
-          }
+      function formatTime(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return String(iso);
+        return d.toLocaleString();
+      }
+
+      // ------------------------------
+      // Equity Chart
+      // ------------------------------
+      let equityChart = null;
+
+      function updateEquityChart(points) {
+        const ctx = $("equity-chart");
+        if (!ctx) return;
+
+        const labels = points.map((p, i) => {
+          const t = p.time_utc || p.time || p.ts || null;
+          const d = t ? new Date(t) : null;
+          if (!d || Number.isNaN(d.getTime())) return String(i + 1);
+          return d.toLocaleTimeString();
+        });
+
+        const data = points.map((p) => p.equity_usd);
+
+        if (equityChart) {
+          equityChart.data.labels = labels;
+          equityChart.data.datasets[0].data = data;
+          equityChart.update();
+          return;
         }
-      }
 
-      refresh();
-      setInterval(refresh, 10000);
-    </script>
-  </body>
-</html>
+        equityChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              { label: "Equity (USD)", data, tension: 0.35, borderWidth: 2, pointRadius: 2 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (c) => "Equity: " + formatUsd(c.parsed.y) } },
+            },
+            scales: {
+              x: { ticks: { maxTicksLimit: 6 }, grid: { color: "rgba(31,41,55,0.6)" } },
+              y: {
+                ticks:
