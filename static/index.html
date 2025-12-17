@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -279,166 +279,303 @@
         text-align: center;
       }
 
-      /* ---------------------------
-         BOT PET (Tamagotchi-ish)
-         --------------------------- */
+      /* ------------------------------
+         BOT PET
+      ------------------------------ */
       .pet-wrap {
         display: flex;
-        gap: 12px;
         align-items: center;
+        gap: 12px;
+      }
+
+      .pet-box {
+        position: relative;
+        width: 112px;
+        height: 86px;
+        border-radius: 16px;
+        border: 1px solid rgba(31, 41, 55, 0.85);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03),
+          0 12px 28px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+
+        background: radial-gradient(circle at 30% 20%, rgba(56, 189, 248, 0.22), transparent 55%),
+          radial-gradient(circle at 70% 80%, rgba(34, 197, 94, 0.10), transparent 55%),
+          linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+      }
+
+      .pet-box::after {
+        content: "";
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 8px;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.08);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        opacity: 0.7;
       }
 
       .pet-screen {
-        width: 68px;
-        height: 68px;
-        border-radius: 14px;
-        border: 1px solid var(--border-soft);
-        background: radial-gradient(circle at top, #0b1224, #050814);
-        display: grid;
-        place-items: center;
-        position: relative;
+        position: absolute;
+        left: 10px;
+        top: 10px;
+        right: 10px;
+        bottom: 18px;
+        border-radius: 12px;
+        background: radial-gradient(circle at top, rgba(180, 212, 196, 0.22), rgba(11, 18, 33, 0.95));
+        border: 1px solid rgba(180, 212, 196, 0.18);
         overflow: hidden;
       }
 
-      .pet {
-        width: 44px;
-        height: 44px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        position: relative;
-        transform-origin: center;
-      }
-
-      .pet::before,
-      .pet::after {
-        content: "";
+      .pet-scan {
         position: absolute;
-        top: 16px;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.85);
-      }
-      .pet::before {
-        left: 12px;
-      }
-      .pet::after {
-        right: 12px;
+        left: 10px;
+        right: 10px;
+        top: 10px;
+        bottom: 18px;
+        border-radius: 12px;
+        pointer-events: none;
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0.05),
+          transparent 25%,
+          rgba(255, 255, 255, 0.02),
+          transparent 60%
+        );
+        mix-blend-mode: screen;
+        opacity: 0.35;
+        animation: scan 3.2s linear infinite;
       }
 
-      .pet-mouth {
+      @keyframes scan {
+        0% {
+          transform: translateY(-40%);
+        }
+        100% {
+          transform: translateY(40%);
+        }
+      }
+
+      .pet-sprite {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 112px;
+        height: 86px;
+        padding: 0;
+        pointer-events: none;
+        filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
+      }
+
+      .plate {
+        position: absolute;
+        left: 44px;
+        bottom: 20px;
+        width: 38px;
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(226, 232, 240, 0.18);
+        background: rgba(226, 232, 240, 0.06);
+        opacity: 0.9;
+      }
+
+      .food {
+        position: absolute;
+        left: 58px;
+        bottom: 24px;
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        background: rgba(34, 197, 94, 0.75);
+        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
+        opacity: 0;
+        transform: translateY(2px) scale(0.9);
+      }
+
+      .pet-fed .food {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        transition: opacity 220ms ease, transform 220ms ease;
+      }
+
+      .pet-hungryHint {
         position: absolute;
         left: 50%;
-        top: 26px;
-        width: 14px;
-        height: 8px;
+        top: 36px;
         transform: translateX(-50%);
-        border-bottom: 2px solid rgba(255, 255, 255, 0.85);
-        border-radius: 0 0 12px 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: rgba(239, 68, 68, 0.9);
+        text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+        opacity: 0;
+        pointer-events: none;
       }
 
-      .pet-happy .pet-mouth {
-        border-bottom: 2px solid rgba(255, 255, 255, 0.95);
+      .pet-hungry .pet-hungryHint {
+        opacity: 1;
       }
 
-      .pet-sad .pet-mouth {
-        top: 30px;
-        height: 8px;
-        border-bottom: none;
-        border-top: 2px solid rgba(255, 255, 255, 0.85);
-        border-radius: 12px 12px 0 0;
-      }
-
-      .pet-watching .pet-mouth {
-        width: 10px;
-        border-bottom: 2px solid rgba(255, 255, 255, 0.6);
-      }
-
-      /* animations */
-      @keyframes bob {
-        0% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(-2px);
-        }
-        100% {
-          transform: translateY(0);
-        }
-      }
-
-      @keyframes wobble {
-        0% {
-          transform: rotate(0deg);
-        }
-        25% {
-          transform: rotate(-4deg);
-        }
-        50% {
-          transform: rotate(0deg);
-        }
-        75% {
-          transform: rotate(4deg);
-        }
-        100% {
-          transform: rotate(0deg);
-        }
+      .pet-pace #pet-sprite {
+        animation: pace 1.6s ease-in-out infinite;
       }
 
       @keyframes pace {
         0% {
-          transform: translateX(-10px);
+          transform: translateX(-3px);
         }
         50% {
-          transform: translateX(10px);
+          transform: translateX(3px);
         }
         100% {
-          transform: translateX(-10px);
+          transform: translateX(-3px);
         }
       }
 
-      .pet-happy .pet {
-        animation: bob 1.2s ease-in-out infinite;
-        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25),
-          0 10px 18px rgba(34, 197, 94, 0.06);
-      }
-
-      .pet-sad .pet {
-        animation: wobble 1.4s ease-in-out infinite;
-        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25),
-          0 10px 18px rgba(239, 68, 68, 0.06);
-      }
-
-      .pet-pacing .pet {
-        animation: pace 1.6s ease-in-out infinite;
-      }
-
-      .pet-label {
+      /* --- LCD icons row --- */
+      .lcd-icons {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        top: 6px;
         display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 10px;
+        opacity: 0.9;
+        filter: saturate(0.85);
+        pointer-events: none;
       }
-      .pet-title {
-        font-size: 12px;
+
+      .lcd-ic {
+        opacity: 0.35;
+        transform: translateY(0px);
+        transition: opacity 220ms ease, transform 220ms ease;
+      }
+
+      .lcd-ic.on {
+        opacity: 0.95;
+        transform: translateY(-1px);
+      }
+
+      /* --- LEVEL UP overlay + sparkles --- */
+      .levelup {
+        position: absolute;
+        left: 50%;
+        top: 52%;
+        transform: translate(-50%, -50%) scale(0.9);
+        padding: 6px 8px;
+        border-radius: 10px;
+        background: rgba(2, 6, 23, 0.75);
+        border: 1px solid rgba(180, 212, 196, 0.25);
+        color: rgba(248, 244, 252, 0.95);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 10px;
         letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--text-muted);
+        opacity: 0;
+        pointer-events: none;
       }
-      .pet-mood {
+
+      .sparkles {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      .sp {
+        position: absolute;
+        font-size: 10px;
+        opacity: 0;
+      }
+
+      .sp.s1 {
+        left: 14px;
+        top: 18px;
+      }
+      .sp.s2 {
+        right: 16px;
+        top: 16px;
+      }
+      .sp.s3 {
+        left: 18px;
+        bottom: 18px;
+      }
+      .sp.s4 {
+        right: 18px;
+        bottom: 16px;
+      }
+      .sp.s5 {
+        left: 50%;
+        top: 52%;
+        transform: translate(-50%, -50%);
+      }
+
+      .pet-levelup .levelup {
+        animation: lvl 900ms ease-out 1;
+      }
+
+      @keyframes lvl {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.85);
+        }
+        20% {
+          opacity: 1;
+          transform: translate(-50%, -58%) scale(1);
+        }
+        70% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -64%) scale(0.92);
+        }
+      }
+
+      .pet-levelup .sparkles {
+        opacity: 1;
+      }
+
+      .pet-levelup .sp {
+        animation: spk 800ms ease-out 1;
+      }
+
+      @keyframes spk {
+        0% {
+          opacity: 0;
+          transform: translateY(6px) scale(0.7);
+        }
+        20% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-10px) scale(1.05);
+        }
+      }
+
+      .pet-text h3 {
+        margin: 0;
         font-size: 14px;
-        font-weight: 700;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        letter-spacing: 0.02em;
       }
-      .pet-sub {
+
+      .pet-text p {
+        margin: 2px 0 0;
         font-size: 12px;
         color: var(--text-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      }
+
+      .pet-bad {
+        color: #f87171;
+      }
+      .pet-good {
+        color: #34d399;
       }
     </style>
   </head>
@@ -468,7 +605,7 @@
           <h2>Win Rate</h2>
           <div class="metric-main" id="metric-win-rate">0%</div>
           <div class="metric-sub">
-            Avg <span id="metric-avg-pnl">$0.00</span> per trade
+            Avg <span id="metric-avg-pnl">-$0.00</span> per trade
           </div>
         </div>
 
@@ -490,19 +627,50 @@
           <div class="metric-sub" id="bot-status-last">Waiting for heartbeat…</div>
         </div>
 
-        <!-- Bot Pet -->
         <div class="card">
           <h2>Bot Pet</h2>
-          <div class="pet-wrap" id="pet-state">
-            <div class="pet-screen">
-              <div class="pet">
-                <div class="pet-mouth"></div>
+          <div class="pet-wrap">
+            <div class="pet-box" id="pet-box">
+              <div class="pet-screen">
+                <div class="lcd-icons">
+                  <span class="lcd-ic" id="ic-food" title="Food">🍽️</span>
+                  <span class="lcd-ic" id="ic-play" title="Play">🎮</span>
+                  <span class="lcd-ic" id="ic-health" title="Health">💊</span>
+                  <span class="lcd-ic" id="ic-clean" title="Clean">🧼</span>
+                  <span class="lcd-ic" id="ic-love" title="Love">❤️</span>
+                </div>
+
+                <div class="levelup" id="pet-levelup">LEVEL UP!</div>
+
+                <div class="sparkles" id="pet-sparkles" aria-hidden="true">
+                  <span class="sp s1">✦</span>
+                  <span class="sp s2">✦</span>
+                  <span class="sp s3">✦</span>
+                  <span class="sp s4">✦</span>
+                  <span class="sp s5">✦</span>
+                </div>
               </div>
+
+              <div class="pet-scan"></div>
+              <div class="pet-hungryHint">HUNGRY</div>
+
+              <svg
+                class="pet-sprite"
+                id="pet-sprite"
+                viewBox="0 0 64 64"
+                xmlns="http://www.w3.org/2000/svg"
+              ></svg>
+
+              <div class="plate"></div>
+              <div class="food"></div>
             </div>
-            <div class="pet-label">
-              <div class="pet-title">Mood</div>
-              <div class="pet-mood" id="pet-mood">Watching…</div>
-              <div class="pet-sub" id="pet-sub">Waiting for trades</div>
+
+            <div class="pet-text">
+              <div class="card-row" style="margin-bottom: 2px">
+                <div class="muted" style="letter-spacing: 0.12em">MOOD</div>
+              </div>
+              <h3 id="pet-mood">Watching…</h3>
+              <p id="pet-sub">Waiting for trades</p>
             </div>
           </div>
         </div>
@@ -558,7 +726,6 @@
         <div>
           <div class="section-title">Equity Curve</div>
           <div class="section-subtitle">Tracks paper-trading balance over time (USD).</div>
-
           <div class="chart-container">
             <canvas id="equity-chart" class="chart-inner"></canvas>
           </div>
@@ -567,10 +734,7 @@
         <div>
           <div class="section-card">
             <div class="section-title">Per-Market Performance</div>
-            <div class="section-subtitle">
-              How the bot is doing on each market (paper trading).
-            </div>
-
+            <div class="section-subtitle">How the bot is doing on each market (paper trading).</div>
             <div class="card" style="padding: 0">
               <table>
                 <thead>
@@ -594,7 +758,6 @@
           <div class="section-card">
             <div class="section-title">Recent Trades</div>
             <div class="section-subtitle">Showing last 20 closed trades.</div>
-
             <div class="card" style="padding: 0">
               <table>
                 <thead>
@@ -625,7 +788,6 @@
         <div class="card">
           <div class="card-row" style="margin-bottom: 10px">
             <div>Venue</div>
-
             <div class="tv-tabs">
               <button class="tv-tab active" data-symbol="COINBASE:BTCUSD">Coinbase</button>
               <button class="tv-tab" data-symbol="KUCOIN:BTCUSDT">KuCoin</button>
@@ -638,8 +800,8 @@
           </div>
 
           <div class="section-subtitle" style="margin-top: 10px">
-            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML (e.g.
-            <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
+            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML
+            (e.g. <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
           </div>
         </div>
       </section>
@@ -649,9 +811,10 @@
       </div>
     </div>
 
-    <!-- Chart.js for equity curve -->
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- TradingView widget -->
+
+    <!-- TradingView -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
     <script>
@@ -660,11 +823,6 @@
       // ------------------------------
       function $(id) {
         return document.getElementById(id);
-      }
-
-      function toFloat(v, d = 0) {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : d;
       }
 
       function formatUsd(v) {
@@ -683,12 +841,12 @@
 
       function formatPercent(v, digits = 1) {
         if (v === null || v === undefined || isNaN(v)) return "—";
-        return v.toFixed(digits) + "%";
+        return v.toFixed(digits).replace(/^-0\.0+$/, "0.0") + "%";
       }
 
       function formatNumber(v, digits = 2) {
         if (v === null || v === undefined || isNaN(v)) return "—";
-        return Number(v).toFixed(digits);
+        return v.toFixed(digits);
       }
 
       function formatTime(iso) {
@@ -698,13 +856,6 @@
         return d.toLocaleString();
       }
 
-      function minutesSince(iso) {
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return null;
-        const diffMs = Date.now() - d.getTime();
-        return Math.max(0, Math.round(diffMs / 60000));
-      }
-
       // ------------------------------
       // Equity Chart
       // ------------------------------
@@ -712,90 +863,108 @@
 
       function updateEquityChart(points) {
         const ctx = $("equity-chart");
+        const safePoints = (points || []).map((p) => ({
+          time: p.time_utc || p.time || p.timeUTC || p.timeUtc || null,
+          equity_usd: p.equity_usd,
+        }));
 
-        const labels = (points || []).map((p) => {
-          const iso = p.time_utc || p.time || p.ts;
-          const d = new Date(iso);
-          return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString();
+        const labels = safePoints.map((p, idx) => {
+          const t = p.time ? new Date(p.time) : null;
+          return t && !Number.isNaN(t.getTime())
+            ? t.toLocaleTimeString()
+            : "t+" + idx;
         });
 
-        const data = (points || []).map((p) => toFloat(p.equity_usd, null)).filter((x) => x !== null);
+        const data = safePoints.map((p) => p.equity_usd);
 
-        // If points are empty, show an empty chart rather than breaking
-        if (!equityChart) {
-          equityChart = new Chart(ctx, {
-            type: "line",
-            data: {
-              labels,
-              datasets: [
-                {
-                  label: "Equity (USD)",
-                  data,
-                  tension: 0.35,
-                  borderWidth: 2,
-                  pointRadius: 2,
-                },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { display: false },
-                tooltip: {
-                  callbacks: {
-                    label: (c) => "Equity: " + formatUsd(c.parsed.y),
-                  },
-                },
-              },
-              scales: {
-                x: {
-                  ticks: { maxTicksLimit: 6 },
-                  grid: { color: "rgba(31,41,55,0.6)" },
-                },
-                y: {
-                  ticks: { callback: (v) => "$" + v },
-                  grid: { color: "rgba(31,41,55,0.6)" },
-                },
-              },
-            },
-          });
+        if (equityChart) {
+          equityChart.data.labels = labels;
+          equityChart.data.datasets[0].data = data;
+          equityChart.update();
           return;
         }
 
-        equityChart.data.labels = labels;
-        equityChart.data.datasets[0].data = data;
-        equityChart.update();
+        equityChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Equity (USD)",
+                data,
+                tension: 0.35,
+                borderWidth: 2,
+                pointRadius: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => "Equity: " + formatUsd(ctx.parsed.y),
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { maxTicksLimit: 6 },
+                grid: { color: "rgba(31,41,55,0.6)" },
+              },
+              y: {
+                ticks: { callback: (v) => "$" + v },
+                grid: { color: "rgba(31,41,55,0.6)" },
+              },
+            },
+          },
+        });
       }
 
       // ------------------------------
       // Bot status
       // ------------------------------
-      function updateBotStatus(botStatus) {
+      function updateBotStatus(status) {
         const dot = $("bot-status-dot");
         const label = $("bot-status-label");
         const minutesEl = $("bot-status-minutes");
         const lastEl = $("bot-status-last");
 
-        const sRaw = (botStatus && botStatus.status) || "unknown";
-        const s = String(sRaw).toLowerCase();
-
+        const s = status?.status || "unknown";
         label.textContent = s.charAt(0).toUpperCase() + s.slice(1);
-        dot.className = "status-dot status-" + (["running", "idle", "stopped"].includes(s) ? s : "unknown");
+        dot.className = "status-dot status-" + s;
 
-        const last = botStatus && botStatus.last_heartbeat;
-        if (last) {
-          const mins = minutesSince(last);
-          minutesEl.textContent = mins != null ? mins + " min since heartbeat" : "";
-          lastEl.textContent = "Last heartbeat: " + formatTime(last);
+        // minutes_since is not in your app.py right now - so just show heartbeat time
+        minutesEl.textContent = "";
+
+        if (status?.last_heartbeat) {
+          lastEl.textContent = "Last heartbeat: " + formatTime(status.last_heartbeat);
         } else {
-          minutesEl.textContent = "";
           lastEl.textContent = "Waiting for heartbeat…";
         }
       }
 
       // ------------------------------
-      // Tables
+      // Advanced metrics
+      // ------------------------------
+      function updateAdvancedMetrics(adv, maxDrawdownOverride) {
+        $("adv-profit-factor").textContent = adv?.profit_factor == null ? "—" : formatNumber(adv.profit_factor, 2);
+        $("adv-avg-win").textContent = formatUsd(adv?.avg_win_usd ?? 0);
+        $("adv-avg-loss").textContent = formatUsd(adv?.avg_loss_usd ?? 0);
+        $("adv-best-trade").textContent = adv?.best_trade_usd == null ? "—" : formatUsd(adv.best_trade_usd);
+        $("adv-worst-trade").textContent = adv?.worst_trade_usd == null ? "—" : formatUsd(adv.worst_trade_usd);
+
+        const mdd = adv?.max_drawdown_usd ?? maxDrawdownOverride;
+        $("adv-max-dd").textContent = mdd == null ? "—" : formatUsd(mdd);
+
+        $("adv-recovery-factor").textContent = adv?.recovery_factor == null ? "—" : formatNumber(adv.recovery_factor, 2);
+        $("adv-sharpe").textContent = adv?.sharpe_ratio == null ? "—" : formatNumber(adv.sharpe_ratio, 2);
+      }
+
+      // ------------------------------
+      // Per-market + recent trades
       // ------------------------------
       function updatePerMarket(perMarket) {
         const body = $("per-market-body");
@@ -815,36 +984,28 @@
         perMarket.forEach((m) => {
           const row = document.createElement("tr");
 
-          const market = m.market || "—";
-          const trades = m.trades ?? 0;
-
-          // API sends: win_rate, total_pnl, avg_pnl
-          const winRate = m.win_rate ?? 0;
-          const totalPnl = m.total_pnl ?? 0;
-          const avgPnl = m.avg_pnl ?? 0;
-
           const cMarket = document.createElement("td");
-          cMarket.textContent = market;
+          cMarket.textContent = m.market;
           row.appendChild(cMarket);
 
           const cTrades = document.createElement("td");
           cTrades.className = "text-right";
-          cTrades.textContent = trades;
+          cTrades.textContent = m.trades;
           row.appendChild(cTrades);
 
           const cWin = document.createElement("td");
           cWin.className = "text-right";
-          cWin.textContent = formatPercent(toFloat(winRate, 0), 1);
+          cWin.textContent = formatPercent(m.win_rate, 1);
           row.appendChild(cWin);
 
           const cTotal = document.createElement("td");
           cTotal.className = "text-right";
-          cTotal.textContent = formatUsd(toFloat(totalPnl, 0));
+          cTotal.textContent = formatUsd(m.total_pnl ?? m.total_pnl_usd ?? 0);
           row.appendChild(cTotal);
 
           const cAvg = document.createElement("td");
           cAvg.className = "text-right";
-          cAvg.textContent = formatUsd(toFloat(avgPnl, 0));
+          cAvg.textContent = formatUsd(m.avg_pnl ?? m.avg_pnl_usd ?? 0);
           row.appendChild(cAvg);
 
           body.appendChild(row);
@@ -870,99 +1031,20 @@
           const row = document.createElement("tr");
 
           const cTime = document.createElement("td");
-          cTime.textContent = formatTime(t.time);
+          cTime.textContent = t.time ? formatTime(t.time) : "—";
           row.appendChild(cTime);
 
-          const cMarket = document.createElement("td");
-          cMarket.textContent = t.market || "—";
-          row.appendChild(cMarket);
+          const cMkt = document.createElement("td");
+          cMkt.textContent = t.market || "—";
+          row.appendChild(cMkt);
 
-          const pnl = toFloat(t.pnl_usd, 0);
           const cPnl = document.createElement("td");
           cPnl.className = "text-right";
-          cPnl.textContent = formatUsd(pnl);
+          cPnl.textContent = formatUsd(t.pnl_usd ?? 0);
           row.appendChild(cPnl);
 
           body.appendChild(row);
         });
-      }
-
-      // ------------------------------
-      // Advanced metrics
-      // ------------------------------
-      function updateAdvancedMetrics(adv) {
-        if (!adv) adv = {};
-
-        $("adv-profit-factor").textContent =
-          adv.profit_factor == null ? "—" : formatNumber(adv.profit_factor, 2);
-
-        $("adv-avg-win").textContent = formatUsd(toFloat(adv.avg_win_usd, 0));
-        $("adv-avg-loss").textContent = formatUsd(toFloat(adv.avg_loss_usd, 0));
-
-        $("adv-best-trade").textContent =
-          adv.best_trade_usd == null ? "—" : formatUsd(toFloat(adv.best_trade_usd, 0));
-
-        $("adv-worst-trade").textContent =
-          adv.worst_trade_usd == null ? "—" : formatUsd(toFloat(adv.worst_trade_usd, 0));
-
-        $("adv-max-dd").textContent =
-          adv.max_drawdown_usd == null ? "—" : formatUsd(toFloat(adv.max_drawdown_usd, 0));
-
-        $("adv-recovery-factor").textContent =
-          adv.recovery_factor == null ? "—" : formatNumber(adv.recovery_factor, 2);
-
-        $("adv-sharpe").textContent =
-          adv.sharpe_ratio == null ? "—" : formatNumber(adv.sharpe_ratio, 2);
-      }
-
-      // ------------------------------
-      // Bot Pet logic (reactive)
-      // ------------------------------
-      let lastTradeSignature = null;
-
-      function setPetState(state, moodText, subText) {
-        const wrap = $("pet-state");
-        wrap.classList.remove("pet-happy", "pet-sad", "pet-watching", "pet-pacing");
-        wrap.classList.add("pet-" + state);
-
-        $("pet-mood").textContent = moodText;
-        $("pet-sub").textContent = subText;
-      }
-
-      function updatePetFromData(data) {
-        const trades = data.recent_trades || [];
-        const totalTrades = data.total_trades || 0;
-
-        if (!trades.length || totalTrades === 0) {
-          setPetState("pacing", "Watching…", "Waiting for trades");
-          return;
-        }
-
-        const last = trades[0];
-        const pnl = toFloat(last.pnl_usd, 0);
-        const mkt = last.market || "a trade";
-
-        // A simple signature to detect “new trade happened”
-        const sig = `${last.time}|${last.market}|${pnl}`;
-
-        if (sig !== lastTradeSignature) {
-          // New trade: react strongly
-          lastTradeSignature = sig;
-
-          if (pnl > 0) {
-            setPetState("happy", "Happy 😄", `Yum! ${mkt} +${formatUsd(pnl)}`);
-          } else if (pnl < 0) {
-            setPetState("sad", "Sad 😟", `Ouch… ${mkt} ${formatUsd(pnl)}`);
-          } else {
-            setPetState("watching", "Neutral 🙂", `${mkt} ${formatUsd(pnl)}`);
-          }
-          return;
-        }
-
-        // No new trade recently — keep it “watching”
-        if (pnl > 0) setPetState("watching", "Content 🙂", `Last win: ${mkt} +${formatUsd(pnl)}`);
-        else if (pnl < 0) setPetState("watching", "Recovering… 🧠", `Last loss: ${mkt} ${formatUsd(pnl)}`);
-        else setPetState("watching", "Watching…", `Last: ${mkt} ${formatUsd(pnl)}`);
       }
 
       // ------------------------------
@@ -976,12 +1058,9 @@
         const container = document.getElementById("tv-chart");
         container.innerHTML = "";
 
-        // If TV hasn't loaded yet, skip; it will be retried on next refresh
-        if (!window.TradingView) return;
-
         tvWidget = new TradingView.widget({
           autosize: true,
-          symbol: symbol,
+          symbol,
           interval: "15",
           timezone: "Etc/UTC",
           theme: "dark",
@@ -1000,10 +1079,268 @@
           tab.addEventListener("click", () => {
             tabs.forEach((t) => t.classList.remove("active"));
             tab.classList.add("active");
-            const symbol = tab.dataset.symbol;
-            loadTradingView(symbol);
+            loadTradingView(tab.dataset.symbol);
           });
         });
+      }
+
+      // ------------------------------
+      // BOT PET logic (local, evolves on wins)
+      // ------------------------------
+      const PET_KEY = "crypto_bot_pet_v1";
+
+      function loadPet() {
+        try {
+          const raw = localStorage.getItem(PET_KEY);
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }
+
+      function savePet(pet) {
+        localStorage.setItem(PET_KEY, JSON.stringify(pet));
+      }
+
+      function defaultPet() {
+        return {
+          xp: 0,
+          hunger: 45, // 0 = full, 100 = starving
+          lastWins: 0,
+          lastLosses: 0,
+          lastTotalTrades: 0,
+          lastTotalPnl: 0,
+          lastUpdate: Date.now(),
+        };
+      }
+
+      function stageFromXp(xp) {
+        if (xp < 3) return 0; // egg
+        if (xp < 7) return 1; // baby blob
+        if (xp < 13) return 2; // cat
+        return 3; // dog
+      }
+
+      function clamp(n, a, b) {
+        return Math.max(a, Math.min(b, n));
+      }
+
+      function setIcon(id, on) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle("on", !!on);
+      }
+
+      function renderPetSprite(stage, moodKey) {
+        // Simple pixel-like SVG built from circles/rects (no external images)
+        // moodKey: HAPPY / SAD / WATCH / HUNGRY
+        const svg = $("pet-sprite");
+        const eye = moodKey === "SAD" || moodKey === "HUNGRY" ? "x" : "o";
+        const mouth =
+          moodKey === "HAPPY"
+            ? "smile"
+            : moodKey === "SAD" || moodKey === "HUNGRY"
+            ? "frown"
+            : "flat";
+
+        // helpers
+        const face = (cx, cy) => {
+          const eyeL =
+            eye === "o"
+              ? `<circle cx="${cx - 7}" cy="${cy}" r="2.2" fill="rgba(248,244,252,0.92)"/>`
+              : `<path d="M${cx - 9} ${cy - 2} L${cx - 5} ${cy + 2} M${cx - 5} ${cy - 2} L${cx - 9} ${cy + 2}" stroke="rgba(248,244,252,0.92)" stroke-width="1.6" stroke-linecap="round"/>`;
+          const eyeR =
+            eye === "o"
+              ? `<circle cx="${cx + 7}" cy="${cy}" r="2.2" fill="rgba(248,244,252,0.92)"/>`
+              : `<path d="M${cx + 5} ${cy - 2} L${cx + 9} ${cy + 2} M${cx + 9} ${cy - 2} L${cx + 5} ${cy + 2}" stroke="rgba(248,244,252,0.92)" stroke-width="1.6" stroke-linecap="round"/>`;
+
+          let mouthPath = "";
+          if (mouth === "smile") {
+            mouthPath = `<path d="M${cx - 6} ${cy + 7} Q ${cx} ${cy + 12} ${cx + 6} ${
+              cy + 7
+            }" stroke="rgba(248,244,252,0.92)" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+          } else if (mouth === "frown") {
+            mouthPath = `<path d="M${cx - 6} ${cy + 12} Q ${cx} ${cy + 7} ${cx + 6} ${
+              cy + 12
+            }" stroke="rgba(248,244,252,0.92)" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+          } else {
+            mouthPath = `<path d="M${cx - 6} ${cy + 10} L${cx + 6} ${
+              cy + 10
+            }" stroke="rgba(248,244,252,0.92)" stroke-width="1.8" stroke-linecap="round"/>`;
+          }
+
+          return eyeL + eyeR + mouthPath;
+        };
+
+        let body = "";
+
+        if (stage === 0) {
+          // egg
+          body = `
+            <g opacity="0.95">
+              <ellipse cx="32" cy="38" rx="15" ry="18" fill="rgba(248,244,252,0.10)" stroke="rgba(226,232,240,0.18)" stroke-width="1.2"/>
+              <path d="M23 32 Q32 26 41 32" stroke="rgba(248,244,252,0.20)" stroke-width="1.2" fill="none"/>
+              ${face(32, 38)}
+            </g>`;
+        } else if (stage === 1) {
+          // baby blob
+          body = `
+            <g opacity="0.98">
+              <rect x="18" y="24" width="28" height="28" rx="12" fill="rgba(248,244,252,0.12)" stroke="rgba(226,232,240,0.20)" stroke-width="1.2"/>
+              <circle cx="22" cy="52" r="4" fill="rgba(248,244,252,0.10)"/>
+              <circle cx="42" cy="52" r="4" fill="rgba(248,244,252,0.10)"/>
+              ${face(32, 36)}
+            </g>`;
+        } else if (stage === 2) {
+          // cat
+          body = `
+            <g opacity="0.98">
+              <path d="M18 30 L26 22 L30 30 Z" fill="rgba(248,244,252,0.14)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
+              <path d="M46 30 L38 22 L34 30 Z" fill="rgba(248,244,252,0.14)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
+              <rect x="18" y="28" width="28" height="26" rx="12" fill="rgba(248,244,252,0.12)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
+              <path d="M20 42 L12 40" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M20 45 L12 45" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M44 42 L52 40" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M44 45 L52 45" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
+              ${face(32, 38)}
+            </g>`;
+        } else {
+          // dog
+          body = `
+            <g opacity="0.98">
+              <path d="M18 34 Q14 38 16 44 Q18 48 22 46 L22 34 Z" fill="rgba(248,244,252,0.10)" stroke="rgba(226,232,240,0.20)" stroke-width="1.2"/>
+              <path d="M46 34 Q50 38 48 44 Q46 48 42 46 L42 34 Z" fill="rgba(248,244,252,0.10)" stroke="rgba(226,232,240,0.20)" stroke-width="1.2"/>
+              <rect x="18" y="28" width="28" height="28" rx="12" fill="rgba(248,244,252,0.12)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
+              <circle cx="32" cy="44" r="3" fill="rgba(248,244,252,0.55)"/>
+              ${face(32, 38)}
+            </g>`;
+        }
+
+        svg.innerHTML = body;
+      }
+
+      function renderPet(pet, data) {
+        const petBox = $("pet-box");
+        const moodEl = $("pet-mood");
+        const subEl = $("pet-sub");
+
+        // time-based hunger increase
+        const now = Date.now();
+        const dtMin = (now - (pet.lastUpdate || now)) / 60000;
+        pet.lastUpdate = now;
+
+        // hunger drifts up over time
+        pet.hunger = clamp(pet.hunger + dtMin * 1.2, 0, 100);
+
+        const prevStage = stageFromXp(pet.xp);
+
+        // detect new wins/losses (from backend totals)
+        const wins = data?.wins ?? 0;
+        const losses = data?.losses ?? 0;
+
+        const newWins = Math.max(0, wins - (pet.lastWins ?? 0));
+        const newLosses = Math.max(0, losses - (pet.lastLosses ?? 0));
+
+        // "wins are food"
+        if (newWins > 0) {
+          pet.xp += newWins * 2;
+          pet.hunger = clamp(pet.hunger - newWins * 18, 0, 100);
+          petBox.classList.add("pet-fed");
+          setTimeout(() => petBox.classList.remove("pet-fed"), 1200);
+        }
+
+        // "losses are empty plate"
+        if (newLosses > 0) {
+          pet.xp = Math.max(0, pet.xp - newLosses * 1);
+          pet.hunger = clamp(pet.hunger + newLosses * 12, 0, 100);
+        }
+
+        pet.lastWins = wins;
+        pet.lastLosses = losses;
+
+        // wipeout reset (based on equity if available)
+        const lastEquity = (data?.equity_curve && data.equity_curve.length)
+          ? data.equity_curve[data.equity_curve.length - 1]?.equity_usd
+          : null;
+
+        if (typeof lastEquity === "number" && lastEquity < 500) {
+          // reset pet on wipeout
+          const fresh = defaultPet();
+          fresh.lastWins = wins;
+          fresh.lastLosses = losses;
+          Object.assign(pet, fresh);
+          petBox.classList.add("pet-levelup");
+          $("pet-levelup").textContent = "RESET!";
+          setTimeout(() => {
+            $("pet-levelup").textContent = "LEVEL UP!";
+            petBox.classList.remove("pet-levelup");
+          }, 1100);
+        }
+
+        // mood + pacing
+        let moodKey = "WATCH";
+        let moodText = "Watching…";
+        let subText = "Waiting for trades";
+
+        // last trade info
+        const lastTrade = (data?.recent_trades && data.recent_trades.length)
+          ? data.recent_trades[0]
+          : null;
+
+        if (pet.hunger >= 75) {
+          moodKey = "HUNGRY";
+          moodText = "Hungry 😿";
+          subText = "Needs wins (food)";
+        } else if (newLosses > 0) {
+          moodKey = "SAD";
+          moodText = "Sad 😢";
+          subText = "Empty plate…";
+        } else if (newWins > 0) {
+          moodKey = "HAPPY";
+          moodText = "Happy 😄";
+          if (lastTrade?.market) {
+            const pnl = lastTrade?.pnl_usd ?? 0;
+            subText = "Yum! " + lastTrade.market + " " + formatUsd(pnl);
+          } else {
+            subText = "Yum! Win snack!";
+          }
+        } else {
+          moodKey = "WATCH";
+          moodText = "Watching…";
+          subText = "Waiting for trades";
+        }
+
+        // stage + evolution animation
+        const stage = stageFromXp(pet.xp);
+        if (stage !== prevStage) {
+          const petBox = $("pet-box");
+          petBox.classList.add("pet-levelup");
+          setTimeout(() => petBox.classList.remove("pet-levelup"), 950);
+        }
+
+        // hungry state + pacing state
+        petBox.classList.toggle("pet-hungry", pet.hunger >= 75);
+        petBox.classList.toggle("pet-pace", moodKey === "WATCH");
+
+        // icons react
+        setIcon("ic-food", pet.hunger >= 60);
+        setIcon("ic-health", pet.hunger >= 80);
+        setIcon("ic-love", moodKey === "HAPPY");
+        setIcon("ic-play", moodKey === "WATCH");
+        setIcon("ic-clean", moodKey === "SAD" && pet.hunger < 80);
+
+        // show mood
+        moodEl.textContent = moodText;
+        subEl.textContent = subText;
+
+        // plate food only when win just happened
+        if (newWins > 0) petBox.classList.add("pet-fed");
+
+        // draw sprite
+        renderPetSprite(stage, moodKey);
+
+        savePet(pet);
       }
 
       // ------------------------------
@@ -1014,43 +1351,40 @@
           const res = await fetch("/data", { cache: "no-store" });
           const data = await res.json();
 
-          // Top metrics (FIXED to match app.py)
-          $("metric-total-trades").textContent = data.total_trades ?? 0;
+          // Top metrics
+          $("metric-total-trades").textContent = data.total_trades ?? data.total_events ?? 0;
           $("metric-wins").textContent = (data.wins ?? 0) + " wins";
           $("metric-losses").textContent = (data.losses ?? 0) + " losses";
 
           const winRate = data.win_rate != null ? data.win_rate : 0;
-          $("metric-win-rate").textContent = formatPercent(toFloat(winRate, 0), 1);
+          $("metric-win-rate").textContent = formatPercent(winRate, 1);
 
-          const totalTrades = toFloat(data.total_trades, 0);
-          const totalPnl = toFloat(data.total_pnl_usd, 0);
-          const avgPnl = totalTrades > 0 ? totalPnl / totalTrades : 0;
-          $("metric-avg-pnl").textContent = formatUsd(avgPnl);
+          $("metric-avg-pnl").textContent = formatUsd(data.avg_pnl_usd ?? 0);
 
+          const totalPnl = data.total_pnl_usd ?? 0;
           const pnlEl = $("metric-total-pnl");
           pnlEl.textContent = formatUsd(totalPnl);
           pnlEl.classList.remove("positive", "negative");
           pnlEl.classList.add(totalPnl >= 0 ? "positive" : "negative");
 
-          // Equity chart (FIXED: reads time_utc)
+          // Equity
           updateEquityChart(data.equity_curve || []);
 
-          // Bot status (FIXED: computes minutes since)
-          updateBotStatus(data.bot_status || {});
+          // Bot status
+          updateBotStatus(data.bot_status);
 
-          // Tables (FIXED: per_market keys)
+          // Per-market & trades
           updatePerMarket(data.per_market || []);
           updateRecentTrades(data.recent_trades || []);
 
           // Advanced
-          updateAdvancedMetrics(data.advanced_metrics || {});
+          updateAdvancedMetrics(data.advanced_metrics, data.max_drawdown_usd);
 
           // Pet
-          updatePetFromData(data);
+          const pet = loadPet() || defaultPet();
+          renderPet(pet, data);
         } catch (err) {
           console.error("Failed to refresh dashboard", err);
-          // If /data fails temporarily, keep page stable
-          setPetState("sad", "Confused 🤔", "Can’t reach /data right now");
         }
       }
 
@@ -1065,4 +1399,4 @@
       });
     </script>
   </body>
-</html>
+ </html>
