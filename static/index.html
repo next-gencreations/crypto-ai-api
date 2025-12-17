@@ -1,1 +1,1068 @@
- 
+ <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Crypto AI Bot Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+      :root {
+        --bg: #050814;
+        --bg-card: #101522;
+        --bg-card-soft: #141b2c;
+        --text-main: #f8f4fc;
+        --text-muted: #9ca3af;
+        --accent: #22c55e;
+        --accent-red: #ef4444;
+        --accent-blue: #3b82f6;
+        --border-soft: #1f2937;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: radial-gradient(circle at top, #111827, #020617);
+        color: var(--text-main);
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      header {
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      header p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      header a {
+        color: #38bdf8;
+        text-decoration: none;
+        margin-left: 4px;
+        margin-right: 4px;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .card {
+        background: linear-gradient(145deg, var(--bg-card), #060b17);
+        border-radius: 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--border-soft);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      }
+
+      .card h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+      }
+
+      .metric-main {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .metric-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .metric-main.positive {
+        color: var(--accent);
+      }
+
+      .metric-main.negative {
+        color: var(--accent-red);
+      }
+
+      .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        background: rgba(15, 23, 42, 0.8);
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+
+      .status-running {
+        background-color: #22c55e;
+      }
+
+      .status-idle {
+        background-color: #eab308;
+      }
+
+      .status-stopped {
+        background-color: #ef4444;
+      }
+
+      .status-unknown {
+        background-color: #6b7280;
+      }
+
+      .section-title {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+      }
+
+      .section-subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: 0 0 12px;
+      }
+
+      .section-card {
+        margin-bottom: 24px;
+      }
+
+      .chart-container {
+        height: 260px;
+        background: radial-gradient(circle at top, #020617, #020617);
+        border-radius: 14px;
+        border: 1px solid var(--border-soft);
+        overflow: hidden;
+      }
+
+      .chart-inner {
+        width: 100%;
+        height: 100%;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      thead {
+        background: rgba(15, 23, 42, 0.9);
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        text-align: left;
+      }
+
+      th {
+        font-weight: 500;
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      tbody tr:nth-child(odd) {
+        background: rgba(15, 23, 42, 0.4);
+      }
+
+      tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.1);
+      }
+
+      tbody tr:hover {
+        background: rgba(55, 65, 81, 0.4);
+      }
+
+      .text-right {
+        text-align: right;
+      }
+
+      .muted {
+        color: var(--text-muted);
+      }
+
+      .section-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
+        gap: 16px;
+      }
+
+      @media (max-width: 900px) {
+        .section-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .advanced-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px 14px;
+        margin-top: 6px;
+      }
+
+      .adv-label {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      .adv-value {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      /* TradingView area */
+      .tv-tabs {
+        display: inline-flex;
+        background: rgba(15, 23, 42, 0.9);
+        border-radius: 999px;
+        padding: 2px;
+        margin-bottom: 8px;
+      }
+
+      .tv-tab {
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .tv-tab.active {
+        background: #0f172a;
+        color: var(--text-main);
+      }
+
+      .footer {
+        margin-top: 18px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+      }
+
+      /* ---------------------------
+         BOT PET (Tamagotchi-ish)
+         --------------------------- */
+      .pet-wrap {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .pet-screen {
+        width: 68px;
+        height: 68px;
+        border-radius: 14px;
+        border: 1px solid var(--border-soft);
+        background: radial-gradient(circle at top, #0b1224, #050814);
+        display: grid;
+        place-items: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .pet {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        position: relative;
+        transform-origin: center;
+      }
+
+      .pet::before,
+      .pet::after {
+        content: "";
+        position: absolute;
+        top: 16px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.85);
+      }
+      .pet::before {
+        left: 12px;
+      }
+      .pet::after {
+        right: 12px;
+      }
+
+      .pet-mouth {
+        position: absolute;
+        left: 50%;
+        top: 26px;
+        width: 14px;
+        height: 8px;
+        transform: translateX(-50%);
+        border-bottom: 2px solid rgba(255, 255, 255, 0.85);
+        border-radius: 0 0 12px 12px;
+      }
+
+      .pet-happy .pet-mouth {
+        border-bottom: 2px solid rgba(255, 255, 255, 0.95);
+      }
+
+      .pet-sad .pet-mouth {
+        top: 30px;
+        height: 8px;
+        border-bottom: none;
+        border-top: 2px solid rgba(255, 255, 255, 0.85);
+        border-radius: 12px 12px 0 0;
+      }
+
+      .pet-watching .pet-mouth {
+        width: 10px;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.6);
+      }
+
+      /* animations */
+      @keyframes bob {
+        0% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-2px);
+        }
+        100% {
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes wobble {
+        0% {
+          transform: rotate(0deg);
+        }
+        25% {
+          transform: rotate(-4deg);
+        }
+        50% {
+          transform: rotate(0deg);
+        }
+        75% {
+          transform: rotate(4deg);
+        }
+        100% {
+          transform: rotate(0deg);
+        }
+      }
+
+      @keyframes pace {
+        0% {
+          transform: translateX(-10px);
+        }
+        50% {
+          transform: translateX(10px);
+        }
+        100% {
+          transform: translateX(-10px);
+        }
+      }
+
+      .pet-happy .pet {
+        animation: bob 1.2s ease-in-out infinite;
+        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25),
+          0 10px 18px rgba(34, 197, 94, 0.06);
+      }
+
+      .pet-sad .pet {
+        animation: wobble 1.4s ease-in-out infinite;
+        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25),
+          0 10px 18px rgba(239, 68, 68, 0.06);
+      }
+
+      .pet-pacing .pet {
+        animation: pace 1.6s ease-in-out infinite;
+      }
+
+      .pet-label {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .pet-title {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+      .pet-mood {
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pet-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="page">
+      <header>
+        <h1>Crypto AI Bot Dashboard</h1>
+        <p>
+          Paper-trading stats from Render —
+          <a href="/data" target="_blank">raw stats</a>
+        </p>
+      </header>
+
+      <!-- Top KPIs -->
+      <section class="cards">
+        <div class="card">
+          <h2>Total Trades</h2>
+          <div class="metric-main" id="metric-total-trades">0</div>
+          <div class="metric-sub">
+            <span id="metric-wins">0 wins</span> /
+            <span id="metric-losses">0 losses</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Win Rate</h2>
+          <div class="metric-main" id="metric-win-rate">0%</div>
+          <div class="metric-sub">
+            Avg <span id="metric-avg-pnl">$0.00</span> per trade
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>PNL (Total)</h2>
+          <div class="metric-main negative" id="metric-total-pnl">$0.00</div>
+          <div class="metric-sub">Based on closed trades only.</div>
+        </div>
+
+        <div class="card">
+          <h2>Bot Status</h2>
+          <div class="card-row" style="margin-bottom: 6px">
+            <div class="status-pill" id="bot-status-pill">
+              <span class="status-dot status-unknown" id="bot-status-dot"></span>
+              <span id="bot-status-label">Unknown</span>
+            </div>
+            <span class="muted" id="bot-status-minutes"></span>
+          </div>
+          <div class="metric-sub" id="bot-status-last">Waiting for heartbeat…</div>
+        </div>
+
+        <!-- Bot Pet -->
+        <div class="card">
+          <h2>Bot Pet</h2>
+          <div class="pet-wrap" id="pet-state">
+            <div class="pet-screen">
+              <div class="pet">
+                <div class="pet-mouth"></div>
+              </div>
+            </div>
+            <div class="pet-label">
+              <div class="pet-title">Mood</div>
+              <div class="pet-mood" id="pet-mood">Watching…</div>
+              <div class="pet-sub" id="pet-sub">Waiting for trades</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Advanced Analytics -->
+      <section class="card section-card">
+        <div class="card-row" style="margin-bottom: 6px">
+          <div>
+            <div class="section-title">Advanced Analytics</div>
+            <div class="section-subtitle">Deeper stats from your closed trades.</div>
+          </div>
+        </div>
+
+        <div class="advanced-grid">
+          <div>
+            <div class="adv-label">Profit Factor</div>
+            <div class="adv-value" id="adv-profit-factor">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Avg Win (USD)</div>
+            <div class="adv-value" id="adv-avg-win">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Avg Loss (USD)</div>
+            <div class="adv-value" id="adv-avg-loss">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Best Trade (USD)</div>
+            <div class="adv-value" id="adv-best-trade">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Worst Trade (USD)</div>
+            <div class="adv-value" id="adv-worst-trade">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Max Drawdown (USD)</div>
+            <div class="adv-value" id="adv-max-dd">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Recovery Factor</div>
+            <div class="adv-value" id="adv-recovery-factor">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Sharpe Ratio</div>
+            <div class="adv-value" id="adv-sharpe">—</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Equity + tables -->
+      <section class="section-grid">
+        <div>
+          <div class="section-title">Equity Curve</div>
+          <div class="section-subtitle">Tracks paper-trading balance over time (USD).</div>
+
+          <div class="chart-container">
+            <canvas id="equity-chart" class="chart-inner"></canvas>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-card">
+            <div class="section-title">Per-Market Performance</div>
+            <div class="section-subtitle">
+              How the bot is doing on each market (paper trading).
+            </div>
+
+            <div class="card" style="padding: 0">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Market</th>
+                    <th class="text-right">Trades</th>
+                    <th class="text-right">Win Rate</th>
+                    <th class="text-right">Total PnL</th>
+                    <th class="text-right">Avg PnL</th>
+                  </tr>
+                </thead>
+                <tbody id="per-market-body">
+                  <tr>
+                    <td colspan="5" class="muted">No markets yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">Recent Trades</div>
+            <div class="section-subtitle">Showing last 20 closed trades.</div>
+
+            <div class="card" style="padding: 0">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Market</th>
+                    <th class="text-right">PnL (USD)</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-trades-body">
+                  <tr>
+                    <td colspan="3" class="muted">No trades yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TradingView candlesticks -->
+      <section class="section-card">
+        <div class="section-title">Market Candlestick Charts</div>
+        <div class="section-subtitle">
+          Live BTC-USD candlesticks on your main venues. Charts are from TradingView only (they do not place trades).
+        </div>
+
+        <div class="card">
+          <div class="card-row" style="margin-bottom: 10px">
+            <div>Venue</div>
+
+            <div class="tv-tabs">
+              <button class="tv-tab active" data-symbol="COINBASE:BTCUSD">Coinbase</button>
+              <button class="tv-tab" data-symbol="KUCOIN:BTCUSDT">KuCoin</button>
+              <button class="tv-tab" data-symbol="CRYPTOCOM:BTCUSD">Crypto.com</button>
+            </div>
+          </div>
+
+          <div class="tradingview-widget-container" style="height: 400px">
+            <div id="tv-chart"></div>
+          </div>
+
+          <div class="section-subtitle" style="margin-top: 10px">
+            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML (e.g.
+            <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
+          </div>
+        </div>
+      </section>
+
+      <div class="footer">
+        Bot is running on Render (paper trading only). Keep it training for 2–3 weeks before making AI changes.
+      </div>
+    </div>
+
+    <!-- Chart.js for equity curve -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- TradingView widget -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+
+    <script>
+      // ------------------------------
+      // Utilities
+      // ------------------------------
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      function toFloat(v, d = 0) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : d;
+      }
+
+      function formatUsd(v) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        const sign = v < 0 ? "-" : "";
+        const abs = Math.abs(v);
+        return (
+          sign +
+          "$" +
+          abs.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })
+        );
+      }
+
+      function formatPercent(v, digits = 1) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        return v.toFixed(digits) + "%";
+      }
+
+      function formatNumber(v, digits = 2) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        return Number(v).toFixed(digits);
+      }
+
+      function formatTime(iso) {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return String(iso);
+        return d.toLocaleString();
+      }
+
+      function minutesSince(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return null;
+        const diffMs = Date.now() - d.getTime();
+        return Math.max(0, Math.round(diffMs / 60000));
+      }
+
+      // ------------------------------
+      // Equity Chart
+      // ------------------------------
+      let equityChart = null;
+
+      function updateEquityChart(points) {
+        const ctx = $("equity-chart");
+
+        const labels = (points || []).map((p) => {
+          const iso = p.time_utc || p.time || p.ts;
+          const d = new Date(iso);
+          return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString();
+        });
+
+        const data = (points || []).map((p) => toFloat(p.equity_usd, null)).filter((x) => x !== null);
+
+        // If points are empty, show an empty chart rather than breaking
+        if (!equityChart) {
+          equityChart = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "Equity (USD)",
+                  data,
+                  tension: 0.35,
+                  borderWidth: 2,
+                  pointRadius: 2,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    label: (c) => "Equity: " + formatUsd(c.parsed.y),
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  ticks: { maxTicksLimit: 6 },
+                  grid: { color: "rgba(31,41,55,0.6)" },
+                },
+                y: {
+                  ticks: { callback: (v) => "$" + v },
+                  grid: { color: "rgba(31,41,55,0.6)" },
+                },
+              },
+            },
+          });
+          return;
+        }
+
+        equityChart.data.labels = labels;
+        equityChart.data.datasets[0].data = data;
+        equityChart.update();
+      }
+
+      // ------------------------------
+      // Bot status
+      // ------------------------------
+      function updateBotStatus(botStatus) {
+        const dot = $("bot-status-dot");
+        const label = $("bot-status-label");
+        const minutesEl = $("bot-status-minutes");
+        const lastEl = $("bot-status-last");
+
+        const sRaw = (botStatus && botStatus.status) || "unknown";
+        const s = String(sRaw).toLowerCase();
+
+        label.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+        dot.className = "status-dot status-" + (["running", "idle", "stopped"].includes(s) ? s : "unknown");
+
+        const last = botStatus && botStatus.last_heartbeat;
+        if (last) {
+          const mins = minutesSince(last);
+          minutesEl.textContent = mins != null ? mins + " min since heartbeat" : "";
+          lastEl.textContent = "Last heartbeat: " + formatTime(last);
+        } else {
+          minutesEl.textContent = "";
+          lastEl.textContent = "Waiting for heartbeat…";
+        }
+      }
+
+      // ------------------------------
+      // Tables
+      // ------------------------------
+      function updatePerMarket(perMarket) {
+        const body = $("per-market-body");
+        body.innerHTML = "";
+
+        if (!perMarket || perMarket.length === 0) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 5;
+          cell.className = "muted";
+          cell.textContent = "No markets yet.";
+          row.appendChild(cell);
+          body.appendChild(row);
+          return;
+        }
+
+        perMarket.forEach((m) => {
+          const row = document.createElement("tr");
+
+          const market = m.market || "—";
+          const trades = m.trades ?? 0;
+
+          // API sends: win_rate, total_pnl, avg_pnl
+          const winRate = m.win_rate ?? 0;
+          const totalPnl = m.total_pnl ?? 0;
+          const avgPnl = m.avg_pnl ?? 0;
+
+          const cMarket = document.createElement("td");
+          cMarket.textContent = market;
+          row.appendChild(cMarket);
+
+          const cTrades = document.createElement("td");
+          cTrades.className = "text-right";
+          cTrades.textContent = trades;
+          row.appendChild(cTrades);
+
+          const cWin = document.createElement("td");
+          cWin.className = "text-right";
+          cWin.textContent = formatPercent(toFloat(winRate, 0), 1);
+          row.appendChild(cWin);
+
+          const cTotal = document.createElement("td");
+          cTotal.className = "text-right";
+          cTotal.textContent = formatUsd(toFloat(totalPnl, 0));
+          row.appendChild(cTotal);
+
+          const cAvg = document.createElement("td");
+          cAvg.className = "text-right";
+          cAvg.textContent = formatUsd(toFloat(avgPnl, 0));
+          row.appendChild(cAvg);
+
+          body.appendChild(row);
+        });
+      }
+
+      function updateRecentTrades(trades) {
+        const body = $("recent-trades-body");
+        body.innerHTML = "";
+
+        if (!trades || trades.length === 0) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 3;
+          cell.className = "muted";
+          cell.textContent = "No trades yet.";
+          row.appendChild(cell);
+          body.appendChild(row);
+          return;
+        }
+
+        trades.forEach((t) => {
+          const row = document.createElement("tr");
+
+          const cTime = document.createElement("td");
+          cTime.textContent = formatTime(t.time);
+          row.appendChild(cTime);
+
+          const cMarket = document.createElement("td");
+          cMarket.textContent = t.market || "—";
+          row.appendChild(cMarket);
+
+          const pnl = toFloat(t.pnl_usd, 0);
+          const cPnl = document.createElement("td");
+          cPnl.className = "text-right";
+          cPnl.textContent = formatUsd(pnl);
+          row.appendChild(cPnl);
+
+          body.appendChild(row);
+        });
+      }
+
+      // ------------------------------
+      // Advanced metrics
+      // ------------------------------
+      function updateAdvancedMetrics(adv) {
+        if (!adv) adv = {};
+
+        $("adv-profit-factor").textContent =
+          adv.profit_factor == null ? "—" : formatNumber(adv.profit_factor, 2);
+
+        $("adv-avg-win").textContent = formatUsd(toFloat(adv.avg_win_usd, 0));
+        $("adv-avg-loss").textContent = formatUsd(toFloat(adv.avg_loss_usd, 0));
+
+        $("adv-best-trade").textContent =
+          adv.best_trade_usd == null ? "—" : formatUsd(toFloat(adv.best_trade_usd, 0));
+
+        $("adv-worst-trade").textContent =
+          adv.worst_trade_usd == null ? "—" : formatUsd(toFloat(adv.worst_trade_usd, 0));
+
+        $("adv-max-dd").textContent =
+          adv.max_drawdown_usd == null ? "—" : formatUsd(toFloat(adv.max_drawdown_usd, 0));
+
+        $("adv-recovery-factor").textContent =
+          adv.recovery_factor == null ? "—" : formatNumber(adv.recovery_factor, 2);
+
+        $("adv-sharpe").textContent =
+          adv.sharpe_ratio == null ? "—" : formatNumber(adv.sharpe_ratio, 2);
+      }
+
+      // ------------------------------
+      // Bot Pet logic (reactive)
+      // ------------------------------
+      let lastTradeSignature = null;
+
+      function setPetState(state, moodText, subText) {
+        const wrap = $("pet-state");
+        wrap.classList.remove("pet-happy", "pet-sad", "pet-watching", "pet-pacing");
+        wrap.classList.add("pet-" + state);
+
+        $("pet-mood").textContent = moodText;
+        $("pet-sub").textContent = subText;
+      }
+
+      function updatePetFromData(data) {
+        const trades = data.recent_trades || [];
+        const totalTrades = data.total_trades || 0;
+
+        if (!trades.length || totalTrades === 0) {
+          setPetState("pacing", "Watching…", "Waiting for trades");
+          return;
+        }
+
+        const last = trades[0];
+        const pnl = toFloat(last.pnl_usd, 0);
+        const mkt = last.market || "a trade";
+
+        // A simple signature to detect “new trade happened”
+        const sig = `${last.time}|${last.market}|${pnl}`;
+
+        if (sig !== lastTradeSignature) {
+          // New trade: react strongly
+          lastTradeSignature = sig;
+
+          if (pnl > 0) {
+            setPetState("happy", "Happy 😄", `Yum! ${mkt} +${formatUsd(pnl)}`);
+          } else if (pnl < 0) {
+            setPetState("sad", "Sad 😟", `Ouch… ${mkt} ${formatUsd(pnl)}`);
+          } else {
+            setPetState("watching", "Neutral 🙂", `${mkt} ${formatUsd(pnl)}`);
+          }
+          return;
+        }
+
+        // No new trade recently — keep it “watching”
+        if (pnl > 0) setPetState("watching", "Content 🙂", `Last win: ${mkt} +${formatUsd(pnl)}`);
+        else if (pnl < 0) setPetState("watching", "Recovering… 🧠", `Last loss: ${mkt} ${formatUsd(pnl)}`);
+        else setPetState("watching", "Watching…", `Last: ${mkt} ${formatUsd(pnl)}`);
+      }
+
+      // ------------------------------
+      // TradingView
+      // ------------------------------
+      let currentSymbol = "COINBASE:BTCUSD";
+      let tvWidget = null;
+
+      function loadTradingView(symbol) {
+        currentSymbol = symbol;
+        const container = document.getElementById("tv-chart");
+        container.innerHTML = "";
+
+        // If TV hasn't loaded yet, skip; it will be retried on next refresh
+        if (!window.TradingView) return;
+
+        tvWidget = new TradingView.widget({
+          autosize: true,
+          symbol: symbol,
+          interval: "15",
+          timezone: "Etc/UTC",
+          theme: "dark",
+          style: "1",
+          locale: "en",
+          enable_publishing: false,
+          withdateranges: true,
+          allow_symbol_change: false,
+          container_id: "tv-chart",
+        });
+      }
+
+      function setupTvTabs() {
+        const tabs = document.querySelectorAll(".tv-tab");
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            tabs.forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            const symbol = tab.dataset.symbol;
+            loadTradingView(symbol);
+          });
+        });
+      }
+
+      // ------------------------------
+      // Fetch + hydrate dashboard
+      // ------------------------------
+      async function refreshDashboard() {
+        try {
+          const res = await fetch("/data", { cache: "no-store" });
+          const data = await res.json();
+
+          // Top metrics (FIXED to match app.py)
+          $("metric-total-trades").textContent = data.total_trades ?? 0;
+          $("metric-wins").textContent = (data.wins ?? 0) + " wins";
+          $("metric-losses").textContent = (data.losses ?? 0) + " losses";
+
+          const winRate = data.win_rate != null ? data.win_rate : 0;
+          $("metric-win-rate").textContent = formatPercent(toFloat(winRate, 0), 1);
+
+          const totalTrades = toFloat(data.total_trades, 0);
+          const totalPnl = toFloat(data.total_pnl_usd, 0);
+          const avgPnl = totalTrades > 0 ? totalPnl / totalTrades : 0;
+          $("metric-avg-pnl").textContent = formatUsd(avgPnl);
+
+          const pnlEl = $("metric-total-pnl");
+          pnlEl.textContent = formatUsd(totalPnl);
+          pnlEl.classList.remove("positive", "negative");
+          pnlEl.classList.add(totalPnl >= 0 ? "positive" : "negative");
+
+          // Equity chart (FIXED: reads time_utc)
+          updateEquityChart(data.equity_curve || []);
+
+          // Bot status (FIXED: computes minutes since)
+          updateBotStatus(data.bot_status || {});
+
+          // Tables (FIXED: per_market keys)
+          updatePerMarket(data.per_market || []);
+          updateRecentTrades(data.recent_trades || []);
+
+          // Advanced
+          updateAdvancedMetrics(data.advanced_metrics || {});
+
+          // Pet
+          updatePetFromData(data);
+        } catch (err) {
+          console.error("Failed to refresh dashboard", err);
+          // If /data fails temporarily, keep page stable
+          setPetState("sad", "Confused 🤔", "Can’t reach /data right now");
+        }
+      }
+
+      // ------------------------------
+      // Init
+      // ------------------------------
+      document.addEventListener("DOMContentLoaded", () => {
+        setupTvTabs();
+        loadTradingView(currentSymbol);
+        refreshDashboard();
+        setInterval(refreshDashboard, 10_000);
+      });
+    </script>
+  </body>
+</html>
