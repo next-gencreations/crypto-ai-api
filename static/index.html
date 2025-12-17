@@ -279,303 +279,145 @@
         text-align: center;
       }
 
-      /* ------------------------------
-         BOT PET
-      ------------------------------ */
-      .pet-wrap {
+      /* ---------------------------------
+         BOT PET (Tamagotchi-ish)
+         --------------------------------- */
+
+      .pet-row {
         display: flex;
         align-items: center;
-        gap: 12px;
-      }
-
-      .pet-box {
-        position: relative;
-        width: 112px;
-        height: 86px;
-        border-radius: 16px;
-        border: 1px solid rgba(31, 41, 55, 0.85);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03),
-          0 12px 28px rgba(0, 0, 0, 0.4);
-        overflow: hidden;
-
-        background: radial-gradient(circle at 30% 20%, rgba(56, 189, 248, 0.22), transparent 55%),
-          radial-gradient(circle at 70% 80%, rgba(34, 197, 94, 0.10), transparent 55%),
-          linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
-      }
-
-      .pet-box::after {
-        content: "";
-        position: absolute;
-        left: 10px;
-        right: 10px;
-        bottom: 8px;
-        height: 10px;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.08);
-        border: 1px solid rgba(148, 163, 184, 0.14);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        opacity: 0.7;
+        gap: 14px;
       }
 
       .pet-screen {
-        position: absolute;
-        left: 10px;
-        top: 10px;
-        right: 10px;
-        bottom: 18px;
-        border-radius: 12px;
-        background: radial-gradient(circle at top, rgba(180, 212, 196, 0.22), rgba(11, 18, 33, 0.95));
-        border: 1px solid rgba(180, 212, 196, 0.18);
+        width: 86px;
+        height: 66px;
+        border-radius: 14px;
+        border: 1px solid rgba(31, 41, 55, 0.9);
+        background: radial-gradient(circle at top, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.22));
+        box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+        position: relative;
         overflow: hidden;
       }
 
-      .pet-scan {
-        position: absolute;
-        left: 10px;
-        right: 10px;
-        top: 10px;
-        bottom: 18px;
-        border-radius: 12px;
-        pointer-events: none;
-        background: linear-gradient(
-          to bottom,
-          rgba(255, 255, 255, 0.05),
-          transparent 25%,
-          rgba(255, 255, 255, 0.02),
-          transparent 60%
-        );
-        mix-blend-mode: screen;
-        opacity: 0.35;
-        animation: scan 3.2s linear infinite;
+      .pet-inner {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        image-rendering: pixelated;
       }
 
-      @keyframes scan {
-        0% {
-          transform: translateY(-40%);
-        }
-        100% {
-          transform: translateY(40%);
-        }
+      .pet-svg {
+        width: 64px;
+        height: 52px;
+        filter: drop-shadow(0 8px 18px rgba(0,0,0,0.35));
+        opacity: 0.98;
       }
 
-      .pet-sprite {
+      .pet-bubble {
         position: absolute;
-        left: 0;
-        top: 0;
-        width: 112px;
-        height: 86px;
-        padding: 0;
-        pointer-events: none;
-        filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
-      }
-
-      .plate {
-        position: absolute;
-        left: 44px;
-        bottom: 20px;
-        width: 38px;
-        height: 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(226, 232, 240, 0.18);
-        background: rgba(226, 232, 240, 0.06);
-        opacity: 0.9;
-      }
-
-      .food {
-        position: absolute;
-        left: 58px;
-        bottom: 24px;
+        right: 8px;
+        bottom: 8px;
         width: 10px;
         height: 10px;
-        border-radius: 3px;
-        background: rgba(34, 197, 94, 0.75);
-        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
-        opacity: 0;
-        transform: translateY(2px) scale(0.9);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        animation: petBlink 2.4s ease-in-out infinite;
       }
 
-      .pet-fed .food {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        transition: opacity 220ms ease, transform 220ms ease;
+      @keyframes petBlink {
+        0%, 100% { transform: translateY(0); opacity: 0.2; }
+        50% { transform: translateY(-3px); opacity: 0.45; }
       }
 
-      .pet-hungryHint {
-        position: absolute;
-        left: 50%;
-        top: 36px;
-        transform: translateX(-50%);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        font-size: 10px;
-        letter-spacing: 0.12em;
-        color: rgba(239, 68, 68, 0.9);
-        text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
-        opacity: 0;
-        pointer-events: none;
+      .pet-pacing {
+        animation: petPace 1.6s ease-in-out infinite;
+      }
+      @keyframes petPace {
+        0%, 100% { transform: translateX(-4px); }
+        50% { transform: translateX(4px); }
       }
 
-      .pet-hungry .pet-hungryHint {
-        opacity: 1;
+      .pet-shiver {
+        animation: petShiver 0.25s linear infinite;
+      }
+      @keyframes petShiver {
+        0% { transform: translateX(-1px) translateY(0); }
+        50% { transform: translateX(1px) translateY(0); }
+        100% { transform: translateX(-1px) translateY(0); }
       }
 
-      .pet-pace #pet-sprite {
-        animation: pace 1.6s ease-in-out infinite;
+      .pet-title {
+        font-weight: 700;
+        margin-bottom: 2px;
+        color: var(--text-main);
       }
-
-      @keyframes pace {
-        0% {
-          transform: translateX(-3px);
-        }
-        50% {
-          transform: translateX(3px);
-        }
-        100% {
-          transform: translateX(-3px);
-        }
-      }
-
-      /* --- LCD icons row --- */
-      .lcd-icons {
-        position: absolute;
-        left: 10px;
-        right: 10px;
-        top: 6px;
-        display: flex;
-        justify-content: space-between;
-        gap: 6px;
-        font-size: 10px;
-        opacity: 0.9;
-        filter: saturate(0.85);
-        pointer-events: none;
-      }
-
-      .lcd-ic {
-        opacity: 0.35;
-        transform: translateY(0px);
-        transition: opacity 220ms ease, transform 220ms ease;
-      }
-
-      .lcd-ic.on {
-        opacity: 0.95;
-        transform: translateY(-1px);
-      }
-
-      /* --- LEVEL UP overlay + sparkles --- */
-      .levelup {
-        position: absolute;
-        left: 50%;
-        top: 52%;
-        transform: translate(-50%, -50%) scale(0.9);
-        padding: 6px 8px;
-        border-radius: 10px;
-        background: rgba(2, 6, 23, 0.75);
-        border: 1px solid rgba(180, 212, 196, 0.25);
-        color: rgba(248, 244, 252, 0.95);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        font-size: 10px;
-        letter-spacing: 0.08em;
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .sparkles {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0;
-      }
-
-      .sp {
-        position: absolute;
-        font-size: 10px;
-        opacity: 0;
-      }
-
-      .sp.s1 {
-        left: 14px;
-        top: 18px;
-      }
-      .sp.s2 {
-        right: 16px;
-        top: 16px;
-      }
-      .sp.s3 {
-        left: 18px;
-        bottom: 18px;
-      }
-      .sp.s4 {
-        right: 18px;
-        bottom: 16px;
-      }
-      .sp.s5 {
-        left: 50%;
-        top: 52%;
-        transform: translate(-50%, -50%);
-      }
-
-      .pet-levelup .levelup {
-        animation: lvl 900ms ease-out 1;
-      }
-
-      @keyframes lvl {
-        0% {
-          opacity: 0;
-          transform: translate(-50%, -50%) scale(0.85);
-        }
-        20% {
-          opacity: 1;
-          transform: translate(-50%, -58%) scale(1);
-        }
-        70% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-          transform: translate(-50%, -64%) scale(0.92);
-        }
-      }
-
-      .pet-levelup .sparkles {
-        opacity: 1;
-      }
-
-      .pet-levelup .sp {
-        animation: spk 800ms ease-out 1;
-      }
-
-      @keyframes spk {
-        0% {
-          opacity: 0;
-          transform: translateY(6px) scale(0.7);
-        }
-        20% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-          transform: translateY(-10px) scale(1.05);
-        }
-      }
-
-      .pet-text h3 {
-        margin: 0;
-        font-size: 14px;
-        letter-spacing: 0.02em;
-      }
-
-      .pet-text p {
-        margin: 2px 0 0;
+      .pet-sub {
         font-size: 12px;
         color: var(--text-muted);
       }
 
-      .pet-bad {
-        color: #f87171;
+      .pet-mini {
+        display: inline-flex;
+        gap: 8px;
+        align-items: baseline;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--text-muted);
       }
-      .pet-good {
-        color: #34d399;
+
+      .pet-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(31, 41, 55, 0.9);
+        background: rgba(15, 23, 42, 0.7);
+        color: var(--text-muted);
+      }
+
+      .pet-bar {
+        width: 92px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.18);
+        overflow: hidden;
+        border: 1px solid rgba(31, 41, 55, 0.7);
+      }
+      .pet-bar > div {
+        height: 100%;
+        width: 50%;
+        background: rgba(34, 197, 94, 0.7);
+      }
+      .pet-bar.red > div {
+        background: rgba(239, 68, 68, 0.65);
+      }
+
+      .pet-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 8px;
+      }
+
+      .pet-btns {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .pet-btn {
+        border: 1px solid rgba(31, 41, 55, 0.9);
+        background: rgba(15, 23, 42, 0.65);
+        color: var(--text-main);
+        border-radius: 999px;
+        font-size: 11px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .pet-btn:hover {
+        background: rgba(15, 23, 42, 0.85);
       }
     </style>
   </head>
@@ -627,51 +469,43 @@
           <div class="metric-sub" id="bot-status-last">Waiting for heartbeat…</div>
         </div>
 
+        <!-- BOT PET CARD -->
         <div class="card">
           <h2>Bot Pet</h2>
-          <div class="pet-wrap">
-            <div class="pet-box" id="pet-box">
-              <div class="pet-screen">
-                <div class="lcd-icons">
-                  <span class="lcd-ic" id="ic-food" title="Food">🍽️</span>
-                  <span class="lcd-ic" id="ic-play" title="Play">🎮</span>
-                  <span class="lcd-ic" id="ic-health" title="Health">💊</span>
-                  <span class="lcd-ic" id="ic-clean" title="Clean">🧼</span>
-                  <span class="lcd-ic" id="ic-love" title="Love">❤️</span>
-                </div>
 
-                <div class="levelup" id="pet-levelup">LEVEL UP!</div>
-
-                <div class="sparkles" id="pet-sparkles" aria-hidden="true">
-                  <span class="sp s1">✦</span>
-                  <span class="sp s2">✦</span>
-                  <span class="sp s3">✦</span>
-                  <span class="sp s4">✦</span>
-                  <span class="sp s5">✦</span>
-                </div>
+          <div class="pet-row">
+            <div class="pet-screen">
+              <div class="pet-inner" id="pet-inner">
+                <!-- SVG injected by JS -->
               </div>
-
-              <div class="pet-scan"></div>
-              <div class="pet-hungryHint">HUNGRY</div>
-
-              <svg
-                class="pet-sprite"
-                id="pet-sprite"
-                viewBox="0 0 64 64"
-                xmlns="http://www.w3.org/2000/svg"
-              ></svg>
-
-              <div class="plate"></div>
-              <div class="food"></div>
+              <div class="pet-bubble"></div>
             </div>
 
-            <div class="pet-text">
-              <div class="card-row" style="margin-bottom: 2px">
-                <div class="muted" style="letter-spacing: 0.12em">MOOD</div>
+            <div style="min-width: 0">
+              <div class="muted" style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">
+                Mood
               </div>
-              <h3 id="pet-mood">Watching…</h3>
-              <p id="pet-sub">Waiting for trades</p>
+              <div class="pet-title" id="pet-title">Watching…</div>
+              <div class="pet-sub" id="pet-sub">Waiting for trades</div>
+
+              <div class="pet-mini">
+                <span class="pet-badge" id="pet-stage">Egg</span>
+
+                <div class="pet-bar" id="pet-xp-bar" title="Growth">
+                  <div></div>
+                </div>
+              </div>
             </div>
+          </div>
+
+          <div class="pet-hint" id="pet-hint">
+            Egg stays until the bot first goes profitable. Wins feed it 🥣.
+          </div>
+
+          <div class="pet-btns">
+            <button class="pet-btn" id="pet-reset-btn" title="Resets only the pet (does not touch your trading data).">
+              Reset Pet
+            </button>
           </div>
         </div>
       </section>
@@ -800,8 +634,8 @@
           </div>
 
           <div class="section-subtitle" style="margin-top: 10px">
-            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML
-            (e.g. <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
+            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML (e.g.
+            <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
           </div>
         </div>
       </section>
@@ -811,10 +645,10 @@
       </div>
     </div>
 
-    <!-- Chart.js -->
+    <!-- Chart.js for equity curve -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- TradingView -->
+    <!-- TradingView widget -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
     <script>
@@ -850,9 +684,8 @@
       }
 
       function formatTime(iso) {
-        if (!iso) return "—";
         const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return String(iso);
+        if (Number.isNaN(d.getTime())) return iso;
         return d.toLocaleString();
       }
 
@@ -863,19 +696,14 @@
 
       function updateEquityChart(points) {
         const ctx = $("equity-chart");
-        const safePoints = (points || []).map((p) => ({
-          time: p.time_utc || p.time || p.timeUTC || p.timeUtc || null,
-          equity_usd: p.equity_usd,
-        }));
 
-        const labels = safePoints.map((p, idx) => {
-          const t = p.time ? new Date(p.time) : null;
-          return t && !Number.isNaN(t.getTime())
-            ? t.toLocaleTimeString()
-            : "t+" + idx;
+        const labels = points.map((p) => {
+          const t = p.time_utc || p.time || p.timeUTC || p.timestamp;
+          const d = new Date(t);
+          return Number.isNaN(d.getTime()) ? String(t) : d.toLocaleTimeString();
         });
 
-        const data = safePoints.map((p) => p.equity_usd);
+        const data = points.map((p) => p.equity_usd);
 
         if (equityChart) {
           equityChart.data.labels = labels;
@@ -936,31 +764,18 @@
         label.textContent = s.charAt(0).toUpperCase() + s.slice(1);
         dot.className = "status-dot status-" + s;
 
-        // minutes_since is not in your app.py right now - so just show heartbeat time
-        minutesEl.textContent = "";
+        // minutes_since might not exist in your API; keep it optional
+        if (status?.minutes_since != null) {
+          minutesEl.textContent = status.minutes_since + " min since heartbeat";
+        } else {
+          minutesEl.textContent = "";
+        }
 
         if (status?.last_heartbeat) {
           lastEl.textContent = "Last heartbeat: " + formatTime(status.last_heartbeat);
         } else {
           lastEl.textContent = "Waiting for heartbeat…";
         }
-      }
-
-      // ------------------------------
-      // Advanced metrics
-      // ------------------------------
-      function updateAdvancedMetrics(adv, maxDrawdownOverride) {
-        $("adv-profit-factor").textContent = adv?.profit_factor == null ? "—" : formatNumber(adv.profit_factor, 2);
-        $("adv-avg-win").textContent = formatUsd(adv?.avg_win_usd ?? 0);
-        $("adv-avg-loss").textContent = formatUsd(adv?.avg_loss_usd ?? 0);
-        $("adv-best-trade").textContent = adv?.best_trade_usd == null ? "—" : formatUsd(adv.best_trade_usd);
-        $("adv-worst-trade").textContent = adv?.worst_trade_usd == null ? "—" : formatUsd(adv.worst_trade_usd);
-
-        const mdd = adv?.max_drawdown_usd ?? maxDrawdownOverride;
-        $("adv-max-dd").textContent = mdd == null ? "—" : formatUsd(mdd);
-
-        $("adv-recovery-factor").textContent = adv?.recovery_factor == null ? "—" : formatNumber(adv.recovery_factor, 2);
-        $("adv-sharpe").textContent = adv?.sharpe_ratio == null ? "—" : formatNumber(adv.sharpe_ratio, 2);
       }
 
       // ------------------------------
@@ -998,14 +813,18 @@
           cWin.textContent = formatPercent(m.win_rate, 1);
           row.appendChild(cWin);
 
+          // backend uses total_pnl and avg_pnl; older UI might expect *_usd
+          const total = m.total_pnl_usd ?? m.total_pnl ?? 0;
+          const avg = m.avg_pnl_usd ?? m.avg_pnl ?? 0;
+
           const cTotal = document.createElement("td");
           cTotal.className = "text-right";
-          cTotal.textContent = formatUsd(m.total_pnl ?? m.total_pnl_usd ?? 0);
+          cTotal.textContent = formatUsd(total);
           row.appendChild(cTotal);
 
           const cAvg = document.createElement("td");
           cAvg.className = "text-right";
-          cAvg.textContent = formatUsd(m.avg_pnl ?? m.avg_pnl_usd ?? 0);
+          cAvg.textContent = formatUsd(avg);
           row.appendChild(cAvg);
 
           body.appendChild(row);
@@ -1034,13 +853,14 @@
           cTime.textContent = t.time ? formatTime(t.time) : "—";
           row.appendChild(cTime);
 
-          const cMkt = document.createElement("td");
-          cMkt.textContent = t.market || "—";
-          row.appendChild(cMkt);
+          const cMarket = document.createElement("td");
+          cMarket.textContent = t.market || "—";
+          row.appendChild(cMarket);
 
+          const pnl = t.pnl_usd ?? 0;
           const cPnl = document.createElement("td");
           cPnl.className = "text-right";
-          cPnl.textContent = formatUsd(t.pnl_usd ?? 0);
+          cPnl.textContent = formatUsd(pnl);
           row.appendChild(cPnl);
 
           body.appendChild(row);
@@ -1048,19 +868,42 @@
       }
 
       // ------------------------------
+      // Advanced metrics
+      // ------------------------------
+      function updateAdvancedMetrics(adv, maxDdFallback) {
+        // Your backend puts max_drawdown_usd in advanced_metrics already,
+        // but we also accept fallback if passed.
+        const pf = adv?.profit_factor;
+        const avgWin = adv?.avg_win_usd;
+        const avgLoss = adv?.avg_loss_usd;
+        const best = adv?.best_trade_usd;
+        const worst = adv?.worst_trade_usd;
+        const maxDd = adv?.max_drawdown_usd ?? maxDdFallback;
+
+        $("adv-profit-factor").textContent = pf == null ? "—" : formatNumber(pf, 2);
+        $("adv-avg-win").textContent = avgWin == null ? "—" : formatUsd(avgWin);
+        $("adv-avg-loss").textContent = avgLoss == null ? "—" : formatUsd(avgLoss);
+        $("adv-best-trade").textContent = best == null ? "—" : formatUsd(best);
+        $("adv-worst-trade").textContent = worst == null ? "—" : formatUsd(worst);
+        $("adv-max-dd").textContent = maxDd == null ? "—" : formatUsd(maxDd);
+
+        $("adv-recovery-factor").textContent = adv?.recovery_factor ?? "—";
+        $("adv-sharpe").textContent = adv?.sharpe_ratio ?? "—";
+      }
+
+      // ------------------------------
       // TradingView
       // ------------------------------
       let currentSymbol = "COINBASE:BTCUSD";
-      let tvWidget = null;
 
       function loadTradingView(symbol) {
         currentSymbol = symbol;
-        const container = document.getElementById("tv-chart");
+        const container = $("tv-chart");
         container.innerHTML = "";
 
-        tvWidget = new TradingView.widget({
+        new TradingView.widget({
           autosize: true,
-          symbol,
+          symbol: symbol,
           interval: "15",
           timezone: "Etc/UTC",
           theme: "dark",
@@ -1085,262 +928,339 @@
       }
 
       // ------------------------------
-      // BOT PET logic (local, evolves on wins)
+      // BOT PET (Egg -> Baby -> Cat -> Dog)
+      // Rules:
+      // - Egg until TOTAL PNL first becomes > 0
+      // - After hatchingOnce=true, never go back to egg
+      // - When not in profit: hungry/sad
+      // - Wins add XP (growth), losses reduce XP slightly and increase hunger
       // ------------------------------
-      const PET_KEY = "crypto_bot_pet_v1";
+      const PET_KEY = "crypto_ai_bot_pet_v2";
 
-      function loadPet() {
+      function loadPetState() {
         try {
           const raw = localStorage.getItem(PET_KEY);
-          if (!raw) return null;
-          return JSON.parse(raw);
+          if (!raw) {
+            return {
+              xp: 0,
+              hunger: 2,         // 0 full, higher = hungry
+              hatchedOnce: false,
+              lastTradeKey: "",
+              lastTotalPnlSeen: null,
+              lastUpdatedAt: Date.now(),
+            };
+          }
+          const pet = JSON.parse(raw);
+          // backfill fields
+          pet.xp = Number.isFinite(pet.xp) ? pet.xp : 0;
+          pet.hunger = Number.isFinite(pet.hunger) ? pet.hunger : 2;
+          pet.hatchedOnce = !!pet.hatchedOnce;
+          pet.lastTradeKey = pet.lastTradeKey || "";
+          pet.lastTotalPnlSeen = (pet.lastTotalPnlSeen === null || pet.lastTotalPnlSeen === undefined)
+            ? null
+            : Number(pet.lastTotalPnlSeen);
+          pet.lastUpdatedAt = Number.isFinite(pet.lastUpdatedAt) ? pet.lastUpdatedAt : Date.now();
+          return pet;
         } catch {
-          return null;
+          return {
+            xp: 0,
+            hunger: 2,
+            hatchedOnce: false,
+            lastTradeKey: "",
+            lastTotalPnlSeen: null,
+            lastUpdatedAt: Date.now(),
+          };
         }
       }
 
-      function savePet(pet) {
+      function savePetState(pet) {
         localStorage.setItem(PET_KEY, JSON.stringify(pet));
       }
 
-      function defaultPet() {
-        return {
-          xp: 0,
-          hunger: 45, // 0 = full, 100 = starving
-          lastWins: 0,
-          lastLosses: 0,
-          lastTotalTrades: 0,
-          lastTotalPnl: 0,
-          lastUpdate: Date.now(),
-        };
+      function resetPetState() {
+        localStorage.removeItem(PET_KEY);
       }
 
-      function stageFromXp(xp) {
-        if (xp < 3) return 0; // egg
-        if (xp < 7) return 1; // baby blob
-        if (xp < 13) return 2; // cat
-        return 3; // dog
+      // Stage rules (never revert to egg after hatching)
+      // 0 egg, 1 baby, 2 cat, 3 dog
+      function stageFromHatching(totalPnl, xp, hatchedOnce) {
+        if (!hatchedOnce) {
+          return totalPnl > 0 ? 1 : 0;
+        }
+        // after hatchingOnce, never return 0
+        if (xp < 10) return 1;
+        if (xp < 22) return 2;
+        return 3;
       }
 
-      function clamp(n, a, b) {
-        return Math.max(a, Math.min(b, n));
+      function clamp(n, min, max) {
+        return Math.max(min, Math.min(max, n));
       }
 
-      function setIcon(id, on) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.classList.toggle("on", !!on);
+      function pct(n, min, max) {
+        if (max <= min) return 0;
+        return clamp((n - min) / (max - min), 0, 1);
       }
 
-      function renderPetSprite(stage, moodKey) {
-        // Simple pixel-like SVG built from circles/rects (no external images)
-        // moodKey: HAPPY / SAD / WATCH / HUNGRY
-        const svg = $("pet-sprite");
-        const eye = moodKey === "SAD" || moodKey === "HUNGRY" ? "x" : "o";
+      function svgEgg(mood) {
+        // mood: "watching" | "happy" | "hungry" | "sad"
+        const face = mood === "happy" ? "happy" : (mood === "hungry" || mood === "sad") ? "sad" : "neutral";
         const mouth =
-          moodKey === "HAPPY"
-            ? "smile"
-            : moodKey === "SAD" || moodKey === "HUNGRY"
-            ? "frown"
-            : "flat";
+          face === "happy"
+            ? '<path d="M26 31c2.5 2.3 9.5 2.3 12 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/>'
+            : face === "sad"
+            ? '<path d="M26 34c2.5-2.3 9.5-2.3 12 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/>'
+            : '<path d="M28 33h10" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/>';
 
-        // helpers
-        const face = (cx, cy) => {
-          const eyeL =
-            eye === "o"
-              ? `<circle cx="${cx - 7}" cy="${cy}" r="2.2" fill="rgba(248,244,252,0.92)"/>`
-              : `<path d="M${cx - 9} ${cy - 2} L${cx - 5} ${cy + 2} M${cx - 5} ${cy - 2} L${cx - 9} ${cy + 2}" stroke="rgba(248,244,252,0.92)" stroke-width="1.6" stroke-linecap="round"/>`;
-          const eyeR =
-            eye === "o"
-              ? `<circle cx="${cx + 7}" cy="${cy}" r="2.2" fill="rgba(248,244,252,0.92)"/>`
-              : `<path d="M${cx + 5} ${cy - 2} L${cx + 9} ${cy + 2} M${cx + 9} ${cy - 2} L${cx + 5} ${cy + 2}" stroke="rgba(248,244,252,0.92)" stroke-width="1.6" stroke-linecap="round"/>`;
+        const eyes =
+          face === "sad"
+            ? '<path d="M25 26l4 3M29 26l-4 3" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/><path d="M39 26l4 3M43 26l-4 3" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/>'
+            : '<circle cx="28" cy="27" r="2.2" fill="rgba(10,12,20,0.9)"/><circle cx="42" cy="27" r="2.2" fill="rgba(10,12,20,0.9)"/>';
 
-          let mouthPath = "";
-          if (mouth === "smile") {
-            mouthPath = `<path d="M${cx - 6} ${cy + 7} Q ${cx} ${cy + 12} ${cx + 6} ${
-              cy + 7
-            }" stroke="rgba(248,244,252,0.92)" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
-          } else if (mouth === "frown") {
-            mouthPath = `<path d="M${cx - 6} ${cy + 12} Q ${cx} ${cy + 7} ${cx + 6} ${
-              cy + 12
-            }" stroke="rgba(248,244,252,0.92)" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+        return `
+          <svg class="pet-svg" viewBox="0 0 64 52" xmlns="http://www.w3.org/2000/svg" aria-label="Egg pet">
+            <defs>
+              <linearGradient id="g1" x1="0" x2="1">
+                <stop offset="0" stop-color="rgba(255,255,255,0.75)"/>
+                <stop offset="1" stop-color="rgba(180,210,255,0.35)"/>
+              </linearGradient>
+              <linearGradient id="g2" x1="0" x2="1">
+                <stop offset="0" stop-color="rgba(70,85,140,0.35)"/>
+                <stop offset="1" stop-color="rgba(0,0,0,0.18)"/>
+              </linearGradient>
+            </defs>
+            <ellipse cx="32" cy="28" rx="18" ry="20" fill="url(#g1)" stroke="rgba(255,255,255,0.14)" stroke-width="1.2"/>
+            <ellipse cx="32" cy="31" rx="16" ry="16" fill="url(#g2)" opacity="0.35"/>
+            ${eyes}
+            ${mouth}
+            ${mood === "hungry" ? '<path d="M18 12h10" stroke="rgba(239,68,68,0.9)" stroke-width="2" stroke-linecap="round"/><path d="M46 12h-10" stroke="rgba(239,68,68,0.9)" stroke-width="2" stroke-linecap="round"/>' : ""}
+          </svg>
+        `;
+      }
+
+      function svgBaby(mood) {
+        const mouth =
+          mood === "happy"
+            ? '<path d="M26 34c2.5 2.3 9.5 2.3 12 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/>'
+            : mood === "hungry" || mood === "sad"
+            ? '<path d="M26 36c2.5-2.3 9.5-2.3 12 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/>'
+            : '<path d="M28 35h10" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/>';
+
+        return `
+          <svg class="pet-svg" viewBox="0 0 64 52" xmlns="http://www.w3.org/2000/svg" aria-label="Baby pet">
+            <defs>
+              <linearGradient id="b1" x1="0" x2="1">
+                <stop offset="0" stop-color="rgba(255,255,255,0.55)"/>
+                <stop offset="1" stop-color="rgba(120,200,255,0.25)"/>
+              </linearGradient>
+            </defs>
+            <rect x="16" y="10" width="32" height="36" rx="16" fill="url(#b1)" stroke="rgba(255,255,255,0.14)" stroke-width="1.2"/>
+            <circle cx="28" cy="28" r="2.2" fill="rgba(10,12,20,0.9)"/>
+            <circle cx="42" cy="28" r="2.2" fill="rgba(10,12,20,0.9)"/>
+            ${mouth}
+            ${mood === "hungry" ? '<path d="M20 14h24" stroke="rgba(239,68,68,0.85)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>' : ""}
+          </svg>
+        `;
+      }
+
+      function svgCat(mood) {
+        const eyes =
+          mood === "sad" || mood === "hungry"
+            ? '<path d="M24 26l5 3M29 26l-5 3" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/><path d="M40 26l5 3M45 26l-5 3" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/>'
+            : '<circle cx="27" cy="27" r="2.2" fill="rgba(10,12,20,0.9)"/><circle cx="43" cy="27" r="2.2" fill="rgba(10,12,20,0.9)"/>';
+
+        const mouth =
+          mood === "happy"
+            ? '<path d="M28 34c1.8 1.8 6.2 1.8 8 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/>'
+            : mood === "sad" || mood === "hungry"
+            ? '<path d="M28 36c1.8-1.8 6.2-1.8 8 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/>'
+            : '<path d="M30 35h6" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/>';
+
+        return `
+          <svg class="pet-svg" viewBox="0 0 64 52" xmlns="http://www.w3.org/2000/svg" aria-label="Cat pet">
+            <defs>
+              <linearGradient id="c1" x1="0" x2="1">
+                <stop offset="0" stop-color="rgba(255,255,255,0.55)"/>
+                <stop offset="1" stop-color="rgba(200,255,220,0.25)"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 20l6-10 8 7h0l8-7 6 10v18c0 6-6 10-14 10h-0c-8 0-14-4-14-10V20z"
+              fill="url(#c1)" stroke="rgba(255,255,255,0.14)" stroke-width="1.2" />
+            ${eyes}
+            ${mouth}
+            ${mood === "hungry" ? '<path d="M18 16h10" stroke="rgba(239,68,68,0.9)" stroke-width="2" stroke-linecap="round"/><path d="M46 16h-10" stroke="rgba(239,68,68,0.9)" stroke-width="2" stroke-linecap="round"/>' : ""}
+          </svg>
+        `;
+      }
+
+      function svgDog(mood) {
+        const eyes =
+          mood === "sad" || mood === "hungry"
+            ? '<path d="M24 26l5 3M29 26l-5 3" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/><path d="M40 26l5 3M45 26l-5 3" stroke="rgba(10,12,20,0.9)" stroke-width="2" stroke-linecap="round"/>'
+            : '<circle cx="27" cy="27" r="2.2" fill="rgba(10,12,20,0.9)"/><circle cx="43" cy="27" r="2.2" fill="rgba(10,12,20,0.9)"/>';
+
+        const mouth =
+          mood === "happy"
+            ? '<path d="M28 35c2.2 2.2 5.8 2.2 8 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="32" cy="36" r="1.5" fill="rgba(10,12,20,0.9)"/>'
+            : mood === "sad" || mood === "hungry"
+            ? '<path d="M28 37c2.2-2.2 5.8-2.2 8 0" stroke="rgba(10,12,20,0.9)" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="32" cy="35.5" r="1.5" fill="rgba(10,12,20,0.9)"/>'
+            : '<circle cx="32" cy="35.5" r="1.8" fill="rgba(10,12,20,0.9)"/>';
+
+        return `
+          <svg class="pet-svg" viewBox="0 0 64 52" xmlns="http://www.w3.org/2000/svg" aria-label="Dog pet">
+            <defs>
+              <linearGradient id="d1" x1="0" x2="1">
+                <stop offset="0" stop-color="rgba(255,255,255,0.55)"/>
+                <stop offset="1" stop-color="rgba(255,220,190,0.22)"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 20c0-8 8-12 14-12s14 4 14 12v18c0 6-6 10-14 10s-14-4-14-10V20z"
+              fill="url(#d1)" stroke="rgba(255,255,255,0.14)" stroke-width="1.2"/>
+            <path d="M18 22c-6 2-7 8-3 12 3 3 6 2 7-1" fill="rgba(255,255,255,0.12)"/>
+            <path d="M46 22c6 2 7 8 3 12-3 3-6 2-7-1" fill="rgba(255,255,255,0.12)"/>
+            ${eyes}
+            ${mouth}
+            ${mood === "hungry" ? '<path d="M16 16h12" stroke="rgba(239,68,68,0.9)" stroke-width="2" stroke-linecap="round"/><path d="M48 16h-12" stroke="rgba(239,68,68,0.9)" stroke-width="2" stroke-linecap="round"/>' : ""}
+          </svg>
+        `;
+      }
+
+      function petSvgFor(stage, mood) {
+        if (stage === 0) return svgEgg(mood);
+        if (stage === 1) return svgBaby(mood);
+        if (stage === 2) return svgCat(mood);
+        return svgDog(mood);
+      }
+
+      function stageLabel(stage) {
+        return stage === 0 ? "Egg" : stage === 1 ? "Hatchling" : stage === 2 ? "Cat" : "Dog";
+      }
+
+      function renderPet(data) {
+        const pet = loadPetState();
+
+        const totalPnl = Number(data?.total_pnl_usd ?? 0);
+        const wins = Number(data?.wins ?? 0);
+        const losses = Number(data?.losses ?? 0);
+        const recent = Array.isArray(data?.recent_trades) ? data.recent_trades : [];
+
+        // Hatch forever the first time total pnl goes positive
+        if (!pet.hatchedOnce && totalPnl > 0) {
+          pet.hatchedOnce = true;
+        }
+
+        // Detect newest trade (first item is most recent in your API)
+        let newestKey = "";
+        let newestPnl = null;
+        let newestMarket = "";
+        if (recent.length > 0) {
+          const t = recent[0];
+          newestMarket = t.market || "";
+          newestPnl = Number(t.pnl_usd ?? 0);
+          newestKey = (t.time || "") + "|" + (t.market || "") + "|" + String(t.pnl_usd ?? "");
+        }
+
+        // Update XP/hunger only when a new trade arrives
+        if (newestKey && newestKey !== pet.lastTradeKey) {
+          pet.lastTradeKey = newestKey;
+
+          if (newestPnl != null && newestPnl > 0) {
+            // win = food
+            pet.xp += 2;
+            pet.hunger = clamp(pet.hunger - 1, 0, 10);
           } else {
-            mouthPath = `<path d="M${cx - 6} ${cy + 10} L${cx + 6} ${
-              cy + 10
-            }" stroke="rgba(248,244,252,0.92)" stroke-width="1.8" stroke-linecap="round"/>`;
+            // loss = empty plate
+            pet.xp -= 1;
+            pet.hunger = clamp(pet.hunger + 1, 0, 10);
           }
 
-          return eyeL + eyeR + mouthPath;
-        };
+          // Keep XP in sensible bounds
+          pet.xp = clamp(pet.xp, 0, 40);
+        }
 
-        let body = "";
+        // Decide stage
+        const stage = stageFromHatching(totalPnl, pet.xp, pet.hatchedOnce);
+
+        // Mood rules
+        // - Egg: watching/pacing until profitable
+        // - Hatched: happy if in profit, hungry/sad if not
+        let mood = "watching";
+        let title = "Watching…";
+        let sub = "Waiting for trades";
+        let hint = "Egg stays until the bot first goes profitable. Wins feed it 🥣.";
+
+        const isWaiting = recent.length === 0;
+        const inProfit = totalPnl > 0;
 
         if (stage === 0) {
-          // egg
-          body = `
-            <g opacity="0.95">
-              <ellipse cx="32" cy="38" rx="15" ry="18" fill="rgba(248,244,252,0.10)" stroke="rgba(226,232,240,0.18)" stroke-width="1.2"/>
-              <path d="M23 32 Q32 26 41 32" stroke="rgba(248,244,252,0.20)" stroke-width="1.2" fill="none"/>
-              ${face(32, 38)}
-            </g>`;
-        } else if (stage === 1) {
-          // baby blob
-          body = `
-            <g opacity="0.98">
-              <rect x="18" y="24" width="28" height="28" rx="12" fill="rgba(248,244,252,0.12)" stroke="rgba(226,232,240,0.20)" stroke-width="1.2"/>
-              <circle cx="22" cy="52" r="4" fill="rgba(248,244,252,0.10)"/>
-              <circle cx="42" cy="52" r="4" fill="rgba(248,244,252,0.10)"/>
-              ${face(32, 36)}
-            </g>`;
-        } else if (stage === 2) {
-          // cat
-          body = `
-            <g opacity="0.98">
-              <path d="M18 30 L26 22 L30 30 Z" fill="rgba(248,244,252,0.14)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
-              <path d="M46 30 L38 22 L34 30 Z" fill="rgba(248,244,252,0.14)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
-              <rect x="18" y="28" width="28" height="26" rx="12" fill="rgba(248,244,252,0.12)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
-              <path d="M20 42 L12 40" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
-              <path d="M20 45 L12 45" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
-              <path d="M44 42 L52 40" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
-              <path d="M44 45 L52 45" stroke="rgba(248,244,252,0.28)" stroke-width="1.2" stroke-linecap="round"/>
-              ${face(32, 38)}
-            </g>`;
+          mood = isWaiting ? "watching" : "watching";
+          title = "Egg 🥚";
+          sub = inProfit ? "Cracking…" : "Needs first profit to hatch";
+          hint = "Once TOTAL PnL goes above $0, it hatches forever.";
         } else {
-          // dog
-          body = `
-            <g opacity="0.98">
-              <path d="M18 34 Q14 38 16 44 Q18 48 22 46 L22 34 Z" fill="rgba(248,244,252,0.10)" stroke="rgba(226,232,240,0.20)" stroke-width="1.2"/>
-              <path d="M46 34 Q50 38 48 44 Q46 48 42 46 L42 34 Z" fill="rgba(248,244,252,0.10)" stroke="rgba(226,232,240,0.20)" stroke-width="1.2"/>
-              <rect x="18" y="28" width="28" height="28" rx="12" fill="rgba(248,244,252,0.12)" stroke="rgba(226,232,240,0.22)" stroke-width="1.2"/>
-              <circle cx="32" cy="44" r="3" fill="rgba(248,244,252,0.55)"/>
-              ${face(32, 38)}
-            </g>`;
-        }
-
-        svg.innerHTML = body;
-      }
-
-      function renderPet(pet, data) {
-        const petBox = $("pet-box");
-        const moodEl = $("pet-mood");
-        const subEl = $("pet-sub");
-
-        // time-based hunger increase
-        const now = Date.now();
-        const dtMin = (now - (pet.lastUpdate || now)) / 60000;
-        pet.lastUpdate = now;
-
-        // hunger drifts up over time
-        pet.hunger = clamp(pet.hunger + dtMin * 1.2, 0, 100);
-
-        const prevStage = stageFromXp(pet.xp);
-
-        // detect new wins/losses (from backend totals)
-        const wins = data?.wins ?? 0;
-        const losses = data?.losses ?? 0;
-
-        const newWins = Math.max(0, wins - (pet.lastWins ?? 0));
-        const newLosses = Math.max(0, losses - (pet.lastLosses ?? 0));
-
-        // "wins are food"
-        if (newWins > 0) {
-          pet.xp += newWins * 2;
-          pet.hunger = clamp(pet.hunger - newWins * 18, 0, 100);
-          petBox.classList.add("pet-fed");
-          setTimeout(() => petBox.classList.remove("pet-fed"), 1200);
-        }
-
-        // "losses are empty plate"
-        if (newLosses > 0) {
-          pet.xp = Math.max(0, pet.xp - newLosses * 1);
-          pet.hunger = clamp(pet.hunger + newLosses * 12, 0, 100);
-        }
-
-        pet.lastWins = wins;
-        pet.lastLosses = losses;
-
-        // wipeout reset (based on equity if available)
-        const lastEquity = (data?.equity_curve && data.equity_curve.length)
-          ? data.equity_curve[data.equity_curve.length - 1]?.equity_usd
-          : null;
-
-        if (typeof lastEquity === "number" && lastEquity < 500) {
-          // reset pet on wipeout
-          const fresh = defaultPet();
-          fresh.lastWins = wins;
-          fresh.lastLosses = losses;
-          Object.assign(pet, fresh);
-          petBox.classList.add("pet-levelup");
-          $("pet-levelup").textContent = "RESET!";
-          setTimeout(() => {
-            $("pet-levelup").textContent = "LEVEL UP!";
-            petBox.classList.remove("pet-levelup");
-          }, 1100);
-        }
-
-        // mood + pacing
-        let moodKey = "WATCH";
-        let moodText = "Watching…";
-        let subText = "Waiting for trades";
-
-        // last trade info
-        const lastTrade = (data?.recent_trades && data.recent_trades.length)
-          ? data.recent_trades[0]
-          : null;
-
-        if (pet.hunger >= 75) {
-          moodKey = "HUNGRY";
-          moodText = "Hungry 😿";
-          subText = "Needs wins (food)";
-        } else if (newLosses > 0) {
-          moodKey = "SAD";
-          moodText = "Sad 😢";
-          subText = "Empty plate…";
-        } else if (newWins > 0) {
-          moodKey = "HAPPY";
-          moodText = "Happy 😄";
-          if (lastTrade?.market) {
-            const pnl = lastTrade?.pnl_usd ?? 0;
-            subText = "Yum! " + lastTrade.market + " " + formatUsd(pnl);
+          // hatched forever
+          if (inProfit) {
+            mood = "happy";
+            title = "Happy 😺";
+            if (newestPnl != null && newestPnl > 0 && newestMarket) {
+              sub = `Yum! ${newestMarket} +${formatUsd(newestPnl).replace("-", "")}`;
+            } else {
+              sub = "Wins are food 🥣";
+            }
+            hint = "Wins feed it. More wins = it grows.";
           } else {
-            subText = "Yum! Win snack!";
+            // not in profit
+            if (pet.hunger >= 6) {
+              mood = "hungry";
+              title = "Hungry 😿";
+              sub = "Losses = empty plate… needs wins (food)";
+              hint = "Get back into profit to cheer it up.";
+            } else {
+              mood = "sad";
+              title = "Sad 🙀";
+              sub = "Not in profit… keep it steady";
+              hint = "One good run and it perks up.";
+            }
           }
+        }
+
+        // Add a little pacing when waiting for trades
+        const inner = $("pet-inner");
+        inner.classList.remove("pet-pacing", "pet-shiver");
+        if (stage === 0 || isWaiting) inner.classList.add("pet-pacing");
+        if ((mood === "sad" || mood === "hungry") && stage !== 0) inner.classList.add("pet-shiver");
+
+        // Inject SVG
+        inner.innerHTML = petSvgFor(stage, mood);
+
+        // Update labels
+        $("pet-title").textContent = title;
+        $("pet-sub").textContent = sub;
+        $("pet-stage").textContent = stageLabel(stage);
+        $("pet-hint").textContent = hint;
+
+        // XP bar (growth progress)
+        const xpBar = $("pet-xp-bar");
+        const fill = xpBar.querySelector("div");
+        // progress toward next stage
+        let p = 0;
+        if (!pet.hatchedOnce) {
+          p = 0;
+        } else if (stage === 1) {
+          p = pct(pet.xp, 0, 10);
+        } else if (stage === 2) {
+          p = pct(pet.xp, 10, 22);
         } else {
-          moodKey = "WATCH";
-          moodText = "Watching…";
-          subText = "Waiting for trades";
+          p = 1;
         }
+        fill.style.width = Math.round(p * 100) + "%";
 
-        // stage + evolution animation
-        const stage = stageFromXp(pet.xp);
-        if (stage !== prevStage) {
-          const petBox = $("pet-box");
-          petBox.classList.add("pet-levelup");
-          setTimeout(() => petBox.classList.remove("pet-levelup"), 950);
-        }
+        // bar color
+        xpBar.classList.remove("red");
+        if (mood === "hungry" || mood === "sad") xpBar.classList.add("red");
 
-        // hungry state + pacing state
-        petBox.classList.toggle("pet-hungry", pet.hunger >= 75);
-        petBox.classList.toggle("pet-pace", moodKey === "WATCH");
-
-        // icons react
-        setIcon("ic-food", pet.hunger >= 60);
-        setIcon("ic-health", pet.hunger >= 80);
-        setIcon("ic-love", moodKey === "HAPPY");
-        setIcon("ic-play", moodKey === "WATCH");
-        setIcon("ic-clean", moodKey === "SAD" && pet.hunger < 80);
-
-        // show mood
-        moodEl.textContent = moodText;
-        subEl.textContent = subText;
-
-        // plate food only when win just happened
-        if (newWins > 0) petBox.classList.add("pet-fed");
-
-        // draw sprite
-        renderPetSprite(stage, moodKey);
-
-        savePet(pet);
+        // Save state
+        savePetState(pet);
       }
 
       // ------------------------------
@@ -1351,17 +1271,18 @@
           const res = await fetch("/data", { cache: "no-store" });
           const data = await res.json();
 
-          // Top metrics
-          $("metric-total-trades").textContent = data.total_trades ?? data.total_events ?? 0;
+          // Top metrics (use your backend keys)
+          $("metric-total-trades").textContent = data.total_trades ?? 0;
           $("metric-wins").textContent = (data.wins ?? 0) + " wins";
           $("metric-losses").textContent = (data.losses ?? 0) + " losses";
 
           const winRate = data.win_rate != null ? data.win_rate : 0;
           $("metric-win-rate").textContent = formatPercent(winRate, 1);
 
-          $("metric-avg-pnl").textContent = formatUsd(data.avg_pnl_usd ?? 0);
+          const avgPnl = (data.total_trades ?? 0) > 0 ? (Number(data.total_pnl_usd ?? 0) / Number(data.total_trades ?? 1)) : 0;
+          $("metric-avg-pnl").textContent = formatUsd(avgPnl);
 
-          const totalPnl = data.total_pnl_usd ?? 0;
+          const totalPnl = Number(data.total_pnl_usd ?? 0);
           const pnlEl = $("metric-total-pnl");
           pnlEl.textContent = formatUsd(totalPnl);
           pnlEl.classList.remove("positive", "negative");
@@ -1381,8 +1302,7 @@
           updateAdvancedMetrics(data.advanced_metrics, data.max_drawdown_usd);
 
           // Pet
-          const pet = loadPet() || defaultPet();
-          renderPet(pet, data);
+          renderPet(data);
         } catch (err) {
           console.error("Failed to refresh dashboard", err);
         }
@@ -1394,9 +1314,15 @@
       document.addEventListener("DOMContentLoaded", () => {
         setupTvTabs();
         loadTradingView(currentSymbol);
+
+        $("pet-reset-btn").addEventListener("click", () => {
+          resetPetState();
+          refreshDashboard();
+        });
+
         refreshDashboard();
         setInterval(refreshDashboard, 10_000);
       });
     </script>
   </body>
- </html>
+  </html>
