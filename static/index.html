@@ -9,24 +9,56 @@
       :root {
         --bg: #050814;
         --bg-card: #101522;
+        --bg-card-soft: #141b2c;
         --text-main: #f8f4fc;
         --text-muted: #9ca3af;
         --accent: #22c55e;
         --accent-red: #ef4444;
+        --accent-blue: #3b82f6;
         --border-soft: #1f2937;
       }
-      * { box-sizing: border-box; }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
         background: radial-gradient(circle at top, #111827, #020617);
         color: var(--text-main);
       }
-      .page { max-width: 1200px; margin: 0 auto; padding: 24px 16px 40px; }
-      header { margin-bottom: 24px; }
-      h1 { margin: 0 0 4px; font-size: 28px; font-weight: 700; letter-spacing: 0.03em; }
-      header p { margin: 0; font-size: 13px; color: var(--text-muted); }
-      header a { color: #38bdf8; text-decoration: none; margin: 0 4px; }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      header {
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      header p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      header a {
+        color: #38bdf8;
+        text-decoration: none;
+        margin-left: 4px;
+        margin-right: 4px;
+      }
 
       .cards {
         display: grid;
@@ -34,13 +66,15 @@
         gap: 12px;
         margin-bottom: 24px;
       }
+
       .card {
         background: linear-gradient(145deg, var(--bg-card), #060b17);
         border-radius: 14px;
         padding: 14px 16px;
         border: 1px solid var(--border-soft);
-        box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
       }
+
       .card h2 {
         font-size: 13px;
         text-transform: uppercase;
@@ -48,25 +82,84 @@
         color: var(--text-muted);
         margin: 0 0 8px;
       }
-      .metric-main { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-      .metric-sub { font-size: 12px; color: var(--text-muted); }
-      .metric-main.positive { color: var(--accent); }
-      .metric-main.negative { color: var(--accent-red); }
 
-      .card-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
-      .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11px; background: rgba(15, 23, 42, 0.8); }
-      .status-dot { width: 7px; height: 7px; border-radius: 50%; }
-      .status-running { background-color: #22c55e; }
-      .status-idle { background-color: #eab308; }
-      .status-stopped { background-color: #ef4444; }
-      .status-unknown { background-color: #6b7280; }
+      .metric-main {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
 
-      .section-title { font-size: 14px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); margin: 0 0 8px; }
-      .section-subtitle { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
-      .section-card { margin-bottom: 24px; }
+      .metric-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
 
-      .section-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr); gap: 16px; }
-      @media (max-width: 900px) { .section-grid { grid-template-columns: minmax(0,1fr); } }
+      .metric-main.positive {
+        color: var(--accent);
+      }
+
+      .metric-main.negative {
+        color: var(--accent-red);
+      }
+
+      .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        background: rgba(15, 23, 42, 0.8);
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+
+      .status-running {
+        background-color: #22c55e;
+      }
+
+      .status-idle {
+        background-color: #eab308;
+      }
+
+      .status-stopped {
+        background-color: #ef4444;
+      }
+
+      .status-unknown {
+        background-color: #6b7280;
+      }
+
+      .section-title {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+      }
+
+      .section-subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: 0 0 12px;
+      }
+
+      .section-card {
+        margin-bottom: 24px;
+      }
 
       .chart-container {
         height: 260px;
@@ -75,11 +168,28 @@
         border: 1px solid var(--border-soft);
         overflow: hidden;
       }
-      .chart-inner { width: 100%; height: 100%; }
 
-      table { width: 100%; border-collapse: collapse; font-size: 12px; }
-      thead { background: rgba(15, 23, 42, 0.9); }
-      th, td { padding: 8px 10px; text-align: left; }
+      .chart-inner {
+        width: 100%;
+        height: 100%;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      thead {
+        background: rgba(15, 23, 42, 0.9);
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        text-align: left;
+      }
+
       th {
         font-weight: 500;
         color: var(--text-muted);
@@ -88,22 +198,38 @@
         letter-spacing: 0.08em;
         border-bottom: 1px solid var(--border-soft);
       }
-      tbody tr:nth-child(odd) { background: rgba(15, 23, 42, 0.4); }
-      tbody tr:nth-child(even) { background: rgba(15, 23, 42, 0.1); }
-      tbody tr:hover { background: rgba(55, 65, 81, 0.4); }
-      .text-right { text-align: right; }
 
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 10px;
-        background: rgba(15, 23, 42, 0.9);
+      tbody tr:nth-child(odd) {
+        background: rgba(15, 23, 42, 0.4);
       }
-      .pill.positive { color: var(--accent); }
-      .pill.negative { color: var(--accent-red); }
-      .muted { color: var(--text-muted); }
+
+      tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.1);
+      }
+
+      tbody tr:hover {
+        background: rgba(55, 65, 81, 0.4);
+      }
+
+      .text-right {
+        text-align: right;
+      }
+
+      .muted {
+        color: var(--text-muted);
+      }
+
+      .section-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
+        gap: 16px;
+      }
+
+      @media (max-width: 900px) {
+        .section-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
 
       .advanced-grid {
         display: grid;
@@ -111,8 +237,16 @@
         gap: 8px 14px;
         margin-top: 6px;
       }
-      .adv-label { font-size: 11px; color: var(--text-muted); }
-      .adv-value { font-size: 14px; font-weight: 600; }
+
+      .adv-label {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      .adv-value {
+        font-size: 14px;
+        font-weight: 600;
+      }
 
       .tv-tabs {
         display: inline-flex;
@@ -121,6 +255,7 @@
         padding: 2px;
         margin-bottom: 8px;
       }
+
       .tv-tab {
         border: none;
         background: transparent;
@@ -130,98 +265,129 @@
         border-radius: 999px;
         cursor: pointer;
       }
-      .tv-tab.active { background: #0f172a; color: var(--text-main); }
 
-      .footer { margin-top: 18px; font-size: 11px; color: var(--text-muted); text-align: center; }
+      .tv-tab.active {
+        background: #0f172a;
+        color: var(--text-main);
+      }
 
-      /* PET */
-      .pet-wrap { display: grid; grid-template-columns: 128px 1fr; gap: 14px; align-items: center; }
+      .footer {
+        margin-top: 18px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+      }
+
+      /* BOT PET UI */
+      .pet-wrap {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 12px;
+        align-items: center;
+      }
+
       .pet-screen {
-        width: 122px; height: 122px;
-        border-radius: 22px;
-        border: 1px solid rgba(148, 163, 184, 0.15);
-        background:
-          radial-gradient(circle at 18% 18%, rgba(59,130,246,0.20), transparent 55%),
-          radial-gradient(circle at 85% 62%, rgba(34,197,94,0.16), transparent 55%),
-          linear-gradient(180deg, rgba(15,23,42,0.85), rgba(2,6,23,0.92));
-        display: grid; place-items: center;
-        position: relative; overflow: hidden;
-        box-shadow: inset 0 0 22px rgba(56,189,248,0.10);
-      }
-      .pet-screen::before {
-        content: ""; position: absolute; inset: 0;
-        background: repeating-linear-gradient(
-          180deg,
-          rgba(255,255,255,0.03),
-          rgba(255,255,255,0.03) 1px,
-          transparent 2px,
-          transparent 5px
+        width: 96px;
+        height: 96px;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: radial-gradient(
+          circle at top,
+          rgba(59, 130, 246, 0.18),
+          rgba(2, 6, 23, 0.9)
         );
-        opacity: 0.22;
-        pointer-events: none;
-      }
-      .pet-screen::after {
-        content: ""; position: absolute; inset: 0;
-        background: linear-gradient(120deg, rgba(255,255,255,0.12), transparent 45%);
-        pointer-events: none; opacity: 0.35;
-      }
-      canvas#pet-canvas { image-rendering: pixelated; width: 96px; height: 96px; }
-
-      .pet-meta .pet-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-      .pet-meta .pet-title b { font-size: 14px; letter-spacing: 0.02em; }
-      .pet-meta .pet-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-
-      .pet-bars { margin-top: 10px; display: grid; gap: 8px; }
-      .bar-row { display: grid; grid-template-columns: 70px 1fr 44px; gap: 8px; align-items: center; }
-      .bar-row span { font-size: 11px; color: var(--text-muted); }
-
-      .bar {
-        height: 10px;
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid rgba(148, 163, 184, 0.15);
-        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        position: relative;
         overflow: hidden;
       }
-      .bar > i {
+
+      canvas#pet-canvas {
+        width: 96px;
+        height: 96px;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 0 10px rgba(96, 165, 250, 0.25))
+          drop-shadow(0 0 18px rgba(34, 197, 94, 0.12));
+      }
+
+      .pet-title {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--text-muted);
+        margin: 0 0 4px;
+      }
+
+      .pet-mood {
+        font-size: 22px;
+        font-weight: 800;
+        margin: 0;
+        line-height: 1.1;
+      }
+
+      .pet-desc {
+        margin-top: 6px;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .barline {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .barrow {
+        display: grid;
+        grid-template-columns: 56px 1fr 40px;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .bar {
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.9);
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+      }
+
+      .bar > span {
         display: block;
         height: 100%;
         width: 0%;
-        background: linear-gradient(90deg, rgba(34,197,94,0.95), rgba(59,130,246,0.85));
-      }
-      .bar.danger > i {
-        background: linear-gradient(90deg, rgba(239,68,68,0.95), rgba(245,158,11,0.85));
+        border-radius: 999px;
       }
 
-      .pet-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+      .bar .g {
+        background: rgba(34, 197, 94, 0.85);
+      }
+
+      .bar .h {
+        background: rgba(239, 68, 68, 0.8);
+      }
+
+      .pet-actions {
+        margin-top: 10px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
       .btn {
         border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(15, 23, 42, 0.8);
+        background: rgba(15, 23, 42, 0.65);
         color: var(--text-main);
-        font-size: 11px;
         padding: 6px 10px;
         border-radius: 999px;
+        font-size: 12px;
         cursor: pointer;
       }
-      .btn:hover { border-color: rgba(148, 163, 184, 0.32); }
 
-      .pet-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 10px;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: rgba(15,23,42,0.8);
-        color: var(--text-muted);
-        border: 1px solid rgba(148, 163, 184, 0.12);
-      }
-      .shake { animation: shake 240ms ease-in-out infinite; }
-      @keyframes shake {
-        0% { transform: translate(0,0) rotate(0deg); }
-        25% { transform: translate(1px,-1px) rotate(-1deg); }
-        50% { transform: translate(-1px,1px) rotate(1deg); }
-        75% { transform: translate(1px,1px) rotate(0deg); }
-        100% { transform: translate(0,0) rotate(0deg); }
+      .btn:hover {
+        border-color: rgba(148, 163, 184, 0.32);
       }
     </style>
   </head>
@@ -230,20 +396,28 @@
     <div class="page">
       <header>
         <h1>Crypto AI Bot Dashboard</h1>
-        <p>Paper-trading stats from Render — <a href="/data" target="_blank">raw stats</a></p>
+        <p>
+          Paper-trading stats from Render —
+          <a href="/data" target="_blank">raw stats</a>
+        </p>
       </header>
 
       <section class="cards">
         <div class="card">
           <h2>Total Trades</h2>
           <div class="metric-main" id="metric-total-trades">0</div>
-          <div class="metric-sub"><span id="metric-wins">0 wins</span> / <span id="metric-losses">0 losses</span></div>
+          <div class="metric-sub">
+            <span id="metric-wins">0 wins</span> /
+            <span id="metric-losses">0 losses</span>
+          </div>
         </div>
 
         <div class="card">
           <h2>Win Rate</h2>
           <div class="metric-main" id="metric-win-rate">0%</div>
-          <div class="metric-sub">Avg <span id="metric-avg-pnl">-$0.00</span> per trade</div>
+          <div class="metric-sub">
+            Avg <span id="metric-avg-pnl">-$0.00</span> per trade
+          </div>
         </div>
 
         <div class="card">
@@ -255,7 +429,7 @@
         <div class="card">
           <h2>Bot Status</h2>
           <div class="card-row" style="margin-bottom: 6px">
-            <div class="status-pill">
+            <div class="status-pill" id="bot-status-pill">
               <span class="status-dot status-unknown" id="bot-status-dot"></span>
               <span id="bot-status-label">Unknown</span>
             </div>
@@ -267,37 +441,38 @@
         <div class="card">
           <h2>Bot Pet</h2>
           <div class="pet-wrap">
-            <div class="pet-screen" id="pet-screen">
-              <canvas id="pet-canvas" width="96" height="96"></canvas>
+            <div class="pet-screen">
+              <canvas id="pet-canvas" width="32" height="32"></canvas>
             </div>
+            <div>
+              <div class="pet-title">Mood</div>
+              <div class="pet-mood" id="pet-mood">Watching… 👀</div>
+              <div class="pet-desc" id="pet-desc">Waiting for trades</div>
 
-            <div class="pet-meta">
-              <div class="pet-title">
-                <div>
-                  <div class="muted" style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;">Mood</div>
-                  <b id="pet-mood">Watching…</b>
+              <div class="barline">
+                <div class="barrow">
+                  <div>Growth</div>
+                  <div class="bar">
+                    <span class="g" id="pet-growth-bar"></span>
+                  </div>
+                  <div class="muted" id="pet-growth-text">0%</div>
                 </div>
-                <span class="pet-badge" id="pet-stage">Egg</span>
-              </div>
-
-              <div class="pet-sub" id="pet-subtext">Wins are food 🍗. Losses are empty plates 🍽️.</div>
-
-              <div class="pet-bars">
-                <div class="bar-row">
-                  <span>Growth</span>
-                  <div class="bar"><i id="pet-xp-bar"></i></div>
-                  <span class="muted" id="pet-xp-text">0%</span>
-                </div>
-                <div class="bar-row">
-                  <span>Hunger</span>
-                  <div class="bar danger"><i id="pet-hunger-bar"></i></div>
-                  <span class="muted" id="pet-hunger-text">0%</span>
+                <div class="barrow">
+                  <div>Hunger</div>
+                  <div class="bar">
+                    <span class="h" id="pet-hunger-bar"></span>
+                  </div>
+                  <div class="muted" id="pet-hunger-text">0%</div>
                 </div>
               </div>
 
               <div class="pet-actions">
-                <button class="btn" id="pet-reset-btn">Reset Pet</button>
-                <span class="muted" style="font-size:11px" id="pet-debug"></span>
+                <button class="btn" id="pet-reset">Reset Pet</button>
+              </div>
+
+              <div class="pet-desc" style="margin-top: 10px">
+                Wins are <b>food</b>. Losses are an <b>empty plate</b>.
+                <br />Egg hatches when Total PnL goes positive — then it never reverts.
               </div>
             </div>
           </div>
@@ -305,17 +480,45 @@
       </section>
 
       <section class="card section-card">
-        <div class="section-title">Advanced Analytics</div>
-        <div class="section-subtitle">Deeper stats from your closed trades.</div>
+        <div class="card-row" style="margin-bottom: 6px">
+          <div>
+            <div class="section-title">Advanced Analytics</div>
+            <div class="section-subtitle">Deeper stats from your closed trades.</div>
+          </div>
+        </div>
         <div class="advanced-grid">
-          <div><div class="adv-label">Profit Factor</div><div class="adv-value" id="adv-profit-factor">—</div></div>
-          <div><div class="adv-label">Avg Win (USD)</div><div class="adv-value" id="adv-avg-win">—</div></div>
-          <div><div class="adv-label">Avg Loss (USD)</div><div class="adv-value" id="adv-avg-loss">—</div></div>
-          <div><div class="adv-label">Best Trade (USD)</div><div class="adv-value" id="adv-best-trade">—</div></div>
-          <div><div class="adv-label">Worst Trade (USD)</div><div class="adv-value" id="adv-worst-trade">—</div></div>
-          <div><div class="adv-label">Max Drawdown (USD)</div><div class="adv-value" id="adv-max-dd">—</div></div>
-          <div><div class="adv-label">Recovery Factor</div><div class="adv-value" id="adv-recovery-factor">—</div></div>
-          <div><div class="adv-label">Sharpe Ratio</div><div class="adv-value" id="adv-sharpe">—</div></div>
+          <div>
+            <div class="adv-label">Profit Factor</div>
+            <div class="adv-value" id="adv-profit-factor">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Avg Win (USD)</div>
+            <div class="adv-value" id="adv-avg-win">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Avg Loss (USD)</div>
+            <div class="adv-value" id="adv-avg-loss">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Best Trade (USD)</div>
+            <div class="adv-value" id="adv-best-trade">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Worst Trade (USD)</div>
+            <div class="adv-value" id="adv-worst-trade">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Max Drawdown (USD)</div>
+            <div class="adv-value" id="adv-max-dd">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Recovery Factor</div>
+            <div class="adv-value" id="adv-recovery-factor">—</div>
+          </div>
+          <div>
+            <div class="adv-label">Sharpe Ratio</div>
+            <div class="adv-value" id="adv-sharpe">—</div>
+          </div>
         </div>
       </section>
 
@@ -331,16 +534,24 @@
         <div>
           <div class="section-card">
             <div class="section-title">Per-Market Performance</div>
-            <div class="section-subtitle">How the bot is doing on each market (paper trading).</div>
+            <div class="section-subtitle">
+              How the bot is doing on each market (paper trading).
+            </div>
             <div class="card" style="padding: 0">
               <table>
                 <thead>
                   <tr>
-                    <th>Market</th><th class="text-right">Trades</th><th class="text-right">Win Rate</th><th class="text-right">Total PnL</th><th class="text-right">Avg PnL</th>
+                    <th>Market</th>
+                    <th class="text-right">Trades</th>
+                    <th class="text-right">Win Rate</th>
+                    <th class="text-right">Total PnL</th>
+                    <th class="text-right">Avg PnL</th>
                   </tr>
                 </thead>
                 <tbody id="per-market-body">
-                  <tr><td colspan="5" class="muted">No markets yet.</td></tr>
+                  <tr>
+                    <td colspan="5" class="muted">No markets yet.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -352,10 +563,16 @@
             <div class="card" style="padding: 0">
               <table>
                 <thead>
-                  <tr><th>Time</th><th>Market</th><th class="text-right">PnL (USD)</th></tr>
+                  <tr>
+                    <th>Time</th>
+                    <th>Market</th>
+                    <th class="text-right">PnL (USD)</th>
+                  </tr>
                 </thead>
                 <tbody id="recent-trades-body">
-                  <tr><td colspan="3" class="muted">No trades yet.</td></tr>
+                  <tr>
+                    <td colspan="3" class="muted">No trades yet.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -365,7 +582,10 @@
 
       <section class="section-card">
         <div class="section-title">Market Candlestick Charts</div>
-        <div class="section-subtitle">TradingView charts only (visual). No real trading.</div>
+        <div class="section-subtitle">
+          Live BTC-USD candlesticks on your main venues. Charts are from TradingView
+          only (they do not place trades).
+        </div>
 
         <div class="card">
           <div class="card-row" style="margin-bottom: 10px">
@@ -376,149 +596,187 @@
               <button class="tv-tab" data-symbol="CRYPTOCOM:BTCUSD">Crypto.com</button>
             </div>
           </div>
+
           <div class="tradingview-widget-container" style="height: 400px">
             <div id="tv-chart"></div>
+          </div>
+
+          <div class="section-subtitle" style="margin-top: 10px">
+            If a chart fails to load, adjust the symbol (e.g.
+            <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
           </div>
         </div>
       </section>
 
-      <div class="footer">Bot is running on Render (paper trading only).</div>
+      <div class="footer">
+        Bot is running on Render (paper trading only). Keep it training for 2–3 weeks
+        before making AI changes.
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
     <script>
-      // ---------- utils ----------
-      function $(id){ return document.getElementById(id); }
-      function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
-      function formatUsd(v){
-        if(v===null||v===undefined||isNaN(v)) return "—";
-        const sign=v<0?"-":"";
-        const abs=Math.abs(v);
-        return sign+"$"+abs.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      function $(id) { return document.getElementById(id); }
+
+      function formatUsd(v) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        const sign = v < 0 ? "-" : "";
+        const abs = Math.abs(v);
+        return sign + "$" + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       }
-      function formatPercent(v,d=1){
-        if(v===null||v===undefined||isNaN(v)) return "—";
-        return v.toFixed(d)+"%";
+      function formatPercent(v, digits = 1) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        return v.toFixed(digits).replace(/^-0\.0+$/, "0.0") + "%";
       }
-      function formatNumber(v,d=2){
-        if(v===null||v===undefined||isNaN(v)) return "—";
-        return v.toFixed(d);
+      function formatNumber(v, digits = 2) {
+        if (v === null || v === undefined || isNaN(v)) return "—";
+        return v.toFixed(digits);
       }
-      function formatTime(iso){
-        const d=new Date(iso);
-        return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+      function formatTime(iso) {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleString();
       }
 
-      // ---------- chart ----------
-      let equityChart=null;
-      function updateEquityChart(points){
-        const ctx=$("equity-chart");
-        const labels=points.map(p=>{
-          const t=p.time_utc||p.time||"";
-          const d=new Date(t);
-          return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString();
+      // =============================
+      // Equity chart
+      // =============================
+      let equityChart = null;
+      function updateEquityChart(points) {
+        const ctx = $("equity-chart");
+        const labels = (points || []).map((p, idx) => {
+          const iso = p.time_utc || p.time;
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return "t+" + idx;
+          return d.toLocaleTimeString();
         });
-        const data=points.map(p=>p.equity_usd);
+        const data = (points || []).map((p) => p.equity_usd);
 
-        if(equityChart){
-          equityChart.data.labels=labels;
-          equityChart.data.datasets[0].data=data;
+        if (equityChart) {
+          equityChart.data.labels = labels;
+          equityChart.data.datasets[0].data = data;
           equityChart.update();
           return;
         }
-        equityChart=new Chart(ctx,{
-          type:"line",
-          data:{ labels, datasets:[{ label:"Equity (USD)", data, tension:0.35, borderWidth:2, pointRadius:2 }] },
-          options:{
-            responsive:true, maintainAspectRatio:false,
-            plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>"Equity: "+formatUsd(c.parsed.y) } } },
-            scales:{
-              x:{ ticks:{maxTicksLimit:6}, grid:{color:"rgba(31,41,55,0.6)"} },
-              y:{ ticks:{ callback:(v)=>"$"+v }, grid:{color:"rgba(31,41,55,0.6)"} }
-            }
-          }
+
+        equityChart = new Chart(ctx, {
+          type: "line",
+          data: { labels, datasets: [{ label: "Equity (USD)", data, tension: 0.35, borderWidth: 2, pointRadius: 2 }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (c) => "Equity: " + formatUsd(c.parsed.y) } },
+            },
+            scales: {
+              x: { ticks: { maxTicksLimit: 6 }, grid: { color: "rgba(31,41,55,0.6)" } },
+              y: { ticks: { callback: (v) => "$" + v }, grid: { color: "rgba(31,41,55,0.6)" } },
+            },
+          },
         });
       }
 
-      // ---------- status ----------
-      function updateBotStatus(status){
-        const s=status?.status||"unknown";
-        $("bot-status-label").textContent=s.charAt(0).toUpperCase()+s.slice(1);
-        $("bot-status-dot").className="status-dot status-"+s;
-        $("bot-status-minutes").textContent=status?.minutes_since!=null ? (status.minutes_since+" min since heartbeat") : "";
-        $("bot-status-last").textContent=status?.last_heartbeat ? ("Last heartbeat: "+formatTime(status.last_heartbeat)) : "Heartbeat file not found yet.";
+      // =============================
+      // Bot status
+      // =============================
+      function updateBotStatus(status) {
+        const dot = $("bot-status-dot");
+        const label = $("bot-status-label");
+        const minutesEl = $("bot-status-minutes");
+        const lastEl = $("bot-status-last");
+
+        const s = status?.status || "unknown";
+        label.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+        dot.className = "status-dot status-" + s;
+        minutesEl.textContent = "";
+
+        if (status?.last_heartbeat) lastEl.textContent = "Last heartbeat: " + formatTime(status.last_heartbeat);
+        else lastEl.textContent = "Heartbeat file not found yet.";
       }
 
-      // ---------- tables ----------
-      function updatePerMarket(perMarket){
-        const body=$("per-market-body");
-        body.innerHTML="";
-        if(!perMarket||perMarket.length===0){
-          body.innerHTML=`<tr><td colspan="5" class="muted">No markets yet.</td></tr>`;
-          return;
+      // =============================
+      // Tables
+      // =============================
+      function updatePerMarket(perMarket) {
+        const body = $("per-market-body");
+        body.innerHTML = "";
+        if (!perMarket || perMarket.length === 0) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 5; cell.className = "muted"; cell.textContent = "No markets yet.";
+          row.appendChild(cell); body.appendChild(row); return;
         }
-        perMarket.forEach(m=>{
-          const tr=document.createElement("tr");
-          tr.innerHTML=`
-            <td>${m.market}</td>
-            <td class="text-right">${m.trades}</td>
-            <td class="text-right">${formatPercent(m.win_rate,1)}</td>
-            <td class="text-right">${formatUsd(m.total_pnl)}</td>
-            <td class="text-right">${formatUsd(m.avg_pnl)}</td>
-          `;
-          body.appendChild(tr);
+        perMarket.forEach((m) => {
+          const row = document.createElement("tr");
+          const c1 = document.createElement("td"); c1.textContent = m.market; row.appendChild(c1);
+          const c2 = document.createElement("td"); c2.className="text-right"; c2.textContent=m.trades; row.appendChild(c2);
+          const c3 = document.createElement("td"); c3.className="text-right"; c3.textContent=formatPercent(m.win_rate,1); row.appendChild(c3);
+          const c4 = document.createElement("td"); c4.className="text-right"; c4.textContent=formatUsd(m.total_pnl); row.appendChild(c4);
+          const c5 = document.createElement("td"); c5.className="text-right"; c5.textContent=formatUsd(m.avg_pnl); row.appendChild(c5);
+          body.appendChild(row);
         });
-      }
-      function updateRecentTrades(trades){
-        const body=$("recent-trades-body");
-        body.innerHTML="";
-        if(!trades||trades.length===0){
-          body.innerHTML=`<tr><td colspan="3" class="muted">No trades yet.</td></tr>`;
-          return;
-        }
-        trades.forEach(t=>{
-          const v=Number(t.pnl_usd);
-          const tr=document.createElement("tr");
-          tr.innerHTML=`
-            <td>${t.time?formatTime(t.time):"—"}</td>
-            <td>${t.market||"—"}</td>
-            <td class="text-right"><span class="pill ${v>=0?"positive":"negative"}">${formatUsd(v)}</span></td>
-          `;
-          body.appendChild(tr);
-        });
-      }
-      function updateAdvancedMetrics(adv, maxDdFromRoot){
-        const a=adv||{};
-        $("adv-profit-factor").textContent=a.profit_factor==null?"—":formatNumber(a.profit_factor,2);
-        $("adv-avg-win").textContent=a.avg_win_usd==null?"—":formatUsd(a.avg_win_usd);
-        $("adv-avg-loss").textContent=a.avg_loss_usd==null?"—":formatUsd(a.avg_loss_usd);
-        $("adv-best-trade").textContent=a.best_trade_usd==null?"—":formatUsd(a.best_trade_usd);
-        $("adv-worst-trade").textContent=a.worst_trade_usd==null?"—":formatUsd(a.worst_trade_usd);
-        const maxdd=(a.max_drawdown_usd!=null)?a.max_drawdown_usd:maxDdFromRoot;
-        $("adv-max-dd").textContent=maxdd==null?"—":formatUsd(maxdd);
-        $("adv-recovery-factor").textContent=a.recovery_factor==null?"—":formatNumber(a.recovery_factor,2);
-        $("adv-sharpe").textContent=a.sharpe_ratio==null?"—":formatNumber(a.sharpe_ratio,2);
       }
 
-      // ---------- TV ----------
-      let currentSymbol="COINBASE:BTCUSD";
-      function loadTradingView(symbol){
-        currentSymbol=symbol;
-        const container=document.getElementById("tv-chart");
-        container.innerHTML="";
+      function updateRecentTrades(trades) {
+        const body = $("recent-trades-body");
+        body.innerHTML = "";
+        if (!trades || trades.length === 0) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 3; cell.className = "muted"; cell.textContent = "No trades yet.";
+          row.appendChild(cell); body.appendChild(row); return;
+        }
+        trades.forEach((t) => {
+          const row = document.createElement("tr");
+          const c1 = document.createElement("td"); c1.textContent = formatTime(t.time); row.appendChild(c1);
+          const c2 = document.createElement("td"); c2.textContent = t.market; row.appendChild(c2);
+          const c3 = document.createElement("td"); c3.className="text-right"; c3.textContent = formatUsd(t.pnl_usd); row.appendChild(c3);
+          body.appendChild(row);
+        });
+      }
+
+      function updateAdvancedMetrics(adv) {
+        $("adv-profit-factor").textContent = adv?.profit_factor != null ? formatNumber(adv.profit_factor,2) : "—";
+        $("adv-avg-win").textContent = formatUsd(adv?.avg_win_usd);
+        $("adv-avg-loss").textContent = formatUsd(adv?.avg_loss_usd);
+        $("adv-best-trade").textContent = formatUsd(adv?.best_trade_usd);
+        $("adv-worst-trade").textContent = formatUsd(adv?.worst_trade_usd);
+        $("adv-max-dd").textContent = formatUsd(adv?.max_drawdown_usd);
+        $("adv-recovery-factor").textContent = adv?.recovery_factor != null ? formatNumber(adv.recovery_factor,2) : "—";
+        $("adv-sharpe").textContent = adv?.sharpe_ratio != null ? formatNumber(adv.sharpe_ratio,2) : "—";
+      }
+
+      // =============================
+      // TradingView
+      // =============================
+      let currentSymbol = "COINBASE:BTCUSD";
+      function loadTradingView(symbol) {
+        currentSymbol = symbol;
+        const container = document.getElementById("tv-chart");
+        container.innerHTML = "";
         new TradingView.widget({
-          autosize:true, symbol, interval:"15", timezone:"Etc/UTC",
-          theme:"dark", style:"1", locale:"en",
-          enable_publishing:false, withdateranges:true, allow_symbol_change:false,
-          container_id:"tv-chart"
+          autosize: true,
+          symbol,
+          interval: "30",
+          timezone: "Etc/UTC",
+          theme: "dark",
+          style: "1",
+          locale: "en",
+          enable_publishing: false,
+          withdateranges: true,
+          allow_symbol_change: false,
+          container_id: "tv-chart",
         });
       }
-      function setupTvTabs(){
-        document.querySelectorAll(".tv-tab").forEach(tab=>{
-          tab.addEventListener("click",()=>{
-            document.querySelectorAll(".tv-tab").forEach(t=>t.classList.remove("active"));
+      function setupTvTabs() {
+        const tabs = document.querySelectorAll(".tv-tab");
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            tabs.forEach((t) => t.classList.remove("active"));
             tab.classList.add("active");
             loadTradingView(tab.dataset.symbol);
           });
@@ -526,427 +784,113 @@
       }
 
       // ==========================================================
-      // PET
+      // BOT PET
       // ==========================================================
-      const PET_KEY="botpet_animals_v3"; // new key so this sprite upgrade starts clean
-      const DEFAULT_PET={
-        hatched:false,
-        species:null,            // cat/dog
-        stage:"egg",             // egg/hatchling/baby/teen/adult
-        xp:0,
-        hunger:35,
-        fainted:false,
-        mood:"watching",
-        lastTotalTrades:0,
-        lastWins:0,
-        lastLosses:0,
-        lastEventAt:Date.now(),
-        anim:{mode:"idle", until:0},
-        lastEvent:"none",
-        blinkUntil:0,
-        blinkNext: Date.now() + 2500 + Math.random()*2500,
-      };
+      const PET_KEY = "ngc_botpet_v4";
 
-      const HATCH_PNL_THRESHOLD=0.01;
-      const HUNGER_TIME_RATE=1.15;   // per hour drift
-      const TICK_MS=120;
-
-      const FAINT_AT=100;
-      const REVIVE_BELOW=85;
-
-      function loadPet(){
-        try{
-          const raw=localStorage.getItem(PET_KEY);
-          if(!raw) return structuredClone(DEFAULT_PET);
-          const p=JSON.parse(raw);
-          return { ...structuredClone(DEFAULT_PET), ...p, anim:{...DEFAULT_PET.anim,...(p.anim||{})} };
-        }catch{ return structuredClone(DEFAULT_PET); }
+      function loadPetState() {
+        try { const raw = localStorage.getItem(PET_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
       }
-      function savePet(p){ localStorage.setItem(PET_KEY, JSON.stringify(p)); }
-      function resetPet(){ const p=structuredClone(DEFAULT_PET); savePet(p); return p; }
-
-      function setAnim(p,mode,ms){ p.anim={mode, until: Date.now()+ms}; }
-      function animMode(p){ return (Date.now() <= (p.anim?.until||0)) ? (p.anim?.mode||"idle") : "idle"; }
-      function pickSpeciesRandom(){ return Math.random()<0.5 ? "cat" : "dog"; }
-
-      function stageFromXp(xp, hatched){
-        if(!hatched) return "egg";
-        if(xp < 10) return "hatchling";
-        if(xp < 30) return "baby";
-        if(xp < 65) return "teen";
-        return "adult";
+      function savePetState(s) { localStorage.setItem(PET_KEY, JSON.stringify(s)); }
+      function newPetState() {
+        return {
+          hatched: false,
+          petType: null, // "cat" | "dog"
+          growth: 0,
+          hunger: 0,
+          lastWins: 0,
+          lastLosses: 0,
+          lastTotalPnl: 0,
+          lastSeenAt: Date.now(),
+          lastEvent: "idle", // "idle" | "feed" | "lose" | "hatch"
+          lastEventAt: 0,
+        };
       }
 
-      function applyTimeHunger(p){
-        const now=Date.now();
-        const dt=Math.max(0, now-(p.lastEventAt||now));
-        const add=(dt/(60*60*1000))*HUNGER_TIME_RATE;
-        p.hunger = clamp(p.hunger + add, 0, 100);
-        p.lastEventAt=now;
-      }
+      let petState = loadPetState() || newPetState();
+      $("pet-reset").addEventListener("click", () => { petState = newPetState(); savePetState(petState); });
 
-      function maybeHatch(p, totalPnl){
-        if(p.hatched) return false;
-        if(totalPnl > HATCH_PNL_THRESHOLD){
-          p.hatched=true;
-          p.species=pickSpeciesRandom();
-          p.xp=Math.max(p.xp, 2);
-          p.stage="hatchling";
-          p.lastEvent="none";
-          setAnim(p,"hatch",2000);
-          return true;
-        }
-        return false;
-      }
-
-      function processTradeDeltas(p, data){
-        const totalTrades=data.total_trades??0;
-        const wins=data.wins??0;
-        const losses=data.losses??0;
-
-        const dTrades=totalTrades-(p.lastTotalTrades||0);
-        const dWins=wins-(p.lastWins||0);
-        const dLosses=losses-(p.lastLosses||0);
-
-        p.lastTotalTrades=totalTrades;
-        p.lastWins=wins;
-        p.lastLosses=losses;
-
-        if(dTrades<=0) return {dTrades:0,dWins:0,dLosses:0};
-
-        if(dWins>0){
-          p.xp = clamp(p.xp + dWins*5, 0, 100);
-          p.hunger = clamp(p.hunger - dWins*14, 0, 100);
-          p.mood="happy";
-          p.lastEvent="food";
-          setAnim(p,"eat",1400);
-        }
-        if(dLosses>0 && !p.fainted){
-          p.hunger = clamp(p.hunger + dLosses*13, 0, 100);
-          p.mood="sad";
-          p.lastEvent="empty";
-          setAnim(p,"sad",1400);
-        }
-        return {dTrades,dWins,dLosses};
-      }
-
-      function updateFaintState(p){
-        if(!p.hatched) return;
-        if(!p.fainted && p.hunger >= FAINT_AT){
-          p.fainted=true;
-          p.mood="sad";
-          setAnim(p,"faint",4500);
-        }
-        if(p.fainted && p.hunger <= REVIVE_BELOW){
-          p.fainted=false;
-          p.mood="happy";
-          setAnim(p,"revive",1800);
-        }
-      }
-
-      // ---------- pixel renderer ----------
-      const canvas=$("pet-canvas");
-      const ctx=canvas.getContext("2d");
-      const SCALE=3;
-
-      // stronger outline / contrast
-      const PALETTE={
+      const PALETTE = {
         " ": null,
-        ".": "rgba(0,0,0,0.18)",
-        "#": "#0b1220",
-        "W": "#f1f5f9",
-        "G": "#94a3b8",
-        "D": "#64748b",
-        "P": "#fb7185",
-        "Y": "#fbbf24",
-        "B": "#60a5fa",
-        "R": "#ef4444",
-        "O": "#f97316",
-        "K": "#0b1220",
-        "T": "#22c55e"
+        ".": "rgba(255,255,255,0.10)",
+
+        // outlines that pop on dark background
+        "K": "#64748b",   // light slate
+        "k": "#475569",   // darker slate
+
+        "W": "#f8fafc",
+        "G": "#cbd5e1",
+        "D": "#94a3b8",
+
+        // cat orange tabby tones
+        "O": "#f59e0b",
+        "o": "#d97706",
+        "S": "#fbbf24",   // stripe highlight
+
+        // dog ear/nose (not pure black)
+        "E": "#334155",   // ear dark slate
+        "e": "#1f2937",   // deeper slate
+
+        "P": "#fb7185",   // pink
+        "R": "#ef4444",   // red
+        "Y": "#fbbf24",   // yellow
       };
 
-      function drawFrame(frame, ox, oy, scale){
-        for(let y=0;y<frame.length;y++){
-          const row=frame[y];
-          for(let x=0;x<row.length;x++){
-            const ch=row[x];
-            const col=PALETTE[ch];
-            if(!col) continue;
-            ctx.fillStyle=col;
-            ctx.fillRect(ox + x*scale, oy + y*scale, scale, scale);
+      function drawSprite(canvas, sprite) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let y = 0; y < sprite.length; y++) {
+          const row = sprite[y];
+          for (let x = 0; x < row.length; x++) {
+            const ch = row[x];
+            const col = PALETTE[ch];
+            if (!col) continue;
+            ctx.fillStyle = col;
+            ctx.fillRect(x, y, 1, 1);
           }
         }
       }
-      function drawCentered(frame, bobY=0){
-        drawFrame(frame, 0, Math.floor(bobY), SCALE);
-      }
-      function drawSparkles(t){
-        ctx.save();
-        ctx.globalAlpha=0.85;
-        ctx.fillStyle=PALETTE["B"];
-        const pts=[[14,14],[80,20],[22,78],[74,72]];
-        pts.forEach((p,i)=>{
-          const pulse=(Math.sin((t/120)+(i*1.2))*0.5+0.5);
-          const r=1+Math.floor(pulse*2);
-          ctx.fillRect(p[0]-r,p[1],r*2,1);
-          ctx.fillRect(p[0],p[1]-r,1,r*2);
-        });
-        ctx.restore();
+
+      function drawComposite(canvas, baseSprite, overlaySprite) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawSprite(canvas, baseSprite);
+        if (!overlaySprite) return;
+        const temp = document.createElement("canvas");
+        temp.width = 32; temp.height = 32;
+        drawSprite(temp, overlaySprite);
+        ctx.drawImage(temp, 0, 0);
       }
 
-      function badgeText(p){
-        if(!p.hatched) return "Egg";
-        if(p.fainted) return (p.species==="dog"?"Dog":"Cat")+" (Fainted)";
-        const sp=p.species==="dog"?"Dog":"Cat";
-        const st=p.stage||"hatchling";
-        if(st==="hatchling") return "Hatchling "+sp;
-        if(st==="baby") return "Baby "+sp;
-        if(st==="teen") return "Teen "+sp;
-        return "Adult "+sp;
-      }
-
-      function moodText(p){
-        if(p.fainted) return "Fainted ☠️ (needs wins)";
-        if(!p.hatched) return "Incubating… 🥚";
-        if(p.hunger>=85) return "Starving 😿";
-        if(p.hunger>=65) return "Hungry 🐾";
-        if(p.mood==="sad") return "Sad 😢";
-        return "Happy 😊";
-      }
-
-      function pct(v){ return Math.round(clamp(v,0,100)); }
-
-      // --------- SPRITES ----------
+      // =============================
+      // Sprites (32x32)
+      // - Cat: chunky ginger tabby silhouette (lazy eyes, stripes)
+      // - Dog: white pup with big dark ear + muzzle
+      // =============================
       const FRAMES = {
-        // egg
-        egg_idle:[
-          "                                ",
-          "            #######             ",
-          "         ###GGGGGG###           ",
-          "       ##GGGGWWWWGGGG##         ",
-          "      #GGGWWWWWWWWWWGGG#        ",
-          "     #GGWWGGGGGGGGGGWWGG#       ",
-          "    #GGWGGGGGGGGGGGGGGWGG#      ",
-          "    #GGWGGGGGGGGGGGGGGWGG#      ",
-          "   #GGWGGGGGGGGGGGGGGGGWGG#     ",
-          "   #GGWGGGGGGGGGGGGGGGGWGG#     ",
-          "   #GGWGGGGGGGGGGGGGGGGWGG#     ",
-          "   #GGWWGGGGGGGGGGGGGGWWGG#     ",
-          "   #GGGWWWWGGGGGGGGWWWWGGG#     ",
-          "    #GGGGGWWWWWWWWWWGGGGG#      ",
-          "     #GGGGGGGGGGGGGGGGGG#       ",
-          "      #GGGGGGGGGGGGGGGG#        ",
-          "       ##GGGGGGGGGGGG##         ",
-          "         ###GGGGGG###           ",
-          "            #######             ",
-          "                                ",
-          "          .............         ",
-          "        .................       ",
-          "          .............         ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
-        egg_crack:[
-          "                                ",
-          "            #######             ",
-          "         ###GGGGGG###           ",
-          "       ##GGGGWWWWGGGG##         ",
-          "      #GGGWWWW##WWWWGGG#        ",
-          "     #GGWWGGG##  ##GGWWGG#      ",
-          "    #GGWGGGG##    ##GGGGWGG#    ",
-          "    #GGWGGG##      ##GGGGWGG#   ",
-          "   #GGWGGG##   ##   ##GGGGWGG#  ",
-          "   #GGWGG##   ####   ##GGGWGG#  ",
-          "   #GGWGG##    ##    ##GGGWGG#  ",
-          "   #GGWWG##          ##GGWWGG#  ",
-          "   #GGGWW##   ####   ##WWGGG#   ",
-          "    #GGGG##  ######  ##GGGG#    ",
-          "     #GGG##   ####   ##GGG#     ",
-          "      #GG##          ##GG#      ",
-          "       ##GGGGGGGGGGGGGG##       ",
-          "         ###GGGGGGGG###         ",
-          "            #######             ",
-          "                                ",
-          "          .............         ",
-          "        .................       ",
-          "          .............         ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
-        egg_shake:[
-          "                                ",
-          "             #######            ",
-          "          ###GGGGGG###          ",
-          "        ##GGGGWWWWGGGG##        ",
-          "       #GGGWWWWWWWWWWGGG#       ",
-          "      #GGWWGGGGGGGGGGWWGG#      ",
-          "     #GGWGGGGGGGGGGGGGGWGG#     ",
-          "     #GGWGGGGGGGGGGGGGGWGG#     ",
-          "    #GGWGGGGGGGGGGGGGGGGWGG#    ",
-          "    #GGWGGGGGGGGGGGGGGGGWGG#    ",
-          "    #GGWGGGGGGGGGGGGGGGGWGG#    ",
-          "    #GGWWGGGGGGGGGGGGGGWWGG#    ",
-          "    #GGGWWWWGGGGGGGGWWWWGGG#    ",
-          "     #GGGGGWWWWWWWWWWGGGGG#     ",
-          "      #GGGGGGGGGGGGGGGGGG#      ",
-          "       #GGGGGGGGGGGGGGGG#       ",
-          "        ##GGGGGGGGGGGG##        ",
-          "          ###GGGGGG###          ",
-          "             #######            ",
-          "                                ",
-          "           .............        ",
-          "         .................      ",
-          "           .............        ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
-        eggshell_bits:[
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "      ..  .  ..  .  ..          ",
-          "    .  . .  .  . .  .  .        ",
-          "   .  .   .   .   .   .  .      ",
-          "     . . . . . . . . .          ",
-          "   .   .   .   .   .   .        ",
-          "      . . .   . . .             ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
-        bowl_food:[
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "           ##########           ",
-          "         ##WWWWWWWWWW##         ",
-          "        #WWWWYYWWYYWWWW#        ",
-          "        #WWWWWWWWWWWWWW#        ",
-          "         ##WWWWWWWWWW##         ",
-          "           ##########           ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
-        plate_empty:[
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "            #######             ",
-          "          ##WWWWWWW##           ",
-          "        ##WWWWWWWWWWW##         ",
-          "       #WWWWWWWWWWWWWWW#        ",
-          "        ##WWWWWWWWWWW##         ",
-          "          ##WWWWWWW##           ",
-          "            #######             ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
-        scarf_teen:[
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "        RRRRRRRRRRRRRR          ",
-          "       RRRR RRRRRR RRRR         ",
-          "        RRRRRR  RRRRRR          ",
-          "          RR      RR            ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
+        egg_idle1: [
+          "                                ",
+          "                                ",
+          "            kkkkkkkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWWWWWWWWk         ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "         kWWWWWWWWWWWWk         ",
+          "          kkWWWWWWWWkk          ",
+          "            kkkkkkkk            ",
+          "                                ",
+          "                                ",
+          "             ..  ..             ",
+          "            .. .. ..            ",
+          "             ..  ..             ",
           "                                ",
           "                                ",
           "                                ",
@@ -958,17 +902,29 @@
           "                                ",
           "                                ",
         ],
-        crown_adult:[
-          "                                ",
-          "             Y   Y              ",
-          "            YYY YYY             ",
-          "           YYYYYYYYY            ",
-          "          YYYYYYYYYYY           ",
-          "           YY  YY  YY           ",
-          "            YYYYYYYY            ",
-          "             YYYYYY             ",
+        egg_idle2: [
           "                                ",
           "                                ",
+          "            kkkkkkkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWWWWWWWWk         ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "       kWWWWWWWWWWWWWWWWk       ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "         kWWWWWWWWWWWWk         ",
+          "          kkWWWWWWWWkk          ",
+          "            kkkkkkkk            ",
+          "                                ",
+          "                                ",
+          "             .. ..              ",
+          "            ..  ..              ",
+          "             .. ..              ",
           "                                ",
           "                                ",
           "                                ",
@@ -979,7 +935,310 @@
           "                                ",
           "                                ",
           "                                ",
+        ],
+
+        // =============================
+        // CAT (ginger tabby, lazy vibe)
+        // =============================
+        cat_idle1: [
           "                                ",
+          "                                ",
+          "            kkOOOOkk            ",
+          "          kkOOooooOOk           ",
+          "         kOOOooSSooOOOk         ",
+          "        kOOoWWWWWWoOOOk         ",
+          "        kOoWGGGGGGWoOOOk        ",
+          "        kOoWGGGGGGWoOOOk        ",
+          "        kOoWWWWWWWWoOOOk        ",
+          "         kOOooSSooooOOk         ",
+          "          kkOOooooOOkk          ",
+          "             kOOOOOk            ",
+          "        kkkkkkOOOOkkkkkk        ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "      kOOOOkOOOooOOOkOOOOk      ",
+          "      kOOOOkOOooooOOOkOOOOk     ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "        kkkkkOOOOOOkkkkk        ",
+          "          kOOOOOOOOOOk          ",
+          "          kOOOooOOOooOk         ",
+          "          kOOoooooooOOk         ",
+          "           kkOOOooOOkk          ",
+          "             kkkkkk             ",
+          "            k  kk  k            ",
+          "            k  kk  k            ",
+          "             kk  kk             ",
+          "               kk               ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_idle2: [
+          "                                ",
+          "                                ",
+          "            kkOOOOkk            ",
+          "          kkOOooooOOk           ",
+          "         kOOOooSSooOOOk         ",
+          "        kOOoWWWWWWoOOOk         ",
+          "        kOoWGGGGGGWoOOOk        ",
+          "        kOoWGGGGGGWoOOOk        ",
+          "        kOoWWWWWWWWoOOOk        ",
+          "         kOOooSSooooOOk         ",
+          "          kkOOooooOOkk          ",
+          "             kOOOOOk            ",
+          "        kkkkkkOOOOkkkkkk        ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "      kOOOOkOOOooOOOkOOOOk      ",
+          "      kOOOOkOOooooOOOkOOOOk     ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "        kkkkkOOOOOOkkkkk        ",
+          "          kOOOOOOOOOOk          ",
+          "          kOOOooOOOooOk         ",
+          "           kOOoooooOOk          ",
+          "            kkOOOkkk            ",
+          "             kkkkk              ",
+          "             k kk k             ",
+          "             k kk k             ",
+          "              k  k              ",
+          "               kk               ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_blink: [
+          "                                ",
+          "                                ",
+          "            kkOOOOkk            ",
+          "          kkOOooooOOk           ",
+          "         kOOOooSSooOOOk         ",
+          "        kOOoWWWWWWoOOOk         ",
+          "        kOoWDDDDDDWoOOOk        ",
+          "        kOoWDDDDDDWoOOOk        ",
+          "        kOoWWWWWWWWoOOOk        ",
+          "         kOOooSSooooOOk         ",
+          "          kkOOooooOOkk          ",
+          "             kOOOOOk            ",
+          "        kkkkkkOOOOkkkkkk        ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "      kOOOOkOOOooOOOkOOOOk      ",
+          "      kOOOOkOOooooOOOkOOOOk     ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "        kkkkkOOOOOOkkkkk        ",
+          "          kOOOOOOOOOOk          ",
+          "          kOOOooOOOooOk         ",
+          "          kOOoooooooOOk         ",
+          "           kkOOOooOOkk          ",
+          "             kkkkkk             ",
+          "            k  kk  k            ",
+          "            k  kk  k            ",
+          "             kk  kk             ",
+          "               kk               ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_sad: [
+          "                                ",
+          "                                ",
+          "            kkOOOOkk            ",
+          "          kkOOooooOOk           ",
+          "         kOOOooSSooOOOk         ",
+          "        kOOoWWWWWWoOOOk         ",
+          "        kOoWRRRRRRWoOOOk        ",
+          "        kOoWRRRRRRWoOOOk        ",
+          "        kOoWWWWWWWWoOOOk        ",
+          "         kOOooSSooooOOk         ",
+          "          kkOOooooOOkk          ",
+          "             kOOOOOk            ",
+          "        kkkkkkOOOOkkkkkk        ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "      kOOOOkOOOooOOOkOOOOk      ",
+          "      kOOOOkOOooooOOOkOOOOk     ",
+          "       kOOOkkOOOOOOkkOOOk       ",
+          "        kkkkkOOOOOOkkkkk        ",
+          "          kOOOOOOOOOOk          ",
+          "             ..RR..             ",
+          "              .RR.              ",
+          "               ..               ",
+          "             kkkkkk             ",
+          "            k  kk  k            ",
+          "            k  kk  k            ",
+          "             kk  kk             ",
+          "               kk               ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_faint: [
+          "                                ",
+          "                                ",
+          "                                ",
+          "             kkOOOOkk           ",
+          "           kkOOooooOOk          ",
+          "          kOOOooSSooOOOk        ",
+          "         kOOoWWWWWWoOOOk        ",
+          "         kOoWRRRRRRWoOOOk       ",
+          "         kOoWRRRRRRWoOOOk       ",
+          "         kOoWWWWWWWWoOOOk       ",
+          "          kOOooSSooooOOk        ",
+          "           kkOOooooOOkk         ",
+          "              kOOOOOk           ",
+          "      kkkkkkkkOOOOOOOOkkkkkkkk  ",
+          "     kOOOkkOOOOOOOOOOOOOOkkOOOk ",
+          "      kkkkkkkkOOOOOOOOkkkkkkkk  ",
+          "           kOOOOOOOOOOk         ",
+          "            kkOOOOOOkk          ",
+          "              kkkkkk            ",
+          "              k kk k            ",
+          "              k kk k            ",
+          "               k  k             ",
+          "                kk              ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+
+        // =============================
+        // DOG (white pup, dark ear + muzzle vibe)
+        // =============================
+        dog_idle1: [
+          "                                ",
+          "                                ",
+          "            kkWWWWkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWEEWWWWWk         ",
+          "        kWWWWEEEEEEWWWWk        ",
+          "        kWWWWEWWWWWEWWWWk       ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "         kWWWWeeeeeWWWWk        ",
+          "          kkWWWeeeWWWkk          ",
+          "            kWWWWWWWWk           ",
+          "             kWWWWWWk            ",
+          "        kkkkkWWWWWWWWkkkkk       ",
+          "       k..kkWWWWWWWWWWkk..k      ",
+          "       k..kkWWWWWWWWWWkk..k      ",
+          "        kkkkkWWWWWWWWkkkkk       ",
+          "           kkWWWWWWWWkk           ",
+          "             kWWWWWWk             ",
+          "              kkWWkk              ",
+          "               kkk                ",
+          "              k   k               ",
+          "              k   k               ",
+          "               kkk                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_idle2: [
+          "                                ",
+          "                                ",
+          "            kkWWWWkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWEEWWWWWk         ",
+          "        kWWWWEEEEEEWWWWk        ",
+          "        kWWWWEWWWWWEWWWWk       ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "         kWWWWeeeeeWWWWk        ",
+          "          kkWWWeeeeWWkk          ",
+          "            kWWWWWWWWk           ",
+          "             kWWWWWWk            ",
+          "        kkkkkWWWWWWWWkkkkk       ",
+          "       k..kkWWWWWWWWWWkk..k      ",
+          "       k..kkWWWWWWWWWWkk..k      ",
+          "        kkkkkWWWWWWWWkkkkk       ",
+          "           kkWWWWWWWWkk           ",
+          "             kWWWWWWk             ",
+          "              kkWWkk              ",
+          "               kkk                ",
+          "             k   k                ",
+          "             k   k                ",
+          "              kkk                 ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_sad: [
+          "                                ",
+          "                                ",
+          "            kkWWWWkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWRRWWWWWk         ",
+          "        kWWWWRRRRRRWWWWk        ",
+          "        kWWWWEWWWWWEWWWWk       ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "         kWWWWeeeeeWWWWk        ",
+          "          kkWWWeeeeWWkk          ",
+          "            kWWWWWWWWk           ",
+          "             kWWWWWWk            ",
+          "        kkkkkWWWWWWWWkkkkk       ",
+          "       k..kkWWWWWWWWWWkk..k      ",
+          "       k..kkWWWWWWWWWWkk..k      ",
+          "        kkkkkWWWWWWWWkkkkk       ",
+          "           kkWWWWWWWWkk           ",
+          "             ..RR..RR..           ",
+          "              .RR..RR.            ",
+          "               ..  ..             ",
+          "               kkk                ",
+          "              k   k               ",
+          "              k   k               ",
+          "               kkk                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_faint: [
+          "                                ",
+          "                                ",
+          "                                ",
+          "            kkWWWWkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWRRWWWWWk         ",
+          "        kWWWWRRRRRRWWWWk        ",
+          "        kWWWWEWWWWWEWWWWk       ",
+          "        kWWWWWWWWWWWWWWk        ",
+          "         kWWWWeeeeeWWWWk        ",
+          "          kkWWWeeeeWWkk          ",
+          "            kWWWWWWWWk           ",
+          "      kkkkkkWWWWWWWWWWkkkkkk     ",
+          "     k..kkWWWWWWWWWWWWWWkk..k    ",
+          "      kkkkkkWWWWWWWWWWkkkkkk     ",
+          "           kkWWWWWWWWkk           ",
+          "              kkWWkk              ",
+          "               kkk                ",
+          "              k   k               ",
+          "              k   k               ",
+          "               kkk                ",
           "                                ",
           "                                ",
           "                                ",
@@ -993,547 +1252,285 @@
           "                                ",
         ],
 
-        // ===== CAT (clearer ears + tail + body)
-        cat_adult_idle1:[
-"                                ",
-"                                ",
-"            ##KWWK##            ",
-"           #KWWWWWWK#           ",
-"          #KWWPPPPWWK#          ",
-"         #KWWPWWWWPWWK#         ",
-"         #KWWWWWWWWWWK#         ",
-"         #KWWWK####KWWK#        ",
-"          #KWWK####KWWK#        ",
-"           #KWWKKKKWWK#         ",
-"            ##KWWWWK##          ",
-"              KWWWWK            ",
-"        ######KWWWWK######      ",
-"       #..###KWWWWWWK###..#     ",
-"       #..###KWWWWWWK###..#     ",
-"        ######KWWWWK######      ",
-"          ###KWWWWWWK###        ",
-"            #KWWWWWWK#          ",
-"            #KWWWWWWK#          ",
-"             ##KWWK##           ",
-"               K  K             ",
-"              K    K            ",
-"             K  KK  K           ",
-"              KK  KK            ",
-"                KK              ",
-"               KKKK             ",
-"              KK  KK            ",
-"                 KK             ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
+        // Plates
+        plate_full: [
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            kkkkkkkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWYYYYYYYYWWk         ",
+          "         kWWYYYYYYYYWWk         ",
+          "          kkWWWWWWWWkk          ",
+          "            kkkkkkkk            ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
         ],
-        cat_adult_idle2:[
-"                                ",
-"                                ",
-"            ##KWWK##            ",
-"           #KWWWWWWK#           ",
-"          #KWWPPPPWWK#          ",
-"         #KWWPWWWWPWWK#         ",
-"         #KWWWWWWWWWWK#         ",
-"         #KWWWK######WWK#       ",
-"          #KWWK####KWWK#        ",
-"           #KWWKKKKWWK#         ",
-"            ##KWWWWK##          ",
-"              KWWWWK            ",
-"        ######KWWWWK######      ",
-"       #..###KWWWWWWK###..#     ",
-"       #..###KWWWWWWK###..#     ",
-"        ######KWWWWK######      ",
-"          ###KWWWWWWK###        ",
-"            #KWWWWWWK#          ",
-"            #KWWWWWWK#          ",
-"             ##KWWK##           ",
-"               K  K             ",
-"              K    K            ",
-"              K KK K            ",
-"               K  K             ",
-"                KK              ",
-"               KKK              ",
-"              KK KK             ",
-"                KK              ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-        cat_adult_idle1_blink:[
-"                                ",
-"                                ",
-"            ##KWWK##            ",
-"           #KWWWWWWK#           ",
-"          #KWWGGGGWWK#          ",
-"         #KWWGWWWWGWWK#         ",
-"         #KWWWWWWWWWWK#         ",
-"         #KWWWK####KWWK#        ",
-"          #KWWK####KWWK#        ",
-"           #KWWKKKKWWK#         ",
-"            ##KWWWWK##          ",
-"              KWWWWK            ",
-"        ######KWWWWK######      ",
-"       #..###KWWWWWWK###..#     ",
-"       #..###KWWWWWWK###..#     ",
-"        ######KWWWWK######      ",
-"          ###KWWWWWWK###        ",
-"            #KWWWWWWK#          ",
-"            #KWWWWWWK#          ",
-"             ##KWWK##           ",
-"               K  K             ",
-"              K    K            ",
-"             K  KK  K           ",
-"              KK  KK            ",
-"                KK              ",
-"               KKKK             ",
-"              KK  KK            ",
-"                 KK             ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-        cat_adult_walk1:null, // will fall back to idle if missing
-        cat_adult_walk2:null,
-        cat_adult_sad1:[
-"                                ",
-"                                ",
-"            ##KWWK##            ",
-"           #KWWWWWWK#           ",
-"          #KWWRRRRWWK#          ",
-"         #KWWRWWWWRWWK#         ",
-"         #KWWWWWWWWWWK#         ",
-"         #KWWWK######WWK#       ",
-"          #KWWK####KWWK#        ",
-"           #KWWKKKKWWK#         ",
-"            ##KWWWWK##          ",
-"              KWWWWK            ",
-"        ######KWWWWK######      ",
-"       #..###KWWWWWWK###..#     ",
-"       #..###KWWWWWWK###..#     ",
-"        ######KWWWWK######      ",
-"          ###KWWWWWWK###        ",
-"             ..RR..RR..         ",
-"              .RR..RR.          ",
-"               ..  ..           ",
-"               K  K             ",
-"              K    K            ",
-"             K  KK  K           ",
-"              KK  KK            ",
-"                KK              ",
-"               KKKK             ",
-"              KK  KK            ",
-"                 KK             ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-
-        // CAT FAINTED (recognisable)
-        cat_faint:[
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"           ##KWWK##             ",
-"          #KWWWWWWK#            ",
-"         #KWWRRRRWWK#           ",
-"         #KWWRWWWRWWK#          ",
-"         #KWWWWWWWWWK#          ",
-"          #KWWWKKKWWK#          ",
-"           ##KWWWWK##           ",
-"              KWWK              ",
-"      ######  KWWK  ######      ",
-"     #..###KWWWWWWK###..#       ",
-"     #..###KWWWWWWK###..#       ",
-"      ######KWWWWK######        ",
-"        ###KWWWWWWK###          ",
-"          #KWWWWWWK#            ",
-"           ##KWWK##             ",
-"             K  K               ",
-"            K    K              ",
-"            K KK K              ",
-"             K  K               ",
-"              KK                ",
-"             KKK                ",
-"            KK KK               ",
-"              KK                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-
-        // ===== DOG (clear floppy ears + snout)
-        dog_adult_idle1:[
-"                                ",
-"                                ",
-"        ##KWWK##  ##KWWK##      ",
-"       #KWWWWWK##KWWWWWWK#      ",
-"      #KWWPPPPWWWWPPPPWWK#      ",
-"      #KWWPWWWWWWWWWWWPWWK#     ",
-"      #KWWWWWWWWWWWWWWWWK#      ",
-"       #KWWWK######KWWWWK#      ",
-"        #KWWK##KK##KWWWWK#      ",
-"         #KWWK  KK  KWWK#       ",
-"          ##KWWWWWWWWK##        ",
-"            #KWWWWWWK#          ",
-"        ####KWWWWWWWWK####      ",
-"       #..##KWWWWWWWWK##..#     ",
-"       #..##KWWWWWWWWK##..#     ",
-"        ####KWWWWWWWWK####      ",
-"          ##KWWWWWWWWK##        ",
-"            #KWWWWWWK#          ",
-"            #KWWWWWWK#          ",
-"             ##KWWK##           ",
-"               KKK              ",
-"              K   K             ",
-"              K   K             ",
-"               KKK              ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-        dog_adult_idle2:[
-"                                ",
-"                                ",
-"        ##KWWK##  ##KWWK##      ",
-"       #KWWWWWK##KWWWWWWK#      ",
-"      #KWWPPPPWWWWPPPPWWK#      ",
-"      #KWWPWWWWWWWWWWWPWWK#     ",
-"      #KWWWWWWWWWWWWWWWWK#      ",
-"       #KWWWK########WWWWK#     ",
-"        #KWWK##KK  ##KWWK#      ",
-"         #KWWK  KK   KWWK#      ",
-"          ##KWWWWWWWWK##        ",
-"            #KWWWWWWK#          ",
-"        ####KWWWWWWWWK####      ",
-"       #..##KWWWWWWWWK##..#     ",
-"       #..##KWWWWWWWWK##..#     ",
-"        ####KWWWWWWWWK####      ",
-"          ##KWWWWWWWWK##        ",
-"            #KWWWWWWK#          ",
-"            #KWWWWWWK#          ",
-"             ##KWWK##           ",
-"               KKK              ",
-"             K   K              ",
-"             K   K              ",
-"              KKK               ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-        dog_adult_sad1:[
-"                                ",
-"                                ",
-"        ##KWWK##  ##KWWK##      ",
-"       #KWWWWWK##KWWWWWWK#      ",
-"      #KWWRRRRWWWWRRRRWWK#      ",
-"      #KWWRWWWWWWWWWWWRWWK#     ",
-"      #KWWWWWWWWWWWWWWWWK#      ",
-"       #KWWWK########WWWWK#     ",
-"        #KWWK##KK  ##KWWK#      ",
-"         #KWWK  KK   KWWK#      ",
-"          ##KWWWWWWWWK##        ",
-"            #KWWWWWWK#          ",
-"        ####KWWWWWWWWK####      ",
-"       #..##KWWWWWWWWK##..#     ",
-"       #..##KWWWWWWWWK##..#     ",
-"        ####KWWWWWWWWK####      ",
-"          ##KWWWWWWWWK##        ",
-"             ..RR..RR..         ",
-"              .RR..RR.          ",
-"               ..  ..           ",
-"               KKK              ",
-"              K   K             ",
-"              K   K             ",
-"               KKK              ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-        dog_faint:[
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"        ##KWWK##  ##KWWK##      ",
-"       #KWWWWWK##KWWWWWWK#      ",
-"      #KWWRRRRWWWWRRRRWWK#      ",
-"      #KWWRWWWWWWWWWWWRWWK#     ",
-"      #KWWWWWWWWWWWWWWWWK#      ",
-"       #KWWWK######KWWWWK#      ",
-"        #KWWK##KK##KWWWWK#      ",
-"          ##KWWWWWWWWK##        ",
-"            #KWWWWWWK#          ",
-"      ######KWWWWWWWWK######    ",
-"     #..###KWWWWWWWWWWK###..#   ",
-"      ######KWWWWWWWWK######    ",
-"          ##KWWWWWWWWK##        ",
-"             ##KWWK##           ",
-"               KKK              ",
-"              K   K             ",
-"              K   K             ",
-"               KKK              ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
+        plate_empty: [
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            kkkkkkkk            ",
+          "          kkWWWWWWWWkk          ",
+          "         kWWWWWWWWWWWWk         ",
+          "         kWWWWWWWWWWWWk         ",
+          "          kkWWWWWWWWkk          ",
+          "            kkkkkkkk            ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
         ],
       };
 
-      // Use the clear animal sprites for ALL stages (avoid “ghost baby”)
-      (function normalizeAnimalStages(){
-        const species=["cat","dog"];
-        for(const sp of species){
-          FRAMES[`${sp}_baby_idle1`] = FRAMES[`${sp}_adult_idle1`];
-          FRAMES[`${sp}_baby_idle2`] = FRAMES[`${sp}_adult_idle2`];
-          FRAMES[`${sp}_baby_idle1_blink`] = FRAMES[`${sp}_adult_idle1_blink`] || FRAMES[`${sp}_adult_idle1`];
+      function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
-          FRAMES[`${sp}_teen_idle1`] = FRAMES[`${sp}_adult_idle1`];
-          FRAMES[`${sp}_teen_idle2`] = FRAMES[`${sp}_adult_idle2`];
-          FRAMES[`${sp}_teen_idle1_blink`] = FRAMES[`${sp}_adult_idle1_blink`] || FRAMES[`${sp}_adult_idle1`];
-
-          // optional walk frames
-          FRAMES[`${sp}_baby_walk1`] = FRAMES[`${sp}_adult_walk1`] || FRAMES[`${sp}_adult_idle1`];
-          FRAMES[`${sp}_baby_walk2`] = FRAMES[`${sp}_adult_walk2`] || FRAMES[`${sp}_adult_idle2`];
-          FRAMES[`${sp}_teen_walk1`] = FRAMES[`${sp}_adult_walk1`] || FRAMES[`${sp}_adult_idle1`];
-          FRAMES[`${sp}_teen_walk2`] = FRAMES[`${sp}_adult_walk2`] || FRAMES[`${sp}_adult_idle2`];
-
-          // sad
-          FRAMES[`${sp}_baby_sad1`] = FRAMES[`${sp}_adult_sad1`] || FRAMES[`${sp}_adult_idle1`];
-          FRAMES[`${sp}_teen_sad1`] = FRAMES[`${sp}_adult_sad1`] || FRAMES[`${sp}_adult_idle1`];
+      function petMaybeHatch(totalPnl) {
+        if (petState.hatched) return;
+        if (totalPnl > 0.01) {
+          petState.hatched = true;
+          petState.petType = Math.random() < 0.5 ? "cat" : "dog"; // random
+          petState.lastEvent = "hatch";
+          petState.lastEventAt = Date.now();
         }
-      })();
-
-      function getFrame(species, stage, action, toggle, blink){
-        const st = (stage === "hatchling") ? "baby" : stage;
-        const base = `${species}_${st}_${action}${toggle ? "1" : "2"}`;
-
-        if(action === "idle" && blink){
-          const key = `${species}_${st}_idle1_blink`;
-          if(FRAMES[key]) return FRAMES[key];
-          const fall = `${species}_adult_idle1_blink`;
-          if(FRAMES[fall]) return FRAMES[fall];
-        }
-        if(FRAMES[base]) return FRAMES[base];
-
-        const adultKey = `${species}_adult_${action}${toggle ? "1" : "2"}`;
-        if(FRAMES[adultKey]) return FRAMES[adultKey];
-
-        return FRAMES[`${species}_adult_idle1`];
       }
 
-      let pet=loadPet();
-      let toggle=false;
-      let lastRender=0;
+      function updatePetUI(stats, recentTrade) {
+        const totalPnl = stats.total_pnl_usd ?? 0;
+        const growthPct = Math.round(petState.growth);
+        const hungerPct = Math.round(petState.hunger);
 
-      function maybeBlink(p){
+        $("pet-growth-bar").style.width = growthPct + "%";
+        $("pet-hunger-bar").style.width = hungerPct + "%";
+        $("pet-growth-text").textContent = growthPct + "%";
+        $("pet-hunger-text").textContent = hungerPct + "%";
+
+        const fainted = petState.hatched && petState.hunger >= 92;
+        const hungry = petState.hatched && petState.hunger >= 70;
+
+        let mood = "Watching… 👀";
+        let desc = "Waiting for trades";
+
+        if (!petState.hatched) {
+          mood = totalPnl > 0 ? "Hatching… 🐣" : "Egg (waiting) 🥚";
+          desc = totalPnl > 0
+            ? "Profit detected — about to hatch!"
+            : "Stays an egg until Total PnL goes positive.";
+        } else if (fainted) {
+          mood = "Fainted ☠️ (needs wins)";
+          desc = "Too hungry. Wins will revive it (it won’t revert to egg).";
+        } else if (hungry) {
+          mood = "Hungry 🍽️";
+          desc = "Needs wins (food). Losses make hunger worse.";
+        } else {
+          if (petState.lastEvent === "feed") {
+            mood = "Happy " + (petState.petType === "cat" ? "😺" : "🐶");
+            desc = recentTrade?.market
+              ? "Yum! " + recentTrade.market + " " + formatUsd(recentTrade.pnl_usd)
+              : "Wins are food — keep feeding it!";
+          } else if (petState.lastEvent === "lose") {
+            mood = "Sad " + (petState.petType === "cat" ? "😿" : "😔");
+            desc = "Empty plate… losses increase hunger.";
+          } else {
+            mood = "Chilling 😌";
+            desc = "Watching the market…";
+          }
+        }
+
+        $("pet-mood").textContent = mood;
+        $("pet-desc").textContent = desc;
+      }
+
+      function petApplyChangesFromStats(stats) {
         const now = Date.now();
-        if(now >= (p.blinkNext||0)){
-          p.blinkUntil = now + (120 + Math.random()*120);
-          p.blinkNext = now + 2200 + Math.random()*3200;
+        const minutes = (now - (petState.lastSeenAt || now)) / 60000;
+        if (minutes > 0) petState.hunger = clamp(petState.hunger + minutes * 0.6, 0, 100);
+
+        const wins = stats.wins ?? 0;
+        const losses = stats.losses ?? 0;
+        const totalPnl = stats.total_pnl_usd ?? 0;
+        const recentTrade = (stats.recent_trades || [])[0];
+
+        petMaybeHatch(totalPnl);
+
+        const dW = wins - (petState.lastWins ?? 0);
+        const dL = losses - (petState.lastLosses ?? 0);
+
+        if (dW > 0) {
+          petState.hunger = clamp(petState.hunger - 18 * dW, 0, 100);
+          petState.growth = clamp(petState.growth + 10 * dW, 0, 100);
+          petState.lastEvent = "feed";
+          petState.lastEventAt = now;
+        } else if (dL > 0) {
+          petState.hunger = clamp(petState.hunger + 14 * dL, 0, 100);
+          petState.growth = clamp(petState.growth - 2 * dL, 0, 100);
+          petState.lastEvent = "lose";
+          petState.lastEventAt = now;
+        } else {
+          if (now - (petState.lastEventAt || 0) > 3500) petState.lastEvent = "idle";
+        }
+
+        petState.lastWins = wins;
+        petState.lastLosses = losses;
+        petState.lastTotalPnl = totalPnl;
+        petState.lastSeenAt = now;
+
+        savePetState(petState);
+        updatePetUI(stats, recentTrade);
+      }
+
+      const petCanvas = $("pet-canvas");
+      let petTick = 0;
+
+      function pickFrame() {
+        const now = Date.now();
+        const t = petTick;
+        const fainted = petState.hatched && petState.hunger >= 92;
+        const hungry = petState.hatched && petState.hunger >= 70;
+
+        let plate = null;
+        const eventAge = now - (petState.lastEventAt || 0);
+        if (petState.lastEvent === "feed" && eventAge < 1800) plate = FRAMES.plate_full;
+        else if (petState.lastEvent === "lose" && eventAge < 2200) plate = FRAMES.plate_empty;
+        else if (hungry || fainted) plate = FRAMES.plate_empty;
+
+        if (!petState.hatched) {
+          const base = t % 18 < 9 ? FRAMES.egg_idle1 : FRAMES.egg_idle2;
+          return { base, plate: null };
+        }
+
+        if (fainted) {
+          const base = petState.petType === "cat" ? FRAMES.cat_faint : FRAMES.dog_faint;
+          return { base, plate };
+        }
+
+        if (hungry) {
+          const base = petState.petType === "cat" ? FRAMES.cat_sad : FRAMES.dog_sad;
+          return { base, plate };
+        }
+
+        if (petState.lastEvent === "feed" && eventAge < 2200) {
+          if (petState.petType === "cat") {
+            const blink = t % 12 < 2;
+            const base = blink ? FRAMES.cat_blink : (t % 18 < 9 ? FRAMES.cat_idle1 : FRAMES.cat_idle2);
+            return { base, plate };
+          } else {
+            const base = t % 18 < 9 ? FRAMES.dog_idle1 : FRAMES.dog_idle2;
+            return { base, plate };
+          }
+        }
+
+        if (petState.lastEvent === "lose" && eventAge < 2200) {
+          const base = petState.petType === "cat" ? FRAMES.cat_sad : FRAMES.dog_sad;
+          return { base, plate };
+        }
+
+        if (petState.petType === "cat") {
+          const blink = t % 45 === 0 || t % 45 === 1;
+          const base = blink ? FRAMES.cat_blink : (t % 18 < 9 ? FRAMES.cat_idle1 : FRAMES.cat_idle2);
+          return { base, plate };
+        } else {
+          const base = t % 18 < 9 ? FRAMES.dog_idle1 : FRAMES.dog_idle2;
+          return { base, plate };
         }
       }
 
-      function renderPet(deltaInfo){
-        pet=loadPet();
-        const screen=$("pet-screen");
-        const mode=animMode(pet);
-        const t=Date.now();
-
-        maybeBlink(pet);
-        const blinking = t <= (pet.blinkUntil||0);
-
-        const bob = Math.sin(t/240)*1.2 + Math.sin(t/900)*0.7;
-
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-
-        const sp = (pet.species==="dog") ? "dog" : "cat";
-
-        // ✅ FIX: fainted shows a *fainted animal*, not a blob/stone
-        if(pet.fainted && pet.hatched){
-          screen.classList.remove("shake");
-          drawCentered(FRAMES[`${sp}_faint`], bob);
-          if(mode==="revive") drawSparkles(t);
-        }
-        else if(!pet.hatched){
-          if(mode==="hatch"){
-            screen.classList.add("shake");
-            drawCentered(toggle ? FRAMES.egg_crack : FRAMES.egg_shake, bob);
-            drawSparkles(t);
-          } else {
-            screen.classList.remove("shake");
-            drawCentered(toggle ? FRAMES.egg_shake : FRAMES.egg_idle, bob);
-          }
-        } else {
-          screen.classList.remove("shake");
-          const stage = pet.stage;
-
-          let action="idle";
-          if(mode==="eat") action="idle";
-          else if(mode==="sad") action="sad";
-          else {
-            const wantsWalk = (pet.hunger>60) ? true : (Math.random()<0.16);
-            action = wantsWalk ? "walk" : "idle";
-          }
-
-          const frame = getFrame(sp, stage, action, toggle, blinking && action==="idle");
-          drawCentered(frame, bob);
-
-          if(mode==="eat"){
-            drawCentered(FRAMES.bowl_food, 18);
-            drawSparkles(t);
-          } else if(mode==="sad"){
-            drawCentered(FRAMES.plate_empty, 18);
-          } else {
-            if(pet.lastEvent==="food") drawCentered(FRAMES.bowl_food, 18);
-            if(pet.lastEvent==="empty") drawCentered(FRAMES.plate_empty, 18);
-          }
-
-          if(stage==="hatchling") drawCentered(FRAMES.eggshell_bits, 18);
-          if(stage==="teen") drawCentered(FRAMES.scarf_teen, 2);
-          if(stage==="adult") drawCentered(FRAMES.crown_adult, 0);
-        }
-
-        pet.stage = stageFromXp(pet.xp, pet.hatched);
-
-        $("pet-mood").textContent=moodText(pet);
-        $("pet-stage").textContent=badgeText(pet);
-
-        const xpp=pct(pet.xp);
-        $("pet-xp-bar").style.width=xpp+"%";
-        $("pet-xp-text").textContent=xpp+"%";
-
-        const hp=pct(pet.hunger);
-        $("pet-hunger-bar").style.width=hp+"%";
-        $("pet-hunger-text").textContent=hp+"%";
-
-        if(pet.fainted){
-          $("pet-subtext").textContent="It fainted from hunger. It won’t reset — feed it wins to revive 🍗";
-        } else if(!pet.hatched){
-          $("pet-subtext").textContent="Egg stays until overall PnL turns positive… then it hatches into a random cat or dog 🥚✨";
-        } else {
-          const spName=pet.species==="dog"?"dog":"cat";
-          let msg="Wins are food 🍗. Losses are empty plates 🍽️.";
-          if(pet.hunger>=85) msg="Starving… feed it wins 🍗😿";
-          else if(pet.hunger>=65) msg="Hungry… it paces more when hungry 🐾";
-          else if(mode==="eat") msg="Yum! A win fed it 🍗✨";
-          else if(mode==="sad") msg="Ouch… empty plate 🍽️";
-          $("pet-subtext").textContent=`Hatched as a ${spName}. Stage: ${pet.stage}. ${msg}`;
-        }
-
-        const dbg=[];
-        if(deltaInfo?.dWins) dbg.push(`+${deltaInfo.dWins} win`);
-        if(deltaInfo?.dLosses) dbg.push(`+${deltaInfo.dLosses} loss`);
-        $("pet-debug").textContent=dbg.join(", ");
-
-        savePet(pet);
-
-        toggle = (Math.floor(t/180) % 2) === 0 ? !toggle : toggle;
+      function petLoop() {
+        petTick++;
+        const { base, plate } = pickFrame();
+        drawComposite(petCanvas, base, plate);
+        requestAnimationFrame(petLoop);
       }
 
-      $("pet-reset-btn").addEventListener("click",()=>{
-        if(confirm("Reset the pet back to egg? (This does not affect bot data)")){
-          pet=resetPet();
-          renderPet(null);
-        }
-      });
+      // =============================
+      // Dashboard fetch + hydrate
+      // =============================
+      async function refreshDashboard() {
+        try {
+          const res = await fetch("/data");
+          const data = await res.json();
 
-      // ---------- refresh ----------
-      async function refreshDashboard(){
-        try{
-          const res=await fetch("/data");
-          const data=await res.json();
+          $("metric-total-trades").textContent = data.total_trades ?? 0;
+          $("metric-wins").textContent = (data.wins ?? 0) + " wins";
+          $("metric-losses").textContent = (data.losses ?? 0) + " losses";
+          $("metric-win-rate").textContent = formatPercent(data.win_rate ?? 0, 1);
 
-          $("metric-total-trades").textContent=data.total_trades??0;
-          $("metric-wins").textContent=(data.wins??0)+" wins";
-          $("metric-losses").textContent=(data.losses??0)+" losses";
+          const avgPnl = (data.total_trades ?? 0) > 0 ? (data.total_pnl_usd ?? 0) / data.total_trades : 0;
+          $("metric-avg-pnl").textContent = formatUsd(avgPnl);
 
-          const winRate=data.win_rate!=null?data.win_rate:0;
-          $("metric-win-rate").textContent=formatPercent(winRate,1);
+          const totalPnl = data.total_pnl_usd ?? 0;
+          const pnlEl = $("metric-total-pnl");
+          pnlEl.textContent = formatUsd(totalPnl);
+          pnlEl.classList.remove("positive", "negative");
+          pnlEl.classList.add(totalPnl >= 0 ? "positive" : "negative");
 
-          const totalTrades=data.total_trades??0;
-          const totalPnl=Number(data.total_pnl_usd??0);
-          const avgPnl=totalTrades?(totalPnl/totalTrades):0;
-          $("metric-avg-pnl").textContent=formatUsd(avgPnl);
-
-          const pnlEl=$("metric-total-pnl");
-          pnlEl.textContent=formatUsd(totalPnl);
-          pnlEl.classList.remove("positive","negative");
-          pnlEl.classList.add(totalPnl>=0?"positive":"negative");
-
-          updateEquityChart(data.equity_curve||[]);
+          updateEquityChart(data.equity_curve || []);
           updateBotStatus(data.bot_status);
-          updatePerMarket(data.per_market||[]);
-          updateRecentTrades(data.recent_trades||[]);
-          updateAdvancedMetrics(data.advanced_metrics, data.max_drawdown_usd);
+          updatePerMarket(data.per_market || []);
+          updateRecentTrades(data.recent_trades || []);
+          updateAdvancedMetrics(data.advanced_metrics);
 
-          pet=loadPet();
-          applyTimeHunger(pet);
-
-          // keep species once hatched (never lose identity)
-          if(pet.hatched && !pet.species) pet.species = (Math.random()<0.5 ? "cat" : "dog");
-
-          maybeHatch(pet, totalPnl);
-
-          const deltaInfo=processTradeDeltas(pet, data);
-          updateFaintState(pet);
-
-          savePet(pet);
-          renderPet(deltaInfo);
-
-        }catch(err){
+          petApplyChangesFromStats({
+            wins: data.wins ?? 0,
+            losses: data.losses ?? 0,
+            total_pnl_usd: data.total_pnl_usd ?? 0,
+            recent_trades: data.recent_trades || [],
+          });
+        } catch (err) {
           console.error("Failed to refresh dashboard", err);
         }
       }
 
-      // ---------- pet loop ----------
-      function petLoop(){
-        const now=Date.now();
-        if(now-lastRender > TICK_MS){
-          lastRender=now;
-          renderPet(null);
-        }
-        requestAnimationFrame(petLoop);
-      }
-
-      // ---------- init ----------
-      document.addEventListener("DOMContentLoaded",()=>{
+      // =============================
+      // Init
+      // =============================
+      document.addEventListener("DOMContentLoaded", () => {
         setupTvTabs();
         loadTradingView(currentSymbol);
-        renderPet(null);
         refreshDashboard();
         setInterval(refreshDashboard, 10_000);
-        requestAnimationFrame(petLoop);
+        petLoop();
       });
     </script>
   </body>
-</html>
+              </html>
