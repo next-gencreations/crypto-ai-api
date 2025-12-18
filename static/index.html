@@ -134,52 +134,38 @@
 
       .footer { margin-top: 18px; font-size: 11px; color: var(--text-muted); text-align: center; }
 
-      /* ----------------------------
-         BOT PET UI (more Tamagotchi)
-      ---------------------------- */
-      .pet-wrap { display: grid; grid-template-columns: 86px 1fr; gap: 12px; align-items: center; }
-
+      /* PET */
+      .pet-wrap { display: grid; grid-template-columns: 128px 1fr; gap: 14px; align-items: center; }
       .pet-screen {
-        width: 82px;
-        height: 82px;
-        border-radius: 18px;
+        width: 122px; height: 122px;
+        border-radius: 22px;
         border: 1px solid rgba(148, 163, 184, 0.15);
         background:
-          radial-gradient(circle at 20% 20%, rgba(59,130,246,0.18), transparent 55%),
-          radial-gradient(circle at 80% 60%, rgba(34,197,94,0.16), transparent 55%),
+          radial-gradient(circle at 18% 18%, rgba(59,130,246,0.20), transparent 55%),
+          radial-gradient(circle at 85% 62%, rgba(34,197,94,0.16), transparent 55%),
           linear-gradient(180deg, rgba(15,23,42,0.85), rgba(2,6,23,0.92));
-        display: grid;
-        place-items: center;
-        position: relative;
-        overflow: hidden;
-        box-shadow: inset 0 0 18px rgba(56,189,248,0.08);
+        display: grid; place-items: center;
+        position: relative; overflow: hidden;
+        box-shadow: inset 0 0 22px rgba(56,189,248,0.10);
       }
-      /* scanlines */
       .pet-screen::before {
-        content: "";
-        position: absolute;
-        inset: 0;
+        content: ""; position: absolute; inset: 0;
         background: repeating-linear-gradient(
           180deg,
           rgba(255,255,255,0.03),
           rgba(255,255,255,0.03) 1px,
           transparent 2px,
-          transparent 4px
+          transparent 5px
         );
         opacity: 0.22;
         pointer-events: none;
       }
-      /* glass sheen */
       .pet-screen::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(120deg, rgba(255,255,255,0.10), transparent 45%);
-        pointer-events: none;
-        opacity: 0.35;
+        content: ""; position: absolute; inset: 0;
+        background: linear-gradient(120deg, rgba(255,255,255,0.12), transparent 45%);
+        pointer-events: none; opacity: 0.35;
       }
-
-      canvas#pet-canvas { image-rendering: pixelated; width: 64px; height: 64px; }
+      canvas#pet-canvas { image-rendering: pixelated; width: 96px; height: 96px; }
 
       .pet-meta .pet-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
       .pet-meta .pet-title b { font-size: 14px; letter-spacing: 0.02em; }
@@ -229,8 +215,7 @@
         color: var(--text-muted);
         border: 1px solid rgba(148, 163, 184, 0.12);
       }
-
-      .shake { animation: shake 250ms ease-in-out infinite; }
+      .shake { animation: shake 240ms ease-in-out infinite; }
       @keyframes shake {
         0% { transform: translate(0,0) rotate(0deg); }
         25% { transform: translate(1px,-1px) rotate(-1deg); }
@@ -252,10 +237,7 @@
         <div class="card">
           <h2>Total Trades</h2>
           <div class="metric-main" id="metric-total-trades">0</div>
-          <div class="metric-sub">
-            <span id="metric-wins">0 wins</span> /
-            <span id="metric-losses">0 losses</span>
-          </div>
+          <div class="metric-sub"><span id="metric-wins">0 wins</span> / <span id="metric-losses">0 losses</span></div>
         </div>
 
         <div class="card">
@@ -273,7 +255,7 @@
         <div class="card">
           <h2>Bot Status</h2>
           <div class="card-row" style="margin-bottom: 6px">
-            <div class="status-pill" id="bot-status-pill">
+            <div class="status-pill">
               <span class="status-dot status-unknown" id="bot-status-dot"></span>
               <span id="bot-status-label">Unknown</span>
             </div>
@@ -282,12 +264,11 @@
           <div class="metric-sub" id="bot-status-last">Waiting for heartbeat…</div>
         </div>
 
-        <!-- BOT PET CARD -->
         <div class="card">
           <h2>Bot Pet</h2>
           <div class="pet-wrap">
             <div class="pet-screen" id="pet-screen">
-              <canvas id="pet-canvas" width="64" height="64"></canvas>
+              <canvas id="pet-canvas" width="96" height="96"></canvas>
             </div>
 
             <div class="pet-meta">
@@ -324,13 +305,8 @@
       </section>
 
       <section class="card section-card">
-        <div class="card-row" style="margin-bottom: 6px">
-          <div>
-            <div class="section-title">Advanced Analytics</div>
-            <div class="section-subtitle">Deeper stats from your closed trades.</div>
-          </div>
-        </div>
-
+        <div class="section-title">Advanced Analytics</div>
+        <div class="section-subtitle">Deeper stats from your closed trades.</div>
         <div class="advanced-grid">
           <div><div class="adv-label">Profit Factor</div><div class="adv-value" id="adv-profit-factor">—</div></div>
           <div><div class="adv-label">Avg Win (USD)</div><div class="adv-value" id="adv-avg-win">—</div></div>
@@ -360,11 +336,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Market</th>
-                    <th class="text-right">Trades</th>
-                    <th class="text-right">Win Rate</th>
-                    <th class="text-right">Total PnL</th>
-                    <th class="text-right">Avg PnL</th>
+                    <th>Market</th><th class="text-right">Trades</th><th class="text-right">Win Rate</th><th class="text-right">Total PnL</th><th class="text-right">Avg PnL</th>
                   </tr>
                 </thead>
                 <tbody id="per-market-body">
@@ -380,11 +352,7 @@
             <div class="card" style="padding: 0">
               <table>
                 <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Market</th>
-                    <th class="text-right">PnL (USD)</th>
-                  </tr>
+                  <tr><th>Time</th><th>Market</th><th class="text-right">PnL (USD)</th></tr>
                 </thead>
                 <tbody id="recent-trades-body">
                   <tr><td colspan="3" class="muted">No trades yet.</td></tr>
@@ -397,9 +365,7 @@
 
       <section class="section-card">
         <div class="section-title">Market Candlestick Charts</div>
-        <div class="section-subtitle">
-          Live BTC-USD candlesticks on your main venues. Charts are from TradingView only (they do not place trades).
-        </div>
+        <div class="section-subtitle">TradingView charts only (visual). No real trading.</div>
 
         <div class="card">
           <div class="card-row" style="margin-bottom: 10px">
@@ -410,64 +376,51 @@
               <button class="tv-tab" data-symbol="CRYPTOCOM:BTCUSD">Crypto.com</button>
             </div>
           </div>
-
           <div class="tradingview-widget-container" style="height: 400px">
             <div id="tv-chart"></div>
-          </div>
-
-          <div class="section-subtitle" style="margin-top: 10px">
-            If a chart fails to load for a venue, adjust the TradingView symbol in the HTML
-            (e.g. <span class="muted">COINBASE:BTCUSD, KUCOIN:BTCUSDT, CRYPTOCOM:BTCUSD</span>).
           </div>
         </div>
       </section>
 
-      <div class="footer">
-        Bot is running on Render (paper trading only). Keep it training for 2–3 weeks before making AI changes.
-      </div>
+      <div class="footer">Bot is running on Render (paper trading only).</div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script src="https://s3.tradingview.com/tv.js"></script>
 
     <script>
-      // ------------------------------
-      // Utilities
-      // ------------------------------
-      function $(id) { return document.getElementById(id); }
+      // ---------- utils ----------
+      function $(id){ return document.getElementById(id); }
       function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
       function formatUsd(v){
-        if (v===null||v===undefined||isNaN(v)) return "—";
-        const sign = v<0 ? "-" : "";
-        const abs = Math.abs(v);
-        return sign + "$" + abs.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(v===null||v===undefined||isNaN(v)) return "—";
+        const sign=v<0?"-":"";
+        const abs=Math.abs(v);
+        return sign+"$"+abs.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
       }
       function formatPercent(v,d=1){
-        if (v===null||v===undefined||isNaN(v)) return "—";
-        return v.toFixed(d) + "%";
+        if(v===null||v===undefined||isNaN(v)) return "—";
+        return v.toFixed(d)+"%";
       }
       function formatNumber(v,d=2){
-        if (v===null||v===undefined||isNaN(v)) return "—";
+        if(v===null||v===undefined||isNaN(v)) return "—";
         return v.toFixed(d);
       }
       function formatTime(iso){
         const d=new Date(iso);
-        if (Number.isNaN(d.getTime())) return iso;
-        return d.toLocaleString();
+        return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
       }
 
-      // ------------------------------
-      // Equity Chart
-      // ------------------------------
+      // ---------- chart ----------
       let equityChart=null;
       function updateEquityChart(points){
         const ctx=$("equity-chart");
-        const labels = points.map(p=>{
-          const t=p.time_utc || p.time || "";
+        const labels=points.map(p=>{
+          const t=p.time_utc||p.time||"";
           const d=new Date(t);
           return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString();
         });
-        const data = points.map(p=>p.equity_usd);
+        const data=points.map(p=>p.equity_usd);
 
         if(equityChart){
           equityChart.data.labels=labels;
@@ -489,42 +442,16 @@
         });
       }
 
-      // ------------------------------
-      // Bot status
-      // ------------------------------
+      // ---------- status ----------
       function updateBotStatus(status){
-        const dot=$("bot-status-dot");
-        const label=$("bot-status-label");
-        const minutesEl=$("bot-status-minutes");
-        const lastEl=$("bot-status-last");
-
         const s=status?.status||"unknown";
-        label.textContent=s.charAt(0).toUpperCase()+s.slice(1);
-        dot.className="status-dot status-"+s;
-
-        minutesEl.textContent = status?.minutes_since!=null ? (status.minutes_since+" min since heartbeat") : "";
-        lastEl.textContent = status?.last_heartbeat ? ("Last heartbeat: "+formatTime(status.last_heartbeat)) : "Heartbeat file not found yet.";
+        $("bot-status-label").textContent=s.charAt(0).toUpperCase()+s.slice(1);
+        $("bot-status-dot").className="status-dot status-"+s;
+        $("bot-status-minutes").textContent=status?.minutes_since!=null ? (status.minutes_since+" min since heartbeat") : "";
+        $("bot-status-last").textContent=status?.last_heartbeat ? ("Last heartbeat: "+formatTime(status.last_heartbeat)) : "Heartbeat file not found yet.";
       }
 
-      // ------------------------------
-      // Advanced metrics
-      // ------------------------------
-      function updateAdvancedMetrics(adv,maxDdFromRoot){
-        const a=adv||{};
-        $("adv-profit-factor").textContent = a.profit_factor==null ? "—" : formatNumber(a.profit_factor,2);
-        $("adv-avg-win").textContent = a.avg_win_usd==null ? "—" : formatUsd(a.avg_win_usd);
-        $("adv-avg-loss").textContent = a.avg_loss_usd==null ? "—" : formatUsd(a.avg_loss_usd);
-        $("adv-best-trade").textContent = a.best_trade_usd==null ? "—" : formatUsd(a.best_trade_usd);
-        $("adv-worst-trade").textContent = a.worst_trade_usd==null ? "—" : formatUsd(a.worst_trade_usd);
-        const maxdd = (a.max_drawdown_usd!=null)?a.max_drawdown_usd:maxDdFromRoot;
-        $("adv-max-dd").textContent = maxdd==null ? "—" : formatUsd(maxdd);
-        $("adv-recovery-factor").textContent = a.recovery_factor==null ? "—" : formatNumber(a.recovery_factor,2);
-        $("adv-sharpe").textContent = a.sharpe_ratio==null ? "—" : formatNumber(a.sharpe_ratio,2);
-      }
-
-      // ------------------------------
-      // Per-market + recent trades
-      // ------------------------------
+      // ---------- tables ----------
       function updatePerMarket(perMarket){
         const body=$("per-market-body");
         body.innerHTML="";
@@ -533,18 +460,17 @@
           return;
         }
         perMarket.forEach(m=>{
-          const row=document.createElement("tr");
-          row.innerHTML=`
+          const tr=document.createElement("tr");
+          tr.innerHTML=`
             <td>${m.market}</td>
             <td class="text-right">${m.trades}</td>
             <td class="text-right">${formatPercent(m.win_rate,1)}</td>
             <td class="text-right">${formatUsd(m.total_pnl)}</td>
             <td class="text-right">${formatUsd(m.avg_pnl)}</td>
           `;
-          body.appendChild(row);
+          body.appendChild(tr);
         });
       }
-
       function updateRecentTrades(trades){
         const body=$("recent-trades-body");
         body.innerHTML="";
@@ -554,19 +480,29 @@
         }
         trades.forEach(t=>{
           const v=Number(t.pnl_usd);
-          const row=document.createElement("tr");
-          row.innerHTML=`
+          const tr=document.createElement("tr");
+          tr.innerHTML=`
             <td>${t.time?formatTime(t.time):"—"}</td>
             <td>${t.market||"—"}</td>
             <td class="text-right"><span class="pill ${v>=0?"positive":"negative"}">${formatUsd(v)}</span></td>
           `;
-          body.appendChild(row);
+          body.appendChild(tr);
         });
       }
+      function updateAdvancedMetrics(adv, maxDdFromRoot){
+        const a=adv||{};
+        $("adv-profit-factor").textContent=a.profit_factor==null?"—":formatNumber(a.profit_factor,2);
+        $("adv-avg-win").textContent=a.avg_win_usd==null?"—":formatUsd(a.avg_win_usd);
+        $("adv-avg-loss").textContent=a.avg_loss_usd==null?"—":formatUsd(a.avg_loss_usd);
+        $("adv-best-trade").textContent=a.best_trade_usd==null?"—":formatUsd(a.best_trade_usd);
+        $("adv-worst-trade").textContent=a.worst_trade_usd==null?"—":formatUsd(a.worst_trade_usd);
+        const maxdd=(a.max_drawdown_usd!=null)?a.max_drawdown_usd:maxDdFromRoot;
+        $("adv-max-dd").textContent=maxdd==null?"—":formatUsd(maxdd);
+        $("adv-recovery-factor").textContent=a.recovery_factor==null?"—":formatNumber(a.recovery_factor,2);
+        $("adv-sharpe").textContent=a.sharpe_ratio==null?"—":formatNumber(a.sharpe_ratio,2);
+      }
 
-      // ------------------------------
-      // TradingView
-      // ------------------------------
+      // ---------- TV ----------
       let currentSymbol="COINBASE:BTCUSD";
       function loadTradingView(symbol){
         currentSymbol=symbol;
@@ -580,10 +516,9 @@
         });
       }
       function setupTvTabs(){
-        const tabs=document.querySelectorAll(".tv-tab");
-        tabs.forEach(tab=>{
+        document.querySelectorAll(".tv-tab").forEach(tab=>{
           tab.addEventListener("click",()=>{
-            tabs.forEach(t=>t.classList.remove("active"));
+            document.querySelectorAll(".tv-tab").forEach(t=>t.classList.remove("active"));
             tab.classList.add("active");
             loadTradingView(tab.dataset.symbol);
           });
@@ -591,32 +526,35 @@
       }
 
       // ==========================================================
-      // BOT PET (Full Hog + More Realistic)
+      // PET (WOW: stage-specific sprites + smoother animation)
       // ==========================================================
-      const PET_KEY="botpet_v2";
-
+      const PET_KEY="botpet_wow_v1"; // new key so it starts clean for this art set
       const DEFAULT_PET={
         hatched:false,
-        species:null,          // "cat" or "dog"
-        stage:"egg",           // "egg" | "baby" | "teen" | "adult"
+        species:null,            // cat/dog
+        stage:"egg",             // egg/hatchling/baby/teen/adult
         xp:0,
         hunger:35,
+        fainted:false,
         mood:"watching",
         lastTotalTrades:0,
         lastWins:0,
         lastLosses:0,
-        lastEquity:null,
         lastEventAt:Date.now(),
-        anim:{mode:"idle",until:0},
-        lastEvent:"none",      // "food" | "empty" | "none"
-        hatchedAt:null
+        anim:{mode:"idle", until:0},
+        lastEvent:"none",
+        blinkUntil:0,
+        blinkNext: Date.now() + 2500 + Math.random()*2500,
       };
 
-      // tweak knobs
-      const HATCH_PNL_THRESHOLD = 0.01;     // first time total PnL > 0 hatches
-      const WIPEOUT_EQUITY_THRESHOLD = 850; // auto reset to egg if equity drops under this
-      const HUNGER_TIME_RATE = 1.1;         // hunger drift per hour
-      const TICK_MS = 160;                  // animation frame interval
+      // knobs
+      const HATCH_PNL_THRESHOLD=0.01;
+      const HUNGER_TIME_RATE=1.15;   // per hour drift
+      const TICK_MS=120;
+
+      // faint / revive
+      const FAINT_AT=100;
+      const REVIVE_BELOW=85;
 
       function loadPet(){
         try{
@@ -627,28 +565,95 @@
         }catch{ return structuredClone(DEFAULT_PET); }
       }
       function savePet(p){ localStorage.setItem(PET_KEY, JSON.stringify(p)); }
-      function resetPet(hard=true){
-        const p=structuredClone(DEFAULT_PET);
-        if(!hard){
-          const old=loadPet();
-          p.lastTotalTrades=old.lastTotalTrades||0;
-          p.lastWins=old.lastWins||0;
-          p.lastLosses=old.lastLosses||0;
-          p.lastEquity=old.lastEquity||null;
-        }
-        savePet(p);
-        return p;
+      function resetPet(){ const p=structuredClone(DEFAULT_PET); savePet(p); return p; }
+
+      function setAnim(p,mode,ms){ p.anim={mode, until: Date.now()+ms}; }
+      function animMode(p){ return (Date.now() <= (p.anim?.until||0)) ? (p.anim?.mode||"idle") : "idle"; }
+      function pickSpeciesRandom(){ return Math.random()<0.5 ? "cat" : "dog"; }
+
+      function stageFromXp(xp, hatched){
+        if(!hatched) return "egg";
+        if(xp < 10) return "hatchling";
+        if(xp < 30) return "baby";
+        if(xp < 65) return "teen";
+        return "adult";
       }
 
-      // ------------------------------
-      // Pixel renderer
-      // ------------------------------
-      const petCanvas=$("pet-canvas");
-      const ctx=petCanvas.getContext("2d");
+      function applyTimeHunger(p){
+        const now=Date.now();
+        const dt=Math.max(0, now-(p.lastEventAt||now));
+        const add=(dt/(60*60*1000))*HUNGER_TIME_RATE;
+        p.hunger = clamp(p.hunger + add, 0, 100);
+        p.lastEventAt=now;
+      }
+
+      function maybeHatch(p, totalPnl){
+        if(p.hatched) return false;
+        if(totalPnl > HATCH_PNL_THRESHOLD){
+          p.hatched=true;
+          p.species=pickSpeciesRandom();
+          p.xp=Math.max(p.xp, 2);
+          p.stage="hatchling";
+          p.lastEvent="none";
+          setAnim(p,"hatch",2000);
+          return true;
+        }
+        return false;
+      }
+
+      function processTradeDeltas(p, data){
+        const totalTrades=data.total_trades??0;
+        const wins=data.wins??0;
+        const losses=data.losses??0;
+
+        const dTrades=totalTrades-(p.lastTotalTrades||0);
+        const dWins=wins-(p.lastWins||0);
+        const dLosses=losses-(p.lastLosses||0);
+
+        p.lastTotalTrades=totalTrades;
+        p.lastWins=wins;
+        p.lastLosses=losses;
+
+        if(dTrades<=0) return {dTrades:0,dWins:0,dLosses:0};
+
+        if(dWins>0){
+          p.xp = clamp(p.xp + dWins*5, 0, 100);
+          p.hunger = clamp(p.hunger - dWins*14, 0, 100);
+          p.mood="happy";
+          p.lastEvent="food";
+          setAnim(p,"eat",1400);
+        }
+        if(dLosses>0 && !p.fainted){
+          p.hunger = clamp(p.hunger + dLosses*13, 0, 100);
+          p.mood="sad";
+          p.lastEvent="empty";
+          setAnim(p,"sad",1400);
+        }
+        return {dTrades,dWins,dLosses};
+      }
+
+      function updateFaintState(p){
+        if(!p.hatched) return;
+        if(!p.fainted && p.hunger >= FAINT_AT){
+          p.fainted=true;
+          p.mood="sad";
+          setAnim(p,"faint",4500);
+        }
+        if(p.fainted && p.hunger <= REVIVE_BELOW){
+          p.fainted=false;
+          p.mood="happy";
+          setAnim(p,"revive",1800);
+        }
+      }
+
+      // ---------- pixel renderer ----------
+      const canvas=$("pet-canvas");
+      const ctx=canvas.getContext("2d");
+      const SCALE=3;           // 32*3=96
 
       const PALETTE={
         " ": null,
-        ".": "rgba(0,0,0,0.25)",
+        ".": "rgba(0,0,0,0.18)",
         "#": "#0b1220",
         "W": "#e6edf7",
         "G": "#94a3b8",
@@ -658,818 +663,1296 @@
         "B": "#60a5fa",
         "R": "#ef4444",
         "O": "#f97316",
-        "K": "#111827"
+        "K": "#111827",
+        "T": "#22c55e"
       };
 
       function drawFrame(frame, ox, oy, scale){
-        const h=frame.length;
-        const w=frame[0].length;
-        for(let y=0;y<h;y++){
-          for(let x=0;x<w;x++){
-            const ch=frame[y][x];
+        for(let y=0;y<frame.length;y++){
+          const row=frame[y];
+          for(let x=0;x<row.length;x++){
+            const ch=row[x];
             const col=PALETTE[ch];
             if(!col) continue;
             ctx.fillStyle=col;
-            ctx.fillRect(ox+x*scale, oy+y*scale, scale, scale);
+            ctx.fillRect(ox + x*scale, oy + y*scale, scale, scale);
           }
         }
       }
 
-      // 24x24 sprites (more detail), drawn at scale 2 into 64x64 (24*2=48) centered
-      const FRAMES={
-        // EGG sequence
-        egg_idle:[
-          "        ######         ",
-          "      ##GGGGGG##       ",
-          "     #GGGWWWWGGG#      ",
-          "    #GGWWGGGGWWGG#     ",
-          "   #GGWGGGGGGGGWGG#    ",
-          "   #GGWGGGGGGGGWGG#    ",
-          "   #GGWWGGGGGGWWGG#    ",
-          "   #GGGWWWWWWWWGGG#    ",
-          "   #GGGGGGGGGGGGGG#    ",
-          "    #GGGGGGGGGGGG#     ",
-          "     #GGGGGGGGGG#      ",
-          "      ##GGGGGG##       ",
-          "        ######         ",
-          "                       ",
-          "       .........       ",
-          "      ...........      ",
-          "       .........       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        egg_shake:[
-          "       ######          ",
-          "     ##GGGGGG##        ",
-          "    #GGGWWWWGGG#       ",
-          "   #GGWWGGGGWWGG#      ",
-          "  #GGWGGGGGGGGWGG#     ",
-          "  #GGWGGGGGGGGWGG#     ",
-          "  #GGWWGGGGGGWWGG#     ",
-          "  #GGGWWWWWWWWGGG#     ",
-          "  #GGGGGGGGGGGGGG#     ",
-          "   #GGGGGGGGGGGG#      ",
-          "    #GGGGGGGGGG#       ",
-          "     ##GGGGGG##        ",
-          "       ######          ",
-          "                       ",
-          "      .........        ",
-          "     ...........       ",
-          "      .........        ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        egg_crack:[
-          "        ######         ",
-          "      ##GGGGGG##       ",
-          "     #GGGWWWWGGG#      ",
-          "    #GGWWGG##WWGG#     ",
-          "   #GGWGGG##GGGWGG#    ",
-          "   #GGWGG##GGGGWGG#    ",
-          "   #GGWWG##GGGWWGG#    ",
-          "   #GGGWW##WWWWGGG#    ",
-          "   #GGGGG##GGGGGGG#    ",
-          "    #GGGG##GGGGGG#     ",
-          "     #GGG##GGGGG#      ",
-          "      ##GGGGGG##       ",
-          "        ######         ",
-          "                       ",
-          "       .........       ",
-          "      ...........      ",
-          "       .........       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        sparkle1:[
-          "                       ",
-          "   B   B        B      ",
-          "      B   B            ",
-          "        ######         ",
-          "      ##GGGGGG##       ",
-          "     #GGGWWWWGGG#      ",
-          "    #GGWWGG##WWGG#     ",
-          "   #GGWGGG##GGGWGG#    ",
-          "   #GGWGG##GGGGWGG#    ",
-          "   #GGWWG##GGGWWGG#    ",
-          "   #GGGWW##WWWWGGG#    ",
-          "   #GGGGG##GGGGGGG#    ",
-          "    #GGGG##GGGGGG#     ",
-          "     #GGG##GGGGG#      ",
-          "      ##GGGGGG##       ",
-          "        ######         ",
-          "       .........       ",
-          "      ...........      ",
-          "       .........       ",
-          "            B          ",
-          "       B               ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        sparkle2:[
-          "                       ",
-          "      B        B       ",
-          "   B       B           ",
-          "        ######         ",
-          "      ##GGGGGG##       ",
-          "     #GGGWWWWGGG#      ",
-          "    #GGWWGG##WWGG#     ",
-          "   #GGWGGG##GGGWGG#    ",
-          "   #GGWGG##GGGGWGG#    ",
-          "   #GGWWG##GGGWWGG#    ",
-          "   #GGGWW##WWWWGGG#    ",
-          "   #GGGGG##GGGGGGG#    ",
-          "    #GGGG##GGGGGG#     ",
-          "     #GGG##GGGGG#      ",
-          "      ##GGGGGG##       ",
-          "        ######         ",
-          "       .........       ",
-          "      ...........      ",
-          "       .........       ",
-          "                       ",
-          "             B         ",
-          "        B              ",
-          "                       ",
-          "                       ",
-        ],
-
-        // BOWL / PLATE overlays (bottom of screen)
-        bowl_food:[
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "        #######        ",
-          "       #WWWWWWW#       ",
-          "       #YYWYYYW#       ",
-          "        #WWWWW#        ",
-          "         #####         ",
-          "                       ",
-        ],
-        plate_empty:[
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "         #####         ",
-          "       ##WWWWW##       ",
-          "      #WWWWWWWWW#      ",
-          "       ##WWWWW##       ",
-          "         #####         ",
-          "                       ",
-        ],
-
-        // CAT (more detailed)
-        cat_idle1:[
-          "                       ",
-          "        ##    ##       ",
-          "       #WW####WW#      ",
-          "      #WGGGGGGGGW#     ",
-          "      #WGPPGGPPGW#     ",
-          "      #WGGGGGGGGW#     ",
-          "       #WGG##GGW#      ",
-          "        #WWWWWW#       ",
-          "       ##W####W##      ",
-          "      #..##..##..#     ",
-          "      #..##..##..#     ",
-          "       ####..####      ",
-          "        ##....##       ",
-          "       #..####..#      ",
-          "       #..#  #..#      ",
-          "        ###  ###       ",
-          "          .. ..        ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        cat_idle2:[ // blink + tail flick
-          "                       ",
-          "        ##    ##       ",
-          "       #WW####WW#      ",
-          "      #WGGGGGGGGW#     ",
-          "      #WGPPGGPPGW#     ",
-          "      #WGGGGGGGGW#     ",
-          "       #WGG####W#      ",
-          "        #WWWWWW#       ",
-          "      ###W####W##      ",
-          "     #..##..##..#      ",
-          "     #..##..##..#      ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      #..####..#       ",
-          "      #..#  #..#       ",
-          "       ###  ###        ",
-          "         .. ..         ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        cat_walk1:[
-          "                       ",
-          "        ##    ##       ",
-          "       #WW####WW#      ",
-          "      #WGGGGGGGGW#     ",
-          "      #WGPPGGPPGW#     ",
-          "      #WGGGGGGGGW#     ",
-          "       #WGG##GGW#      ",
-          "        #WWWWWW#       ",
-          "     ####W####W##      ",
-          "    #..##..##..#       ",
-          "     #..##..##..#      ",
-          "      ####..####       ",
-          "        ##....##       ",
-          "         ..####..      ",
-          "          .#  #..      ",
-          "           ##  ###     ",
-          "            .. ..      ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        cat_walk2:[
-          "                       ",
-          "        ##    ##       ",
-          "       #WW####WW#      ",
-          "      #WGGGGGGGGW#     ",
-          "      #WGPPGGPPGW#     ",
-          "      #WGGGGGGGGW#     ",
-          "       #WGG##GGW#      ",
-          "        #WWWWWW#       ",
-          "      ##W####W####     ",
-          "       #..##..##..#    ",
-          "      #..##..##..#     ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      ..####..         ",
-          "      ..#  #.          ",
-          "      ###  ##          ",
-          "       .. ..           ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        cat_eat1:[
-          "                       ",
-          "        ##    ##       ",
-          "       #WW####WW#      ",
-          "      #WGGGGGGGGW#     ",
-          "      #WGPPGGPPGW#     ",
-          "      #WGGGGGGGGW#     ",
-          "       #WGG##GGW#      ",
-          "        #WWWWWW#       ",
-          "       ##W####W##      ",
-          "      #..##..##..#     ",
-          "      #..##..##..#     ",
-          "       ####..####      ",
-          "        ##....##       ",
-          "       #..####..#      ",
-          "       #..#  #..#      ",
-          "        ###  ###       ",
-          "          .. ..        ",
-          "                       ",
-          "        (bowl)         ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        cat_sad1:[
-          "                       ",
-          "        ##    ##       ",
-          "       #WW####WW#      ",
-          "      #WGGGGGGGGW#     ",
-          "      #WGRRGGRRGW#     ",
-          "      #WGGGGGGGGW#     ",
-          "       #WGG####W#      ",
-          "        #WWWWWW#       ",
-          "       ##W####W##      ",
-          "      #..##..##..#     ",
-          "      #..##..##..#     ",
-          "       ####..####      ",
-          "        ##....##       ",
-          "       #..####..#      ",
-          "         ..RR..         ",
-          "          .RR.          ",
-          "          .. ..        ",
-          "                       ",
-          "        (plate)        ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-
-        // DOG (more detailed)
-        dog_idle1:[
-          "                       ",
-          "       ##########      ",
-          "      #WWGGGGGGWW#     ",
-          "     #WGGGGGGGGGGW#    ",
-          "     #WGPPGGPPGGGW#    ",
-          "     #WGGGGGGGGGGW#    ",
-          "      #WGG####GGW#     ",
-          "       #WWWWWWWW#      ",
-          "      ##W######W##     ",
-          "     #..##..##..#      ",
-          "     #..##..##..#      ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      #..####..#       ",
-          "      #..#  #..#       ",
-          "       ###  ###        ",
-          "         .. ..         ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        dog_idle2:[ // wag + blink
-          "                       ",
-          "       ##########      ",
-          "      #WWGGGGGGWW#     ",
-          "     #WGGGGGGGGGGW#    ",
-          "     #WGPPGGPPGGGW#    ",
-          "     #WGGGGGGGGGGW#    ",
-          "      #WGG######W#     ",
-          "       #WWWWWWWW#      ",
-          "     ###W######W##     ",
-          "    #..##..##..#       ",
-          "     #..##..##..#      ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      #..####..#       ",
-          "      #..#  #..#       ",
-          "       ###  ###        ",
-          "         .. ..         ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        dog_walk1:[
-          "                       ",
-          "       ##########      ",
-          "      #WWGGGGGGWW#     ",
-          "     #WGGGGGGGGGGW#    ",
-          "     #WGPPGGPPGGGW#    ",
-          "     #WGGGGGGGGGGW#    ",
-          "      #WGG####GGW#     ",
-          "       #WWWWWWWW#      ",
-          "    ####W######W##     ",
-          "   #..##..##..#        ",
-          "    #..##..##..#       ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "        ..####..       ",
-          "          #  #..       ",
-          "          ##  ###      ",
-          "           .. ..       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        dog_walk2:[
-          "                       ",
-          "       ##########      ",
-          "      #WWGGGGGGWW#     ",
-          "     #WGGGGGGGGGGW#    ",
-          "     #WGPPGGPPGGGW#    ",
-          "     #WGGGGGGGGGGW#    ",
-          "      #WGG####GGW#     ",
-          "       #WWWWWWWW#      ",
-          "      ##W######W####   ",
-          "        #..##..##..#   ",
-          "       #..##..##..#    ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      ..####..         ",
-          "      ..#  #.          ",
-          "      ###  ##          ",
-          "       .. ..           ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        dog_sad1:[
-          "                       ",
-          "       ##########      ",
-          "      #WWGGGGGGWW#     ",
-          "     #WGGGGGGGGGGW#    ",
-          "     #WGRRGGRRGGGW#    ",
-          "     #WGGGGGGGGGGW#    ",
-          "      #WGG######W#     ",
-          "       #WWWWWWWW#      ",
-          "      ##W######W##     ",
-          "     #..##..##..#      ",
-          "     #..##..##..#      ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      #..####..#       ",
-          "        ..RR..         ",
-          "         .RR.          ",
-          "         .. ..         ",
-          "                       ",
-          "        (plate)        ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-        dog_eat1:[
-          "                       ",
-          "       ##########      ",
-          "      #WWGGGGGGWW#     ",
-          "     #WGGGGGGGGGGW#    ",
-          "     #WGPPGGPPGGGW#    ",
-          "     #WGGGGGGGGGGW#    ",
-          "      #WGG####GGW#     ",
-          "       #WWWWWWWW#      ",
-          "      ##W######W##     ",
-          "     #..##..##..#      ",
-          "     #..##..##..#      ",
-          "      ####..####       ",
-          "       ##....##        ",
-          "      #..####..#       ",
-          "      #..#  #..#       ",
-          "       ###  ###        ",
-          "         .. ..         ",
-          "                       ",
-          "        (bowl)         ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-          "                       ",
-        ],
-      };
-
-      function stageFromXp(xp){
-        if (xp < 20) return "baby";
-        if (xp < 55) return "teen";
-        return "adult";
+      function drawCentered(frame, bobY=0){
+        drawFrame(frame, 0, Math.floor(bobY), SCALE);
       }
-      function xpPct(xp){ return Math.round((clamp(xp,0,100)/100)*100); }
-      function hungerPct(h){ return Math.round(clamp(h,0,100)); }
 
-      function setAnim(pet, mode, ms){ pet.anim={mode, until: Date.now()+ms}; }
-      function animMode(pet){ return (Date.now() <= (pet.anim?.until||0)) ? (pet.anim?.mode||"idle") : "idle"; }
+      function drawSparkles(t){
+        ctx.save();
+        ctx.globalAlpha=0.85;
+        ctx.fillStyle=PALETTE["B"];
+        const pts=[[14,14],[80,20],[22,78],[74,72]];
+        pts.forEach((p,i)=>{
+          const pulse=(Math.sin((t/120)+(i*1.2))*0.5+0.5);
+          const r=1+Math.floor(pulse*2);
+          ctx.fillRect(p[0]-r,p[1],r*2,1);
+          ctx.fillRect(p[0],p[1]-r,1,r*2);
+        });
+        ctx.restore();
+      }
 
-      function pickSpeciesRandom(){ return Math.random()<0.5 ? "cat" : "dog"; }
+      function badgeText(p){
+        if(!p.hatched) return "Egg";
+        if(p.fainted) return "Fainted";
+        const sp=p.species==="dog"?"Dog":"Cat";
+        const st=p.stage||"hatchling";
+        if(st==="hatchling") return "Hatchling "+sp;
+        if(st==="baby") return "Baby "+sp;
+        if(st==="teen") return "Teen "+sp;
+        return "Adult "+sp;
+      }
 
-      function decideMoodText(pet){
-        if(!pet.hatched) return "Hatching… 🥚";
-        if(pet.hunger>=85) return "Starving 😿";
-        if(pet.hunger>=65) return "Hungry 🐾";
-        if(pet.mood==="sad") return "Sad 😢";
+      function moodText(p){
+        if(p.fainted) return "Fainted ☠️ (needs wins)";
+        if(!p.hatched) return "Incubating… 🥚";
+        if(p.hunger>=85) return "Starving 😿";
+        if(p.hunger>=65) return "Hungry 🐾";
+        if(p.mood==="sad") return "Sad 😢";
         return "Happy 😊";
       }
 
-      function badgeText(pet){
-        if(!pet.hatched) return "Egg";
-        const sp = pet.species==="dog" ? "Dog" : "Cat";
-        const st = pet.stage || "baby";
-        return (st==="adult" ? "Adult " : st==="teen" ? "Teen " : "Baby ") + sp;
-      }
+      function pct(v){ return Math.round(clamp(v,0,100)); }
 
-      function applyTimeHunger(pet){
-        const now=Date.now();
-        const dt=Math.max(0, now-(pet.lastEventAt||now));
-        const add=(dt/(60*60*1000))*HUNGER_TIME_RATE;
-        pet.hunger=clamp(pet.hunger+add,0,100);
-        pet.lastEventAt=now;
-      }
+      // ---- Sprite sheet (WOW)
+      // For compactness, teen/adult are “bigger body” variants; baby has smaller body.
+      // Blink frames are separate (eyes change from P to G).
+      const FRAMES={
+        // --- Egg (same as before, 32x32)
+        egg_idle:[
+          "                                ",
+          "            #######             ",
+          "         ###GGGGGG###           ",
+          "       ##GGGGWWWWGGGG##         ",
+          "      #GGGWWWWWWWWWWGGG#        ",
+          "     #GGWWGGGGGGGGGGWWGG#       ",
+          "    #GGWGGGGGGGGGGGGGGWGG#      ",
+          "    #GGWGGGGGGGGGGGGGGWGG#      ",
+          "   #GGWGGGGGGGGGGGGGGGGWGG#     ",
+          "   #GGWGGGGGGGGGGGGGGGGWGG#     ",
+          "   #GGWGGGGGGGGGGGGGGGGWGG#     ",
+          "   #GGWWGGGGGGGGGGGGGGWWGG#     ",
+          "   #GGGWWWWGGGGGGGGWWWWGGG#     ",
+          "    #GGGGGWWWWWWWWWWGGGGG#      ",
+          "     #GGGGGGGGGGGGGGGGGG#       ",
+          "      #GGGGGGGGGGGGGGGG#        ",
+          "       ##GGGGGGGGGGGG##         ",
+          "         ###GGGGGG###           ",
+          "            #######             ",
+          "                                ",
+          "          .............         ",
+          "        .................       ",
+          "          .............         ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        egg_crack:[
+          "                                ",
+          "            #######             ",
+          "         ###GGGGGG###           ",
+          "       ##GGGGWWWWGGGG##         ",
+          "      #GGGWWWW##WWWWGGG#        ",
+          "     #GGWWGGG##  ##GGWWGG#      ",
+          "    #GGWGGGG##    ##GGGGWGG#    ",
+          "    #GGWGGG##      ##GGGGWGG#   ",
+          "   #GGWGGG##   ##   ##GGGGWGG#  ",
+          "   #GGWGG##   ####   ##GGGWGG#  ",
+          "   #GGWGG##    ##    ##GGGWGG#  ",
+          "   #GGWWG##          ##GGWWGG#  ",
+          "   #GGGWW##   ####   ##WWGGG#   ",
+          "    #GGGG##  ######  ##GGGG#    ",
+          "     #GGG##   ####   ##GGG#     ",
+          "      #GG##          ##GG#      ",
+          "       ##GGGGGGGGGGGGGG##       ",
+          "         ###GGGGGGGG###         ",
+          "            #######             ",
+          "                                ",
+          "          .............         ",
+          "        .................       ",
+          "          .............         ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        egg_shake:[
+          "                                ",
+          "             #######            ",
+          "          ###GGGGGG###          ",
+          "        ##GGGGWWWWGGGG##        ",
+          "       #GGGWWWWWWWWWWGGG#       ",
+          "      #GGWWGGGGGGGGGGWWGG#      ",
+          "     #GGWGGGGGGGGGGGGGGWGG#     ",
+          "     #GGWGGGGGGGGGGGGGGWGG#     ",
+          "    #GGWGGGGGGGGGGGGGGGGWGG#    ",
+          "    #GGWGGGGGGGGGGGGGGGGWGG#    ",
+          "    #GGWGGGGGGGGGGGGGGGGWGG#    ",
+          "    #GGWWGGGGGGGGGGGGGGWWGG#    ",
+          "    #GGGWWWWGGGGGGGGWWWWGGG#    ",
+          "     #GGGGGWWWWWWWWWWGGGGG#     ",
+          "      #GGGGGGGGGGGGGGGGGG#      ",
+          "       #GGGGGGGGGGGGGGGG#       ",
+          "        ##GGGGGGGGGGGG##        ",
+          "          ###GGGGGG###          ",
+          "             #######            ",
+          "                                ",
+          "           .............        ",
+          "         .................      ",
+          "           .............        ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
 
-      function maybeHatch(pet, totalPnlUsd){
-        if(pet.hatched) return false;
-        if(totalPnlUsd > HATCH_PNL_THRESHOLD){
-          pet.hatched=true;
-          pet.species=pickSpeciesRandom();
-          pet.stage="baby";
-          pet.xp=Math.max(pet.xp, 2);
-          pet.hunger=clamp(pet.hunger, 0, 75);
-          pet.hatchedAt=Date.now();
+        bowl_food:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "           ##########           ",
+          "         ##WWWWWWWWWW##         ",
+          "        #WWWWYYWWYYWWWW#        ",
+          "        #WWWWWWWWWWWWWW#        ",
+          "         ##WWWWWWWWWW##         ",
+          "           ##########           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        plate_empty:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            #######             ",
+          "          ##WWWWWWW##           ",
+          "        ##WWWWWWWWWWW##         ",
+          "       #WWWWWWWWWWWWWWW#        ",
+          "        ##WWWWWWWWWWW##         ",
+          "          ##WWWWWWW##           ",
+          "            #######             ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        eggshell_bits:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "      ..  .  ..  .  ..          ",
+          "    .  . .  .  . .  .  .        ",
+          "   .  .   .   .   .   .  .      ",
+          "     . . . . . . . . .          ",
+          "   .   .   .   .   .   .        ",
+          "      . . .   . . .             ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        scarf_teen:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "        RRRRRRRRRRRRRR          ",
+          "       RRRR RRRRRR RRRR         ",
+          "        RRRRRR  RRRRRR          ",
+          "          RR      RR            ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        crown_adult:[
+          "                                ",
+          "             Y   Y              ",
+          "            YYY YYY             ",
+          "           YYYYYYYYY            ",
+          "          YYYYYYYYYYY           ",
+          "           YY  YY  YY           ",
+          "            YYYYYYYY            ",
+          "             YYYYYY             ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        grave:[
+          "                                ",
+          "                                ",
+          "            #######             ",
+          "          ##WWWWWWW##           ",
+          "         #WWWWWWWWWWW#          ",
+          "        #WWWWWWWWWWWWWW#        ",
+          "        #WWW  WWWW  WWW#        ",
+          "        #WWW   WW   WWW#        ",
+          "        #WWW  WWWW  WWW#        ",
+          "        #WWWWWWWWWWWWWW#        ",
+          "        #WWWWWWWWWWWWWW#        ",
+          "        #WWWWWWWWWWWWWW#        ",
+          "         #WWWWWWWWWWWW#         ",
+          "          ##WWWWWWW##           ",
+          "            #######             ",
+          "                                ",
+          "          .............         ",
+          "        .................       ",
+          "          .............         ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
 
-          // a nicer hatch sequence
-          setAnim(pet, "hatch_sparkle", 1800);
-          pet.lastEvent="none";
-          return true;
+        // ===== CAT by stage (BABY smaller / TEEN mid / ADULT bigger)
+        // Adult is the “full size” body, teen is slightly slimmer, baby is visibly smaller.
+        cat_baby_idle1:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            ##    ##            ",
+          "           #WW####WW#           ",
+          "          #WGGGGGGGGW#          ",
+          "          #WGGPPGGPPGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "           #WGG####GGW#          ",
+          "            #WWWWWWWW#           ",
+          "          ###W######W###         ",
+          "         #..##..##..##..#        ",
+          "         #..##..##..##..#        ",
+          "          ####..####..####       ",
+          "           ##....##....##        ",
+          "          #..####..####..#       ",
+          "           ..#  #..#  #..        ",
+          "            ##  ###  ###         ",
+          "             ..  ..  ..          ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_baby_idle2:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            ##    ##            ",
+          "           #WW####WW#           ",
+          "          #WGGGGGGGGW#          ",
+          "          #WGGPPGGPPGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "           #WGG######W#          ",
+          "            #WWWWWWWW#           ",
+          "         ####W######W##          ",
+          "        #..##..##..##..#         ",
+          "        #..##..##..##..#         ",
+          "         ####..####..####        ",
+          "          ##....##....##         ",
+          "         #..####..####..#        ",
+          "          ..#  #..#  #..         ",
+          "          ###  ###  ##           ",
+          "           ..   ..  ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_baby_idle1_blink:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            ##    ##            ",
+          "           #WW####WW#           ",
+          "          #WGGGGGGGGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "           #WGG####GGW#          ",
+          "            #WWWWWWWW#           ",
+          "          ###W######W###         ",
+          "         #..##..##..##..#        ",
+          "         #..##..##..##..#        ",
+          "          ####..####..####       ",
+          "           ##....##....##        ",
+          "          #..####..####..#       ",
+          "           ..#  #..#  #..        ",
+          "            ##  ###  ###         ",
+          "             ..  ..  ..          ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_baby_walk1:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            ##    ##            ",
+          "           #WW####WW#           ",
+          "          #WGGGGGGGGW#          ",
+          "          #WGGPPGGPPGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "           #WGG####GGW#          ",
+          "            #WWWWWWWW#           ",
+          "      ######W######W###          ",
+          "     #..##..##..##..#             ",
+          "      #..##..##..##..#            ",
+          "       ####..####..####           ",
+          "         ##....##....##           ",
+          "          ..####..####..          ",
+          "           .#  #..#  #..          ",
+          "            ##  ###  ###          ",
+          "             ..  ..  ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_baby_walk2:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            ##    ##            ",
+          "           #WW####WW#           ",
+          "          #WGGGGGGGGW#          ",
+          "          #WGGPPGGPPGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "           #WGG####GGW#          ",
+          "            #WWWWWWWW#           ",
+          "         ###W######W######       ",
+          "          #..##..##..##..#       ",
+          "         #..##..##..##..#        ",
+          "         ####..####..####        ",
+          "          ##....##....##         ",
+          "         ..####..####..          ",
+          "         ..#  #..#  #.           ",
+          "         ###  ###  ##            ",
+          "          ..   ..  ..            ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_baby_sad1:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "            ##    ##            ",
+          "           #WW####WW#           ",
+          "          #WGGGGGGGGW#          ",
+          "          #WGRRGGRRGGW#          ",
+          "          #WGGGGGGGGGW#          ",
+          "           #WGG######W#          ",
+          "            #WWWWWWWW#           ",
+          "          ###W######W###         ",
+          "         #..##..##..##..#        ",
+          "         #..##..##..##..#        ",
+          "          ####..####..####       ",
+          "           ##....##....##        ",
+          "          #..####..####..#       ",
+          "            ..RR..RR..           ",
+          "             .RR..RR.            ",
+          "             ..  ..              ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_baby_eat1: null, // reuse baby idle while bowl anim plays
+
+        cat_teen_idle1:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGPPGGGGPPGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG####GGGGGGW#       ",
+          "        #WGGG##  ##GGGGW#        ",
+          "         #WW##    ##WW#          ",
+          "          ##W######W##           ",
+          "        ###W########W##          ",
+          "       #..##..##..##..#          ",
+          "       #..##..##..##..#          ",
+          "        ####..####..####         ",
+          "         ##....##....##          ",
+          "        #..####..####..#         ",
+          "        #..#  #..#  #..#         ",
+          "         ###  ###  ###           ",
+          "          ..   ..   ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_teen_idle2: null, // reuse adult idle2 style below
+        cat_teen_idle1_blink: null, // reuse adult blink variant below
+        cat_teen_walk1: null,
+        cat_teen_walk2: null,
+        cat_teen_sad1: null,
+        cat_teen_eat1: null,
+
+        cat_adult_idle1:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGPPGGGGPPGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG####GGGGGGW#       ",
+          "        #WGGG##  ##GGGGW#        ",
+          "         #WW##    ##WW#          ",
+          "          ##W######W##           ",
+          "         ##W########W##          ",
+          "        #..##..##..##..#         ",
+          "        #..##..##..##..#         ",
+          "         ####..####..####        ",
+          "          ##....##....##         ",
+          "         #..####..####..#        ",
+          "         #..#  #..#  #..#        ",
+          "          ###  ###  ###          ",
+          "           ..   ..   ..          ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_adult_idle2:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGPPGGGGPPGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG######GGGGW#       ",
+          "        #WGGG##    ##GGW#        ",
+          "         #WW##      ##W#         ",
+          "          ##W######W##           ",
+          "        ###W########W##          ",
+          "       #..##..##..##..#          ",
+          "       #..##..##..##..#          ",
+          "        ####..####..####         ",
+          "         ##....##....##          ",
+          "        #..####..####..#         ",
+          "        #..#  #..#  #..#         ",
+          "         ###  ###  ###           ",
+          "          ..   ..   ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_adult_idle1_blink:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG####GGGGGGW#       ",
+          "        #WGGG##  ##GGGGW#        ",
+          "         #WW##    ##WW#          ",
+          "          ##W######W##           ",
+          "         ##W########W##          ",
+          "        #..##..##..##..#         ",
+          "        #..##..##..##..#         ",
+          "         ####..####..####        ",
+          "          ##....##....##         ",
+          "         #..####..####..#        ",
+          "         #..#  #..#  #..#        ",
+          "          ###  ###  ###          ",
+          "           ..   ..   ..          ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_adult_walk1:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGPPGGGGPPGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG####GGGGGGW#       ",
+          "        #WGGG##  ##GGGGW#        ",
+          "         #WW##    ##WW#          ",
+          "          ##W######W##           ",
+          "      ####W########W##           ",
+          "     #..##..##..##..#             ",
+          "      #..##..##..##..#            ",
+          "       ####..####..####           ",
+          "         ##....##....##           ",
+          "          ..####..####..          ",
+          "           .#  #..#  #..          ",
+          "            ##  ###  ###          ",
+          "             ..  ..  ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_adult_walk2:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGPPGGGGPPGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG####GGGGGGW#       ",
+          "        #WGGG##  ##GGGGW#        ",
+          "         #WW##    ##WW#          ",
+          "          ##W######W##           ",
+          "        ##W########W####         ",
+          "         #..##..##..##..#        ",
+          "        #..##..##..##..#         ",
+          "        ####..####..####         ",
+          "         ##....##....##          ",
+          "        ..####..####..           ",
+          "        ..#  #..#  #.            ",
+          "        ###  ###  ##             ",
+          "         ..   ..  ..             ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        cat_adult_sad1:[
+          "                                ",
+          "                                ",
+          "          ##        ##           ",
+          "         #WW#      #WW#          ",
+          "        #WGGW######WGGW#         ",
+          "        #WGGGGGGGGGGGGW#         ",
+          "       #WGGGRRGGGGRRGGGW#        ",
+          "       #WGGGGGGGGGGGGGGW#        ",
+          "       #WGGGGG######GGGGW#       ",
+          "        #WGGG##    ##GGW#        ",
+          "         #WW##      ##W#         ",
+          "          ##W######W##           ",
+          "         ##W########W##          ",
+          "        #..##..##..##..#         ",
+          "        #..##..##..##..#         ",
+          "         ####..####..####        ",
+          "          ##....##....##         ",
+          "         #..####..####..#        ",
+          "            ..RR..RR..           ",
+          "             .RR..RR.            ",
+          "             ..  ..              ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+
+        // ===== DOG by stage
+        dog_baby_idle1:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "           ####  ####            ",
+          "          #WWGG##GGWW#           ",
+          "         #WGGGGGGGGGGW#          ",
+          "         #WGGPPGGPPGGGW#          ",
+          "         #WGGGGGGGGGGGW#          ",
+          "          #WGG######GGW#          ",
+          "           #WW##  ##WW#           ",
+          "            ##W####W##            ",
+          "          ###W######W###          ",
+          "         #..##..##..##..#         ",
+          "         #..##..##..##..#         ",
+          "          ####..####..####        ",
+          "           ##....##....##         ",
+          "          #..####..####..#        ",
+          "           ..#  #..#  #..         ",
+          "            ##  ###  ###          ",
+          "             ..  ..  ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_baby_idle2:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "           ####  ####            ",
+          "          #WWGG##GGWW#           ",
+          "         #WGGGGGGGGGGW#          ",
+          "         #WGGPPGGPPGGGW#          ",
+          "         #WGGGGGGGGGGGW#          ",
+          "          #WGG########W#          ",
+          "           #WW##    ##W#          ",
+          "            ##W####W##            ",
+          "         ####W######W##           ",
+          "        #..##..##..##..#          ",
+          "        #..##..##..##..#          ",
+          "         ####..####..####         ",
+          "          ##....##....##          ",
+          "         #..####..####..#         ",
+          "          ..#  #..#  #..          ",
+          "          ###  ###  ##            ",
+          "           ..   ..  ..            ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_baby_walk1: null, // reuse adult walk1 with baby proportions? we’ll map below
+        dog_baby_walk2: null,
+        dog_baby_sad1:[
+          "                                ",
+          "                                ",
+          "                                ",
+          "           ####  ####            ",
+          "          #WWGG##GGWW#           ",
+          "         #WGGGGGGGGGGW#          ",
+          "         #WGGGRRGGRRGGW#          ",
+          "         #WGGGGGGGGGGGW#          ",
+          "          #WGG########W#          ",
+          "           #WW##    ##W#          ",
+          "            ##W####W##            ",
+          "          ###W######W###          ",
+          "         #..##..##..##..#         ",
+          "         #..##..##..##..#         ",
+          "          ####..####..####        ",
+          "           ##....##....##         ",
+          "          #..####..####..#        ",
+          "            ..RR..RR..            ",
+          "             .RR..RR.             ",
+          "             ..  ..               ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+
+        dog_adult_idle1:[
+          "                                ",
+          "                                ",
+          "         ########  ########      ",
+          "        #WWGGGGWW##WWGGGGWW#     ",
+          "       #WGGGGGGGGGGGGGGGGGW#    ",
+          "       #WGGGPPGGGGGGPPGGGGGW#    ",
+          "       #WGGGGGGGGGGGGGGGGGGW#    ",
+          "        #WGGGG######GGGGGGW#     ",
+          "         #WGGG##  ##GGGGGW#      ",
+          "          #WW##    ##WW##        ",
+          "           ##W######W##          ",
+          "          ##W########W##         ",
+          "         #..##..##..##..#        ",
+          "         #..##..##..##..#        ",
+          "          ####..####..####       ",
+          "           ##....##....##        ",
+          "          #..####..####..#       ",
+          "          #..#  #..#  #..#       ",
+          "           ###  ###  ###         ",
+          "            ..   ..   ..         ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_adult_idle2:[
+          "                                ",
+          "                                ",
+          "         ########  ########      ",
+          "        #WWGGGGWW##WWGGGGWW#     ",
+          "       #WGGGGGGGGGGGGGGGGGW#    ",
+          "       #WGGGPPGGGGGGPPGGGGGW#    ",
+          "       #WGGGGGGGGGGGGGGGGGGW#    ",
+          "        #WGGGG########GGGGW#     ",
+          "         #WGGG##    ##GGGGW#     ",
+          "          #WW##      ##WW#       ",
+          "           ##W######W##          ",
+          "        ###W########W##          ",
+          "       #..##..##..##..#          ",
+          "       #..##..##..##..#          ",
+          "        ####..####..####         ",
+          "         ##....##....##          ",
+          "        #..####..####..#         ",
+          "        #..#  #..#  #..#         ",
+          "         ###  ###  ###           ",
+          "          ..   ..   ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_adult_walk1:[
+          "                                ",
+          "                                ",
+          "         ########  ########      ",
+          "        #WWGGGGWW##WWGGGGWW#     ",
+          "       #WGGGGGGGGGGGGGGGGGW#    ",
+          "       #WGGGPPGGGGGGPPGGGGGW#    ",
+          "       #WGGGGGGGGGGGGGGGGGGW#    ",
+          "        #WGGGG######GGGGGGW#     ",
+          "         #WGGG##  ##GGGGGW#      ",
+          "          #WW##    ##WW##        ",
+          "           ##W######W##          ",
+          "      ####W########W##           ",
+          "     #..##..##..##..#             ",
+          "      #..##..##..##..#            ",
+          "       ####..####..####           ",
+          "         ##....##....##           ",
+          "          ..####..####..          ",
+          "           .#  #..#  #..          ",
+          "            ##  ###  ###          ",
+          "             ..  ..  ..           ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_adult_walk2:[
+          "                                ",
+          "                                ",
+          "         ########  ########      ",
+          "        #WWGGGGWW##WWGGGGWW#     ",
+          "       #WGGGGGGGGGGGGGGGGGW#    ",
+          "       #WGGGPPGGGGGGPPGGGGGW#    ",
+          "       #WGGGGGGGGGGGGGGGGGGW#    ",
+          "        #WGGGG######GGGGGGW#     ",
+          "         #WGGG##  ##GGGGGW#      ",
+          "          #WW##    ##WW##        ",
+          "           ##W######W##          ",
+          "        ##W########W####         ",
+          "         #..##..##..##..#        ",
+          "        #..##..##..##..#         ",
+          "        ####..####..####         ",
+          "         ##....##....##          ",
+          "        ..####..####..           ",
+          "        ..#  #..#  #.            ",
+          "        ###  ###  ##             ",
+          "         ..   ..  ..             ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+        dog_adult_sad1:[
+          "                                ",
+          "                                ",
+          "         ########  ########      ",
+          "        #WWGGGGWW##WWGGGGWW#     ",
+          "       #WGGGGGGGGGGGGGGGGGW#    ",
+          "       #WGGGRRGGGGGGRRGGGGGW#    ",
+          "       #WGGGGGGGGGGGGGGGGGGW#    ",
+          "        #WGGGG########GGGGW#     ",
+          "         #WGGG##    ##GGGGW#     ",
+          "          #WW##      ##WW#       ",
+          "           ##W######W##          ",
+          "          ##W########W##         ",
+          "         #..##..##..##..#        ",
+          "         #..##..##..##..#        ",
+          "          ####..####..####       ",
+          "           ##....##....##        ",
+          "          #..####..####..#       ",
+          "            ..RR..RR..           ",
+          "             .RR..RR.            ",
+          "             ..  ..              ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+          "                                ",
+        ],
+      };
+
+      // Fill teen frames by reusing adult frames (teen uses slimmer look via scarf overlay + slightly faster pace)
+      function getFrame(species, stage, action, toggle, blink){
+        const st = (stage === "hatchling") ? "baby" : stage; // hatchling uses baby body + eggshell overlay
+        const s = species;
+        const base = `${s}_${st}_${action}${toggle ? "1" : "2"}`;
+
+        // idle blink
+        if(action === "idle" && blink){
+          const key = `${s}_${st}_idle1_blink`;
+          if(FRAMES[key]) return FRAMES[key];
+          // fall back: adult blink if exists
+          const fall = `${s}_adult_idle1_blink`;
+          if(FRAMES[fall]) return FRAMES[fall];
         }
-        return false;
-      }
 
-      function maybeWipeoutReset(pet, equity){
-        if(equity==null) return {wiped:false, pet};
-        if(pet.hatched && equity < WIPEOUT_EQUITY_THRESHOLD){
-          return {wiped:true, pet: resetPet(true)};
-        }
-        return {wiped:false, pet};
-      }
+        // prefer exact
+        if(FRAMES[base]) return FRAMES[base];
 
-      function processTradeDeltas(pet, data){
-        const totalTrades=data.total_trades??0;
-        const wins=data.wins??0;
-        const losses=data.losses??0;
+        // fallbacks to adult
+        const adultKey = `${s}_adult_${action}${toggle ? "1" : "2"}`;
+        if(FRAMES[adultKey]) return FRAMES[adultKey];
 
-        const dTrades = totalTrades - (pet.lastTotalTrades||0);
-        const dWins = wins - (pet.lastWins||0);
-        const dLosses = losses - (pet.lastLosses||0);
-
-        pet.lastTotalTrades=totalTrades;
-        pet.lastWins=wins;
-        pet.lastLosses=losses;
-
-        if(dTrades<=0) return {dTrades:0,dWins:0,dLosses:0};
-
-        if(dWins>0){
-          pet.xp=clamp(pet.xp + dWins*5, 0, 100);
-          pet.hunger=clamp(pet.hunger - dWins*12, 0, 100);
-          pet.mood="happy";
-          pet.lastEvent="food";
-          setAnim(pet, "eat", 1400);
-        }
-
-        if(dLosses>0){
-          pet.hunger=clamp(pet.hunger + dLosses*13, 0, 100);
-          pet.mood="sad";
-          pet.lastEvent="empty";
-          setAnim(pet, "sad", 1400);
-        }
-
-        if(pet.hatched) pet.stage=stageFromXp(pet.xp);
-
-        return {dTrades,dWins,dLosses};
-      }
-
-      // ------------------------------
-      // Draw helpers + bobbing
-      // ------------------------------
-      function clear(){ ctx.clearRect(0,0,petCanvas.width,petCanvas.height); }
-
-      function drawSpriteCentered(frame, bobY=0){
-        const scale=2;
-        const w=frame[0].length*scale;
-        const h=frame.length*scale;
-        const ox=Math.floor((64-w)/2);
-        const oy=Math.floor((64-h)/2 + bobY);
-        drawFrame(frame, ox, oy, scale);
-      }
-
-      // small sparkles
-      function drawSparkles(t){
-        ctx.save();
-        ctx.globalAlpha=0.9;
-        ctx.fillStyle=PALETTE["B"];
-        const pts=[
-          [10,14],[52,20],[18,50],[44,46]
-        ];
-        pts.forEach((p,i)=>{
-          const pulse = (Math.sin((t/120)+(i*1.3))*0.5+0.5);
-          const r = 1 + Math.floor(pulse*2);
-          ctx.fillRect(p[0]-r, p[1], r*2, 1);
-          ctx.fillRect(p[0], p[1]-r, 1, r*2);
-        });
-        ctx.restore();
+        // last resort: adult idle
+        return FRAMES[`${s}_adult_idle1`];
       }
 
       let pet=loadPet();
       let toggle=false;
       let lastRender=0;
 
+      function maybeBlink(p){
+        const now = Date.now();
+        if(now >= (p.blinkNext||0)){
+          p.blinkUntil = now + (120 + Math.random()*120);
+          p.blinkNext = now + 2200 + Math.random()*3200;
+        }
+      }
+
       function renderPet(deltaInfo){
         pet=loadPet();
-        const mode=animMode(pet);
         const screen=$("pet-screen");
-
-        // subtle breathing bob
+        const mode=animMode(pet);
         const t=Date.now();
-        const bob = Math.sin(t/260)*1.2;
 
-        clear();
+        maybeBlink(pet);
+        const blinking = t <= (pet.blinkUntil||0);
 
-        // egg animation + hatch sparkles
-        if(!pet.hatched){
-          if(mode==="hatch_sparkle"){
+        // smoother breathing bob + tiny “life” sway
+        const bob = Math.sin(t/240)*1.2 + Math.sin(t/900)*0.7;
+        const hungrySlow = pet.hunger >= 65 ? 0.65 : 1.0;
+
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        if(pet.fainted){
+          screen.classList.remove("shake");
+          drawCentered(FRAMES.grave, bob);
+          if(mode==="revive") drawSparkles(t);
+        } else if(!pet.hatched){
+          if(mode==="hatch"){
             screen.classList.add("shake");
-            drawSpriteCentered(toggle ? FRAMES.sparkle1 : FRAMES.sparkle2, bob);
+            drawCentered(toggle ? FRAMES.egg_crack : FRAMES.egg_shake, bob);
             drawSparkles(t);
-          } else if(mode==="hatch_crack"){
-            screen.classList.add("shake");
-            drawSpriteCentered(toggle ? FRAMES.egg_crack : FRAMES.egg_shake, bob);
-          } else if(mode==="hatch_shake"){
-            screen.classList.add("shake");
-            drawSpriteCentered(toggle ? FRAMES.egg_shake : FRAMES.egg_idle, bob);
           } else {
             screen.classList.remove("shake");
-            drawSpriteCentered(FRAMES.egg_idle, bob);
+            drawCentered(toggle ? FRAMES.egg_shake : FRAMES.egg_idle, bob);
           }
         } else {
           screen.classList.remove("shake");
           const sp = pet.species==="dog" ? "dog" : "cat";
+          const stage = pet.stage;
 
-          let base=null;
+          // animation selection
+          let action="idle";
+          if(mode==="eat") action="idle"; // body stays; bowl anim sells it
+          else if(mode==="sad") action="sad";
+          else {
+            // pacing when hungry, otherwise occasional stroll
+            const wantsWalk = (pet.hunger>60) ? true : (Math.random()<0.16);
+            action = wantsWalk ? "walk" : "idle";
+          }
+
+          const frame = getFrame(sp, stage, action, toggle, blinking && action==="idle");
+          drawCentered(frame, bob);
+
+          // overlays
           if(mode==="eat"){
-            base = FRAMES[sp+"_eat1"];
-            drawSpriteCentered(base, bob-0.5);
-            // bowl overlay
-            drawSpriteCentered(FRAMES.bowl_food, 18);
+            drawCentered(FRAMES.bowl_food, 18);
             drawSparkles(t);
           } else if(mode==="sad"){
-            base = FRAMES[sp+"_sad1"];
-            drawSpriteCentered(base, bob+0.6);
-            drawSpriteCentered(FRAMES.plate_empty, 18);
+            drawCentered(FRAMES.plate_empty, 18);
           } else {
-            // idle realism: blink/wag alternation + occasional walk
-            const hungry = pet.hunger > 60;
-            const wantsWalk = hungry ? true : (Math.random() < 0.25);
-            if(wantsWalk){
-              base = FRAMES[sp + (toggle ? "_walk1" : "_walk2")];
-              drawSpriteCentered(base, bob);
-            } else {
-              base = FRAMES[sp + (toggle ? "_idle1" : "_idle2")];
-              drawSpriteCentered(base, bob);
-            }
-
-            // show last event briefly as overlay
-            if(pet.lastEvent==="food") drawSpriteCentered(FRAMES.bowl_food, 18);
-            if(pet.lastEvent==="empty") drawSpriteCentered(FRAMES.plate_empty, 18);
+            if(pet.lastEvent==="food") drawCentered(FRAMES.bowl_food, 18);
+            if(pet.lastEvent==="empty") drawCentered(FRAMES.plate_empty, 18);
           }
+
+          // hatchling eggshell bits
+          if(stage==="hatchling") drawCentered(FRAMES.eggshell_bits, 18);
+
+          // teen scarf, adult crown
+          if(stage==="teen") drawCentered(FRAMES.scarf_teen, 2);
+          if(stage==="adult") drawCentered(FRAMES.crown_adult, 0);
         }
 
-        // UI text/bars
-        $("pet-mood").textContent = decideMoodText(pet);
-        $("pet-stage").textContent = badgeText(pet);
+        // stage based on xp
+        pet.stage = stageFromXp(pet.xp, pet.hatched);
 
-        const xpp=xpPct(pet.xp);
-        $("pet-xp-bar").style.width = xpp+"%";
-        $("pet-xp-text").textContent = xpp+"%";
+        // UI
+        $("pet-mood").textContent=moodText(pet);
+        $("pet-stage").textContent=badgeText(pet);
 
-        const hp=hungerPct(pet.hunger);
-        $("pet-hunger-bar").style.width = hp+"%";
-        $("pet-hunger-text").textContent = hp+"%";
+        const xpp=pct(pet.xp);
+        $("pet-xp-bar").style.width=xpp+"%";
+        $("pet-xp-text").textContent=xpp+"%";
 
-        if(!pet.hatched){
-          $("pet-subtext").textContent = "Egg stays until overall PnL turns positive… then it hatches into a random cat or dog 🥚✨";
+        const hp=pct(pet.hunger);
+        $("pet-hunger-bar").style.width=hp+"%";
+        $("pet-hunger-text").textContent=hp+"%";
+
+        if(pet.fainted){
+          $("pet-subtext").textContent="It fainted from hunger. It won’t reset — feed it wins to revive 🍗";
+        } else if(!pet.hatched){
+          $("pet-subtext").textContent="Egg stays until overall PnL turns positive… then it hatches into a random cat or dog 🥚✨";
         } else {
-          const spName = pet.species==="dog" ? "dog" : "cat";
-          let msg = "Wins are food 🍗. Losses are empty plates 🍽️.";
+          const spName=pet.species==="dog"?"dog":"cat";
+          let msg="Wins are food 🍗. Losses are empty plates 🍽️.";
           if(pet.hunger>=85) msg="Starving… feed it wins 🍗😿";
-          else if(pet.hunger>=65) msg="Hungry… needs wins (food) 🍗";
+          else if(pet.hunger>=65) msg="Hungry… it paces more when hungry 🐾";
           else if(mode==="eat") msg="Yum! A win fed it 🍗✨";
           else if(mode==="sad") msg="Ouch… empty plate 🍽️";
-          $("pet-subtext").textContent = `Hatched as a ${spName}. ${msg} More wins = it grows.`;
+          $("pet-subtext").textContent=`Hatched as a ${spName}. Stage: ${pet.stage}. ${msg}`;
         }
 
         const dbg=[];
         if(deltaInfo?.dWins) dbg.push(`+${deltaInfo.dWins} win`);
         if(deltaInfo?.dLosses) dbg.push(`+${deltaInfo.dLosses} loss`);
-        $("pet-debug").textContent = dbg.join(", ");
+        $("pet-debug").textContent=dbg.join(", ");
 
-        toggle=!toggle;
+        savePet(pet);
+
+        // slow animation when hungry (more realistic)
+        const step = (pet.hunger>=65) ? 2 : 1;
+        toggle = (Math.floor(t/180) % step) === 0 ? !toggle : toggle;
       }
 
       $("pet-reset-btn").addEventListener("click",()=>{
-        if(confirm("Reset the pet back to egg?")){
-          pet=resetPet(true);
+        if(confirm("Reset the pet back to egg? (This does not affect bot data)")){
+          pet=resetPet();
           renderPet(null);
         }
       });
 
-      // ------------------------------
-      // Fetch + hydrate dashboard
-      // ------------------------------
+      // ---------- refresh ----------
       async function refreshDashboard(){
         try{
           const res=await fetch("/data");
           const data=await res.json();
 
-          $("metric-total-trades").textContent = data.total_trades ?? 0;
-          $("metric-wins").textContent = (data.wins ?? 0) + " wins";
-          $("metric-losses").textContent = (data.losses ?? 0) + " losses";
+          $("metric-total-trades").textContent=data.total_trades??0;
+          $("metric-wins").textContent=(data.wins??0)+" wins";
+          $("metric-losses").textContent=(data.losses??0)+" losses";
 
-          const winRate = data.win_rate != null ? data.win_rate : 0;
-          $("metric-win-rate").textContent = formatPercent(winRate,1);
+          const winRate=data.win_rate!=null?data.win_rate:0;
+          $("metric-win-rate").textContent=formatPercent(winRate,1);
 
-          const totalTrades = data.total_trades ?? 0;
-          const totalPnl = Number(data.total_pnl_usd ?? 0);
-          const avgPnl = totalTrades ? (totalPnl / totalTrades) : 0;
-          $("metric-avg-pnl").textContent = formatUsd(avgPnl);
+          const totalTrades=data.total_trades??0;
+          const totalPnl=Number(data.total_pnl_usd??0);
+          const avgPnl=totalTrades?(totalPnl/totalTrades):0;
+          $("metric-avg-pnl").textContent=formatUsd(avgPnl);
 
           const pnlEl=$("metric-total-pnl");
-          pnlEl.textContent = formatUsd(totalPnl);
+          pnlEl.textContent=formatUsd(totalPnl);
           pnlEl.classList.remove("positive","negative");
-          pnlEl.classList.add(totalPnl>=0 ? "positive" : "negative");
+          pnlEl.classList.add(totalPnl>=0?"positive":"negative");
 
-          updateEquityChart(data.equity_curve || []);
+          updateEquityChart(data.equity_curve||[]);
           updateBotStatus(data.bot_status);
-          updatePerMarket(data.per_market || []);
-          updateRecentTrades(data.recent_trades || []);
+          updatePerMarket(data.per_market||[]);
+          updateRecentTrades(data.recent_trades||[]);
           updateAdvancedMetrics(data.advanced_metrics, data.max_drawdown_usd);
 
-          // PET logic
+          // PET
           pet=loadPet();
           applyTimeHunger(pet);
 
-          const eq = (data.equity_curve && data.equity_curve.length)
-            ? Number(data.equity_curve[data.equity_curve.length-1].equity_usd)
-            : (pet.lastEquity!=null ? Number(pet.lastEquity) : null);
-          pet.lastEquity = (eq!=null && !Number.isNaN(eq)) ? eq : pet.lastEquity;
-
-          // pre-hatch dramatic lead-in
-          if(!pet.hatched){
-            if(totalPnl > HATCH_PNL_THRESHOLD){
-              // hatch!
-              maybeHatch(pet, totalPnl);
-            } else {
-              // keep egg lively
-              if(animMode(pet)==="idle"){
-                setAnim(pet, "hatch_shake", 900);
-                // sometimes crack tease
-                if(Math.random()<0.18) setAnim(pet, "hatch_crack", 800);
-              }
-            }
-          }
+          maybeHatch(pet, totalPnl);
 
           const deltaInfo=processTradeDeltas(pet, data);
-
-          const wipe = maybeWipeoutReset(pet, pet.lastEquity);
-          pet = wipe.pet;
+          updateFaintState(pet);
 
           savePet(pet);
           renderPet(deltaInfo);
@@ -1479,9 +1962,7 @@
         }
       }
 
-      // ------------------------------
-      // Pet animation loop
-      // ------------------------------
+      // ---------- pet loop ----------
       function petLoop(){
         const now=Date.now();
         if(now-lastRender > TICK_MS){
@@ -1491,9 +1972,7 @@
         requestAnimationFrame(petLoop);
       }
 
-      // ------------------------------
-      // Init
-      // ------------------------------
+      // ---------- init ----------
       document.addEventListener("DOMContentLoaded",()=>{
         setupTvTabs();
         loadTradingView(currentSymbol);
@@ -1504,4 +1983,4 @@
       });
     </script>
   </body>
-</html>
+  </html>
