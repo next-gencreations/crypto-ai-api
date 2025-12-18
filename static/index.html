@@ -528,7 +528,7 @@
       // ==========================================================
       // PET
       // ==========================================================
-      const PET_KEY="botpet_animals_v2"; // new key so it starts clean for this animal upgrade
+      const PET_KEY="botpet_animals_v3"; // new key so this sprite upgrade starts clean
       const DEFAULT_PET={
         hatched:false,
         species:null,            // cat/dog
@@ -647,14 +647,14 @@
       // ---------- pixel renderer ----------
       const canvas=$("pet-canvas");
       const ctx=canvas.getContext("2d");
-      const SCALE=3; // 32*3=96
+      const SCALE=3;
 
-      // Stronger outline color via "K"
+      // stronger outline / contrast
       const PALETTE={
         " ": null,
         ".": "rgba(0,0,0,0.18)",
         "#": "#0b1220",
-        "W": "#e6edf7",
+        "W": "#f1f5f9",
         "G": "#94a3b8",
         "D": "#64748b",
         "P": "#fb7185",
@@ -697,7 +697,7 @@
 
       function badgeText(p){
         if(!p.hatched) return "Egg";
-        if(p.fainted) return "Fainted";
+        if(p.fainted) return (p.species==="dog"?"Dog":"Cat")+" (Fainted)";
         const sp=p.species==="dog"?"Dog":"Cat";
         const st=p.stage||"hatchling";
         if(st==="hatchling") return "Hatchling "+sp;
@@ -992,71 +992,37 @@
           "                                ",
           "                                ",
         ],
-        grave:[
-          "                                ",
-          "                                ",
-          "            #######             ",
-          "          ##WWWWWWW##           ",
-          "         #WWWWWWWWWWW#          ",
-          "        #WWWWWWWWWWWWWW#        ",
-          "        #WWW  WWWW  WWW#        ",
-          "        #WWW   WW   WWW#        ",
-          "        #WWW  WWWW  WWW#        ",
-          "        #WWWWWWWWWWWWWW#        ",
-          "        #WWWWWWWWWWWWWW#        ",
-          "        #WWWWWWWWWWWWWW#        ",
-          "         #WWWWWWWWWWWW#         ",
-          "          ##WWWWWWW##           ",
-          "            #######             ",
-          "                                ",
-          "          .............         ",
-          "        .................       ",
-          "          .............         ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-          "                                ",
-        ],
 
-        // ===== CLEAR CAT (outline K, pointy ears + tail)
+        // ===== CAT (clearer ears + tail + body)
         cat_adult_idle1:[
 "                                ",
 "                                ",
-"            ######              ",
-"          ##KWWWWK##            ",
-"         #KWWWWWWWWK#           ",
-"        #KWWPPWWPPWWK#          ",
-"        #KWWWWWWWWWWK#          ",
-"        #KWWWK####KWWK#         ",
-"         #KWWK####KWWK#         ",
-"          #KWWKKKKWWK#          ",
-"           ##KWWWWK##           ",
-"            #KWWWWK#            ",
-"        ####KWWWWWWK####        ",
-"       #..##KWWWWWWK##..#       ",
-"       #..##KWWWWWWK##..#       ",
-"        ####KWWWWWWK####        ",
-"          ##KWWWWWWK##          ",
-"         #..##KWWWWK##..#       ",
-"         #..#  KWWK  #..#       ",
-"          ###  KWWK  ###        ",
-"           ..   KK   ..         ",
+"            ##KWWK##            ",
+"           #KWWWWWWK#           ",
+"          #KWWPPPPWWK#          ",
+"         #KWWPWWWWPWWK#         ",
+"         #KWWWWWWWWWWK#         ",
+"         #KWWWK####KWWK#        ",
+"          #KWWK####KWWK#        ",
+"           #KWWKKKKWWK#         ",
+"            ##KWWWWK##          ",
+"              KWWWWK            ",
+"        ######KWWWWK######      ",
+"       #..###KWWWWWWK###..#     ",
+"       #..###KWWWWWWK###..#     ",
+"        ######KWWWWK######      ",
+"          ###KWWWWWWK###        ",
+"            #KWWWWWWK#          ",
+"            #KWWWWWWK#          ",
+"             ##KWWK##           ",
+"               K  K             ",
+"              K    K            ",
+"             K  KK  K           ",
+"              KK  KK            ",
 "                KK              ",
 "               KKKK             ",
 "              KK  KK            ",
 "                 KK             ",
-"                                ",
-"                                ",
-"                                ",
 "                                ",
 "                                ",
 "                                ",
@@ -1065,32 +1031,32 @@
         cat_adult_idle2:[
 "                                ",
 "                                ",
-"            ######              ",
-"          ##KWWWWK##            ",
-"         #KWWWWWWWWK#           ",
-"        #KWWPPWWPPWWK#          ",
-"        #KWWWWWWWWWWK#          ",
-"        #KWWWK######WWK#        ",
-"         #KWWK####KWWK#         ",
-"          #KWWKKKKWWK#          ",
-"           ##KWWWWK##           ",
-"            #KWWWWK#            ",
-"        ####KWWWWWWK####        ",
-"       #..##KWWWWWWK##..#       ",
-"       #..##KWWWWWWK##..#       ",
-"        ####KWWWWWWK####        ",
-"          ##KWWWWWWK##          ",
-"         #..##KWWWWK##..#       ",
-"         #..#  KWWK  #..#       ",
-"          ###  KWWK  ###        ",
-"           ..   KK   ..         ",
+"            ##KWWK##            ",
+"           #KWWWWWWK#           ",
+"          #KWWPPPPWWK#          ",
+"         #KWWPWWWWPWWK#         ",
+"         #KWWWWWWWWWWK#         ",
+"         #KWWWK######WWK#       ",
+"          #KWWK####KWWK#        ",
+"           #KWWKKKKWWK#         ",
+"            ##KWWWWK##          ",
+"              KWWWWK            ",
+"        ######KWWWWK######      ",
+"       #..###KWWWWWWK###..#     ",
+"       #..###KWWWWWWK###..#     ",
+"        ######KWWWWK######      ",
+"          ###KWWWWWWK###        ",
+"            #KWWWWWWK#          ",
+"            #KWWWWWWK#          ",
+"             ##KWWK##           ",
+"               K  K             ",
+"              K    K            ",
+"              K KK K            ",
+"               K  K             ",
+"                KK              ",
 "               KKK              ",
 "              KK KK             ",
-"                 KK             ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
+"                KK              ",
 "                                ",
 "                                ",
 "                                ",
@@ -1099,25 +1065,28 @@
         cat_adult_idle1_blink:[
 "                                ",
 "                                ",
-"            ######              ",
-"          ##KWWWWK##            ",
-"         #KWWWWWWWWK#           ",
-"        #KWWGGWWGGWWK#          ",
-"        #KWWWWWWWWWWK#          ",
-"        #KWWWK####KWWK#         ",
-"         #KWWK####KWWK#         ",
-"          #KWWKKKKWWK#          ",
-"           ##KWWWWK##           ",
-"            #KWWWWK#            ",
-"        ####KWWWWWWK####        ",
-"       #..##KWWWWWWK##..#       ",
-"       #..##KWWWWWWK##..#       ",
-"        ####KWWWWWWK####        ",
-"          ##KWWWWWWK##          ",
-"         #..##KWWWWK##..#       ",
-"         #..#  KWWK  #..#       ",
-"          ###  KWWK  ###        ",
-"           ..   KK   ..         ",
+"            ##KWWK##            ",
+"           #KWWWWWWK#           ",
+"          #KWWGGGGWWK#          ",
+"         #KWWGWWWWGWWK#         ",
+"         #KWWWWWWWWWWK#         ",
+"         #KWWWK####KWWK#        ",
+"          #KWWK####KWWK#        ",
+"           #KWWKKKKWWK#         ",
+"            ##KWWWWK##          ",
+"              KWWWWK            ",
+"        ######KWWWWK######      ",
+"       #..###KWWWWWWK###..#     ",
+"       #..###KWWWWWWK###..#     ",
+"        ######KWWWWK######      ",
+"          ###KWWWWWWK###        ",
+"            #KWWWWWWK#          ",
+"            #KWWWWWWK#          ",
+"             ##KWWK##           ",
+"               K  K             ",
+"              K    K            ",
+"             K  KK  K           ",
+"              KK  KK            ",
 "                KK              ",
 "               KKKK             ",
 "              KK  KK            ",
@@ -1126,66 +1095,72 @@
 "                                ",
 "                                ",
 "                                ",
-"                                ",
-"                                ",
-"                                ",
         ],
-        cat_adult_walk1:[
+        cat_adult_walk1:null, // will fall back to idle if missing
+        cat_adult_walk2:null,
+        cat_adult_sad1:[
 "                                ",
 "                                ",
-"            ######              ",
-"          ##KWWWWK##            ",
-"         #KWWWWWWWWK#           ",
-"        #KWWPPWWPPWWK#          ",
-"        #KWWWWWWWWWWK#          ",
-"        #KWWWK####KWWK#         ",
-"         #KWWK####KWWK#         ",
-"          #KWWKKKKWWK#          ",
-"           ##KWWWWK##           ",
-"            #KWWWWK#            ",
-"     #######KWWWWWWK####        ",
-"    #..##..##KWWWWK##..#        ",
-"     #..##..##KWWWWK##..#       ",
-"      ####..####WW#######       ",
-"        ##....##KK##....##      ",
-"         ..####..KK..####..     ",
-"          .#  #..KK..#  #.      ",
-"           ##  ###  ###         ",
-"            ..  ..  ..          ",
-"               KKK              ",
-"              KK KK             ",
+"            ##KWWK##            ",
+"           #KWWWWWWK#           ",
+"          #KWWRRRRWWK#          ",
+"         #KWWRWWWWRWWK#         ",
+"         #KWWWWWWWWWWK#         ",
+"         #KWWWK######WWK#       ",
+"          #KWWK####KWWK#        ",
+"           #KWWKKKKWWK#         ",
+"            ##KWWWWK##          ",
+"              KWWWWK            ",
+"        ######KWWWWK######      ",
+"       #..###KWWWWWWK###..#     ",
+"       #..###KWWWWWWK###..#     ",
+"        ######KWWWWK######      ",
+"          ###KWWWWWWK###        ",
+"             ..RR..RR..         ",
+"              .RR..RR.          ",
+"               ..  ..           ",
+"               K  K             ",
+"              K    K            ",
+"             K  KK  K           ",
+"              KK  KK            ",
 "                KK              ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
+"               KKKK             ",
+"              KK  KK            ",
+"                 KK             ",
 "                                ",
 "                                ",
 "                                ",
 "                                ",
         ],
-        cat_adult_walk2:[
+
+        // CAT FAINTED (recognisable)
+        cat_faint:[
 "                                ",
 "                                ",
-"            ######              ",
-"          ##KWWWWK##            ",
-"         #KWWWWWWWWK#           ",
-"        #KWWPPWWPPWWK#          ",
-"        #KWWWWWWWWWWK#          ",
-"        #KWWWK####KWWK#         ",
-"         #KWWK####KWWK#         ",
-"          #KWWKKKKWWK#          ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"           ##KWWK##             ",
+"          #KWWWWWWK#            ",
+"         #KWWRRRRWWK#           ",
+"         #KWWRWWWRWWK#          ",
+"         #KWWWWWWWWWK#          ",
+"          #KWWWKKKWWK#          ",
 "           ##KWWWWK##           ",
-"            #KWWWWK#            ",
-"        ####KWWWWWWK#######     ",
-"       #..##KWWWWK##..##..#     ",
-"      #..##KWWWWK##..##..#      ",
-"      ######WW####..####        ",
-"       ##....##KK##....##       ",
-"       ..####..KK..####..       ",
-"       ..#  #..KK..#  #..       ",
-"       ###  ###  ###            ",
-"        ..   ..  ..             ",
+"              KWWK              ",
+"      ######  KWWK  ######      ",
+"     #..###KWWWWWWK###..#       ",
+"     #..###KWWWWWWK###..#       ",
+"      ######KWWWWK######        ",
+"        ###KWWWWWWK###          ",
+"          #KWWWWWWK#            ",
+"           ##KWWK##             ",
+"             K  K               ",
+"            K    K              ",
+"            K KK K              ",
+"             K  K               ",
+"              KK                ",
 "             KKK                ",
 "            KK KK               ",
 "              KK                ",
@@ -1193,72 +1168,34 @@
 "                                ",
 "                                ",
 "                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-        ],
-        cat_adult_sad1:[
-"                                ",
-"                                ",
-"            ######              ",
-"          ##KWWWWK##            ",
-"         #KWWWWWWWWK#           ",
-"        #KWWRRWWRRWWK#          ",
-"        #KWWWWWWWWWWK#          ",
-"        #KWWWK######WWK#        ",
-"         #KWWK####KWWK#         ",
-"          #KWWKKKKWWK#          ",
-"           ##KWWWWK##           ",
-"            #KWWWWK#            ",
-"        ####KWWWWWWK####        ",
-"       #..##KWWWWWWK##..#       ",
-"       #..##KWWWWWWK##..#       ",
-"        ####KWWWWWWK####        ",
-"          ##KWWWWWWK##          ",
-"         #..##KWWWWK##..#       ",
-"            ..RR..RR..          ",
-"             .RR..RR.           ",
-"             ..  ..             ",
-"               KKK              ",
-"              KK KK             ",
-"                KK              ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
-"                                ",
         ],
 
-        // ===== CLEAR DOG (outline K, floppy ears + snout)
+        // ===== DOG (clear floppy ears + snout)
         dog_adult_idle1:[
 "                                ",
 "                                ",
-"         #######  #######        ",
-"       ##KWWWWWK##KWWWWWK##      ",
-"      #KWWWWWWWWKKWWWWWWWWK#     ",
-"     #KWWPPWWPPWWWWPPWWPPWWK#    ",
-"     #KWWWWWWWWWWWWWWWWWWWWK#    ",
-"      #KWWWK#######KWWWWWWK#     ",
-"       #KWWK##KK##KWWWWWWK#      ",
-"        #KWWK  KK  KWWWWWK#      ",
-"         ##KWWWWWWWWWWWK##       ",
-"           #KWWWWWWWWWK#         ",
-"        ####KWWWWWWWWWK####      ",
-"       #..##KWWWWWWWWWK##..#     ",
-"       #..##KWWWWWWWWWK##..#     ",
-"        ####KWWWWWWWWWK####      ",
-"          ##KWWWWWWWWWK##        ",
-"         #..##KWWWWWWWK##..#     ",
-"         #..#  KWWWWK  #..#      ",
-"          ###   KKK   ###        ",
-"           ..   K K   ..         ",
-"               K  K              ",
-"              K    K             ",
-"               KKKK              ",
+"        ##KWWK##  ##KWWK##      ",
+"       #KWWWWWK##KWWWWWWK#      ",
+"      #KWWPPPPWWWWPPPPWWK#      ",
+"      #KWWPWWWWWWWWWWWPWWK#     ",
+"      #KWWWWWWWWWWWWWWWWK#      ",
+"       #KWWWK######KWWWWK#      ",
+"        #KWWK##KK##KWWWWK#      ",
+"         #KWWK  KK  KWWK#       ",
+"          ##KWWWWWWWWK##        ",
+"            #KWWWWWWK#          ",
+"        ####KWWWWWWWWK####      ",
+"       #..##KWWWWWWWWK##..#     ",
+"       #..##KWWWWWWWWK##..#     ",
+"        ####KWWWWWWWWK####      ",
+"          ##KWWWWWWWWK##        ",
+"            #KWWWWWWK#          ",
+"            #KWWWWWWK#          ",
+"             ##KWWK##           ",
+"               KKK              ",
+"              K   K             ",
+"              K   K             ",
+"               KKK              ",
 "                                ",
 "                                ",
 "                                ",
@@ -1271,28 +1208,28 @@
         dog_adult_idle2:[
 "                                ",
 "                                ",
-"         #######  #######        ",
-"       ##KWWWWWK##KWWWWWK##      ",
-"      #KWWWWWWWWKKWWWWWWWWK#     ",
-"     #KWWPPWWPPWWWWPPWWPPWWK#    ",
-"     #KWWWWWWWWWWWWWWWWWWWWK#    ",
-"      #KWWWK##########WWWWWK#    ",
-"       #KWWK##KK  ##KWWWWWK#     ",
-"        #KWWK  KK   KWWWWWK#     ",
-"         ##KWWWWWWWWWWWK##       ",
-"           #KWWWWWWWWWK#         ",
-"        ####KWWWWWWWWWK####      ",
-"       #..##KWWWWWWWWWK##..#     ",
-"       #..##KWWWWWWWWWK##..#     ",
-"        ####KWWWWWWWWWK####      ",
-"          ##KWWWWWWWWWK##        ",
-"         #..##KWWWWWWWK##..#     ",
-"         #..#  KWWWWK  #..#      ",
-"          ###   KKK   ###        ",
-"           ..   K K   ..         ",
-"              K   K              ",
-"              K   K              ",
-"               KKK               ",
+"        ##KWWK##  ##KWWK##      ",
+"       #KWWWWWK##KWWWWWWK#      ",
+"      #KWWPPPPWWWWPPPPWWK#      ",
+"      #KWWPWWWWWWWWWWWPWWK#     ",
+"      #KWWWWWWWWWWWWWWWWK#      ",
+"       #KWWWK########WWWWK#     ",
+"        #KWWK##KK  ##KWWK#      ",
+"         #KWWK  KK   KWWK#      ",
+"          ##KWWWWWWWWK##        ",
+"            #KWWWWWWK#          ",
+"        ####KWWWWWWWWK####      ",
+"       #..##KWWWWWWWWK##..#     ",
+"       #..##KWWWWWWWWK##..#     ",
+"        ####KWWWWWWWWK####      ",
+"          ##KWWWWWWWWK##        ",
+"            #KWWWWWWK#          ",
+"            #KWWWWWWK#          ",
+"             ##KWWK##           ",
+"               KKK              ",
+"             K   K              ",
+"             K   K              ",
+"              KKK               ",
 "                                ",
 "                                ",
 "                                ",
@@ -1305,28 +1242,62 @@
         dog_adult_sad1:[
 "                                ",
 "                                ",
-"         #######  #######        ",
-"       ##KWWWWWK##KWWWWWK##      ",
-"      #KWWWWWWWWKKWWWWWWWWK#     ",
-"     #KWWRRWWRRWWWWRRWWRRWWK#    ",
-"     #KWWWWWWWWWWWWWWWWWWWWK#    ",
-"      #KWWWK##########WWWWWK#    ",
-"       #KWWK##KK  ##KWWWWWK#     ",
-"        #KWWK  KK   KWWWWWK#     ",
-"         ##KWWWWWWWWWWWK##       ",
-"           #KWWWWWWWWWK#         ",
-"        ####KWWWWWWWWWK####      ",
-"       #..##KWWWWWWWWWK##..#     ",
-"       #..##KWWWWWWWWWK##..#     ",
-"        ####KWWWWWWWWWK####      ",
-"          ##KWWWWWWWWWK##        ",
-"         #..##KWWWWWWWK##..#     ",
-"            ..RR..RR..            ",
-"             .RR..RR.             ",
-"             ..  ..               ",
-"              K   K               ",
-"              K   K               ",
-"               KKK                ",
+"        ##KWWK##  ##KWWK##      ",
+"       #KWWWWWK##KWWWWWWK#      ",
+"      #KWWRRRRWWWWRRRRWWK#      ",
+"      #KWWRWWWWWWWWWWWRWWK#     ",
+"      #KWWWWWWWWWWWWWWWWK#      ",
+"       #KWWWK########WWWWK#     ",
+"        #KWWK##KK  ##KWWK#      ",
+"         #KWWK  KK   KWWK#      ",
+"          ##KWWWWWWWWK##        ",
+"            #KWWWWWWK#          ",
+"        ####KWWWWWWWWK####      ",
+"       #..##KWWWWWWWWK##..#     ",
+"       #..##KWWWWWWWWK##..#     ",
+"        ####KWWWWWWWWK####      ",
+"          ##KWWWWWWWWK##        ",
+"             ..RR..RR..         ",
+"              .RR..RR.          ",
+"               ..  ..           ",
+"               KKK              ",
+"              K   K             ",
+"              K   K             ",
+"               KKK              ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+        ],
+        dog_faint:[
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"                                ",
+"        ##KWWK##  ##KWWK##      ",
+"       #KWWWWWK##KWWWWWWK#      ",
+"      #KWWRRRRWWWWRRRRWWK#      ",
+"      #KWWRWWWWWWWWWWWRWWK#     ",
+"      #KWWWWWWWWWWWWWWWWK#      ",
+"       #KWWWK######KWWWWK#      ",
+"        #KWWK##KK##KWWWWK#      ",
+"          ##KWWWWWWWWK##        ",
+"            #KWWWWWWK#          ",
+"      ######KWWWWWWWWK######    ",
+"     #..###KWWWWWWWWWWK###..#   ",
+"      ######KWWWWWWWWK######    ",
+"          ##KWWWWWWWWK##        ",
+"             ##KWWK##           ",
+"               KKK              ",
+"              K   K             ",
+"              K   K             ",
+"               KKK              ",
 "                                ",
 "                                ",
 "                                ",
@@ -1338,12 +1309,10 @@
         ],
       };
 
-      // Use the strong animal sprites for ALL stages (so baby/teen never looks ghosty)
-      // (Later we can add true “different body shapes” per stage if you want.)
+      // Use the clear animal sprites for ALL stages (avoid “ghost baby”)
       (function normalizeAnimalStages(){
         const species=["cat","dog"];
         for(const sp of species){
-          // idle
           FRAMES[`${sp}_baby_idle1`] = FRAMES[`${sp}_adult_idle1`];
           FRAMES[`${sp}_baby_idle2`] = FRAMES[`${sp}_adult_idle2`];
           FRAMES[`${sp}_baby_idle1_blink`] = FRAMES[`${sp}_adult_idle1_blink`] || FRAMES[`${sp}_adult_idle1`];
@@ -1352,10 +1321,9 @@
           FRAMES[`${sp}_teen_idle2`] = FRAMES[`${sp}_adult_idle2`];
           FRAMES[`${sp}_teen_idle1_blink`] = FRAMES[`${sp}_adult_idle1_blink`] || FRAMES[`${sp}_adult_idle1`];
 
-          // walk
+          // optional walk frames
           FRAMES[`${sp}_baby_walk1`] = FRAMES[`${sp}_adult_walk1`] || FRAMES[`${sp}_adult_idle1`];
           FRAMES[`${sp}_baby_walk2`] = FRAMES[`${sp}_adult_walk2`] || FRAMES[`${sp}_adult_idle2`];
-
           FRAMES[`${sp}_teen_walk1`] = FRAMES[`${sp}_adult_walk1`] || FRAMES[`${sp}_adult_idle1`];
           FRAMES[`${sp}_teen_walk2`] = FRAMES[`${sp}_adult_walk2`] || FRAMES[`${sp}_adult_idle2`];
 
@@ -1408,11 +1376,15 @@
 
         ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        if(pet.fainted){
+        const sp = (pet.species==="dog") ? "dog" : "cat";
+
+        // ✅ FIX: fainted shows a *fainted animal*, not a blob/stone
+        if(pet.fainted && pet.hatched){
           screen.classList.remove("shake");
-          drawCentered(FRAMES.grave, bob);
+          drawCentered(FRAMES[`${sp}_faint`], bob);
           if(mode==="revive") drawSparkles(t);
-        } else if(!pet.hatched){
+        }
+        else if(!pet.hatched){
           if(mode==="hatch"){
             screen.classList.add("shake");
             drawCentered(toggle ? FRAMES.egg_crack : FRAMES.egg_shake, bob);
@@ -1423,7 +1395,6 @@
           }
         } else {
           screen.classList.remove("shake");
-          const sp = pet.species==="dog" ? "dog" : "cat";
           const stage = pet.stage;
 
           let action="idle";
@@ -1486,7 +1457,7 @@
 
         savePet(pet);
 
-        toggle = (Math.floor(t/180) % (pet.hunger>=65 ? 2 : 1)) === 0 ? !toggle : toggle;
+        toggle = (Math.floor(t/180) % 2) === 0 ? !toggle : toggle;
       }
 
       $("pet-reset-btn").addEventListener("click",()=>{
@@ -1525,9 +1496,11 @@
           updateRecentTrades(data.recent_trades||[]);
           updateAdvancedMetrics(data.advanced_metrics, data.max_drawdown_usd);
 
-          // PET
           pet=loadPet();
           applyTimeHunger(pet);
+
+          // keep species once hatched (never lose identity)
+          if(pet.hatched && !pet.species) pet.species = (Math.random()<0.5 ? "cat" : "dog");
 
           maybeHatch(pet, totalPnl);
 
@@ -1563,4 +1536,4 @@
       });
     </script>
   </body>
-  </html>
+</html>
