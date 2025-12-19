@@ -473,11 +473,11 @@
   const petCanvas = document.getElementById("petCanvas");
   const ctx = petCanvas.getContext("2d");
 
-  // NEW PALETTE (with compat aliases so nothing else breaks)
+  // ✅ UPDATED palette (your improved version)
   const PAL = {
     ink: "#0b1228",
-    ink2: "#121a34",
-    shadow: "rgba(0,0,0,.25)",
+    ink2: "#1a243c",
+    shadow: "rgba(0,0,0,0.35)",
 
     eggA: "#f8fafc",
     eggB: "#dbe6ff",
@@ -485,41 +485,28 @@
     eggY: "#ffd166",
     eggP: "#ff7aa2",
 
-    // Ginger cat
-    catOrange: "#ff8c00",
-    catDarkOrange: "#e67e00",
-    catStripes: "#b35900",
+    // Ginger the Cat - improved colors with better contrast
+    catMain: "#ff9500",
+    catDark: "#cc7700",
+    catLight: "#ffcc80",
+    catStripes: "#994c00",
     catNose: "#ff6b8a",
-    catMouth: "#8b4513",
-    catEyes: "#2c3e50",
-    catInnerEar: "#ffcc80",
-    catPaws: "#ffcc80",
-    catWhiskers: "#f5f5f5",
+    catOutline: "#663300",
+    catEyes: "#1a2b3c",
+    catWhisker: "#ffffff",
+    catPaws: "#ffdd99",
 
-    // Spot dog
+    // Spot the Dog - improved with better definition
     dogWhite: "#ffffff",
-    dogLightGray: "#f0f8ff",
-    dogBlackSpot: "#2c3e50",
-    dogNose: "#000000",
-    dogCollar: "#ff4d4d",
+    dogLight: "#f5f5f5",
+    dogDark: "#2d3748",
+    dogNose: "#1a202c",
+    dogCollar: "#e53e3e",
     dogEyes: "#000000",
-    dogEar: "#8b7355",
-    dogTongue: "#ff6b8a",
-    dogTailTip: "#2c3e50"
+    dogEar: "#805a46",
+    dogTongue: "#fc8181",
+    dogOutline: "#4a5568"
   };
-
-  // Backwards-compatible aliases (egg/old code safety)
-  PAL.catA = PAL.catOrange;
-  PAL.catB = PAL.catDarkOrange;
-  PAL.catC = PAL.catStripes;
-  PAL.catW = PAL.catPaws;
-  PAL.catS = PAL.catInnerEar;
-  PAL.catP = PAL.catNose;
-
-  PAL.dogA = PAL.dogWhite;
-  PAL.dogB = PAL.dogLightGray;
-  PAL.dogK = PAL.dogBlackSpot;
-  PAL.dogN = PAL.dogNose;
 
   function clearPetCanvas(){
     ctx.clearRect(0,0,petCanvas.width,petCanvas.height);
@@ -528,6 +515,7 @@
   function drawBg(){
     const w = petCanvas.width, h = petCanvas.height;
     ctx.save();
+
     const g1 = ctx.createRadialGradient(w*0.25,h*0.2, 10, w*0.25,h*0.2, w*0.7);
     g1.addColorStop(0, "rgba(63,183,255,.15)");
     g1.addColorStop(1, "rgba(0,0,0,0)");
@@ -542,13 +530,13 @@
 
     ctx.fillStyle = "rgba(255,255,255,.03)";
     ctx.fillRect(0, h*0.70, w, h*0.30);
+
     ctx.restore();
   }
 
-  // SAFE pixel plot (fixes blur + out-of-bounds writes)
-  function px(x,y, c){
-    x = x | 0;
-    y = y | 0;
+  // ✅ REPAIR #1: Safe px() with bounds check (prevents tail/outline pixels spilling off-grid)
+  function px(x,y,c){
+    x = x|0; y = y|0;
     if (x < 0 || x > 31 || y < 0 || y > 31) return;
     ctx.fillStyle = c;
     ctx.fillRect(x, y, 1, 1);
@@ -565,13 +553,14 @@
     ctx.translate(sx, sy);
     ctx.scale(scale, scale);
 
-    // shadow
+    // little shadow
     ctx.fillStyle = PAL.shadow;
     ctx.beginPath();
     ctx.ellipse(16, 28.5, 9.8, 2.4, 0, 0, Math.PI*2);
     ctx.fill();
 
     drawFn(opts);
+
     ctx.restore();
   }
 
@@ -580,25 +569,9 @@
     ctx.save();
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = "rgba(0,0,0,.25)";
-
-    // roundRect fallback safety
-    const x = w-74, y = 16, rw = 54, rh = 36, r = 14;
-    if (typeof ctx.roundRect === "function") {
-      ctx.beginPath();
-      ctx.roundRect(x, y, rw, rh, r);
-      ctx.fill();
-    } else {
-      // manual rounded rect
-      ctx.beginPath();
-      ctx.moveTo(x+r, y);
-      ctx.arcTo(x+rw, y, x+rw, y+rh, r);
-      ctx.arcTo(x+rw, y+rh, x, y+rh, r);
-      ctx.arcTo(x, y+rh, x, y, r);
-      ctx.arcTo(x, y, x+rw, y, r);
-      ctx.closePath();
-      ctx.fill();
-    }
-
+    ctx.beginPath();
+    ctx.roundRect(w-74, 16, 54, 36, 14);
+    ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,.92)";
     ctx.font = "22px system-ui, Apple Color Emoji, Segoe UI Emoji";
     ctx.textAlign = "center";
@@ -607,7 +580,7 @@
     ctx.restore();
   }
 
-  // --- EGG (your original, still works with new PAL)
+  // --- EGG (same as before, still works with new PAL)
   function spriteEgg({t, mood}){
     const blink = (Math.floor(t/35) % 14 === 0);
     const crack = (mood === "hungry" || mood === "fainted");
@@ -667,267 +640,356 @@
     }
   }
 
-  // --- NEW CAT (Ginger)
+  // ✅ IMPROVED CAT (your updated version)
   function spriteCat({t, mood}) {
-    const blink = ((t/40)|0) % 16 === 0;
-    const lazyStretch = (((t/30)|0) % 2) ? 1 : 0;
-    const tailSway = (((Math.sin(t/12))*2)|0);
+    const blink = ((t/45)|0) % 18 === 0;
+    const stretch = Math.sin(t/25) > 0 ? 1 : 0;
+    const tailMove = (((Math.sin(t/15))*3)|0);
 
     const hungry = (mood === "hungry");
     const sad = (mood === "sad");
     const faint = (mood === "fainted");
     const happy = (mood === "happy");
-    const chilling = (mood === "chilling");
 
-    // Body
+    const baseX = 16, baseY = 16;
+
+    // BODY
     for(let y=14; y<=28; y++) {
       for(let x=8; x<=24; x++) {
-        const dx = (x-16), dy = (y-22);
-        const inside = (dx*dx)/(12.5*12.5) + (dy*dy)/(7.5*7.5) <= 1;
-        if(!inside) continue;
-        let c = PAL.catOrange;
-        if(y > 20 || (x+y) % 5 === 0) c = PAL.catDarkOrange;
-        if((x+y) % 8 === 0) c = PAL.catStripes;
-        px(x, y + lazyStretch, c);
-      }
-    }
-
-    // Head
-    for(let y=4; y<=16; y++) {
-      for(let x=8; x<=24; x++) {
-        const dx = (x-16), dy = (y-10);
-        const inside = (dx*dx)/(9.5*9.5) + (dy*dy)/(7.5*7.5) <= 1;
-        if(!inside) continue;
-        let c = PAL.catOrange;
-        if(y > 12 && x > 13 && x < 19) c = PAL.catPaws; // muzzle
-        else if(y < 8) c = PAL.catDarkOrange;
-        px(x, y + lazyStretch, c);
-      }
-    }
-
-    // Ears
-    [[12,6],[13,5],[14,6]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catOrange));
-    px(13, 6+lazyStretch, PAL.catInnerEar);
-    [[20,6],[19,5],[18,6]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catOrange));
-    px(19, 6+lazyStretch, PAL.catInnerEar);
-
-    // Eyes
-    const eyeY = 10 + lazyStretch;
-    if(faint) {
-      [[14,eyeY],[16,eyeY],[18,eyeY]].forEach(([x,y]) => px(x, y, PAL.catEyes));
-    } else if(blink) {
-      for(let x=13; x<=15; x++) px(x, eyeY+1, PAL.catEyes);
-      for(let x=17; x<=19; x++) px(x, eyeY+1, PAL.catEyes);
-    } else if(sad || hungry) {
-      [[13,eyeY],[14,eyeY],[13,eyeY+1],[14,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.catEyes));
-      [[18,eyeY],[19,eyeY],[18,eyeY+1],[19,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.catEyes));
-    } else if(chilling || happy) {
-      px(14, eyeY+1, PAL.catEyes);
-      px(15, eyeY+1, PAL.catEyes);
-      px(18, eyeY+1, PAL.catEyes);
-      px(19, eyeY+1, PAL.catEyes);
-    } else {
-      px(14, eyeY, PAL.catEyes);
-      px(18, eyeY, PAL.catEyes);
-      px(14, eyeY+1, PAL.catEyes);
-      px(18, eyeY+1, PAL.catEyes);
-    }
-
-    // Nose
-    px(16, 12+lazyStretch, PAL.catNose);
-    [[15,13],[16,13],[17,13]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catNose));
-
-    // Mouth
-    const mouthY = 15 + lazyStretch;
-    if(hungry) {
-      for(let x=14; x<=18; x++) px(x, mouthY, PAL.catMouth);
-      px(16, mouthY+1, PAL.catMouth);
-      px(15, mouthY-1, PAL.catWhiskers);
-      px(17, mouthY-1, PAL.catWhiskers);
-    } else if(sad) {
-      px(15, mouthY+1, PAL.catMouth);
-      px(16, mouthY, PAL.catMouth);
-      px(17, mouthY+1, PAL.catMouth);
-    } else if(happy || chilling) {
-      for(let x=15; x<=17; x++) px(x, mouthY, PAL.catMouth);
-      px(16, mouthY-1, PAL.catMouth);
-    } else {
-      for(let x=15; x<=17; x++) px(x, mouthY, PAL.catMouth);
-    }
-
-    // Whiskers
-    [[9,11],[10,11],[11,11],[21,11],[22,11],[23,11]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catWhiskers));
-    [[9,13],[10,13],[11,13],[21,13],[22,13],[23,13]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catWhiskers));
-
-    // Stripes
-    const stripes = [
-      [12,7],[13,7],[19,7],[20,7],
-      [10,10],[11,10],[21,10],[22,10],
-      [11,14],[12,14],[20,14],[21,14],
-      [12,17],[13,17],[19,17],[20,17],
-      [11,20],[12,20],[20,20],[21,20],
-      [12,23],[13,23],[19,23],[20,23],
-      [13,26],[14,26],[18,26],[19,26]
-    ];
-    stripes.forEach(([x,y]) => px(x, y+lazyStretch, PAL.catStripes));
-
-    // Paws
-    [10,11,12].forEach(x => { px(x, 27+lazyStretch, PAL.catPaws); px(x, 28+lazyStretch, PAL.catPaws); });
-    [20,21,22].forEach(x => { px(x, 27+lazyStretch, PAL.catPaws); px(x, 28+lazyStretch, PAL.catPaws); });
-
-    // Tail (clamped sway)
-    const sway = clamp(tailSway, -2, 2);
-    const tailPoints = [
-      [24, 22+lazyStretch, PAL.catOrange],
-      [25, 21+lazyStretch+sway, PAL.catStripes],
-      [26, 20+lazyStretch+sway, PAL.catOrange],
-      [27, 19+lazyStretch+sway, PAL.catStripes],
-      [26, 18+lazyStretch+sway, PAL.catOrange]
-    ];
-    tailPoints.forEach(([x,y,c]) => px(x, y, c));
-
-    // Subtle outline
-    const outlinePoints = [
-      [10,14],[22,14],[9,16],[23,16],[8,18],[24,18],
-      [8,20],[24,20],[9,22],[23,22],[10,24],[22,24],
-      [11,26],[21,26],[12,28],[20,28]
-    ];
-    outlinePoints.forEach(([x,y]) => px(x, y+lazyStretch, PAL.ink2));
-  }
-
-  // --- NEW DOG (Spot)
-  function spriteDog({t, mood}) {
-    const blink = ((t/42)|0) % 18 === 0;
-    const bounce = (((t/20)|0) % 2) ? 1 : 0;
-    const earFlop = (((Math.sin(t/18))*1.5)|0);
-    const tailWagRaw = (((Math.sin(t/7))*3)|0);
-    const tailWag = clamp(tailWagRaw, -2, 2);
-
-    const hungry = (mood === "hungry");
-    const sad = (mood === "sad");
-    const faint = (mood === "fainted");
-    const happy = (mood === "happy");
-    const chilling = (mood === "chilling");
-
-    // Body
-    for(let y=14; y<=28; y++) {
-      for(let x=8; x<=24; x++) {
-        const dx = (x-16), dy = (y-22);
-        const inside = (dx*dx)/(11.5*11.5) + (dy*dy)/(7.5*7.5) <= 1;
-        if(!inside) continue;
-        px(x, y + bounce, PAL.dogWhite);
-      }
-    }
-
-    // Head
-    for(let y=4; y<=16; y++) {
-      for(let x=8; x<=24; x++) {
-        const dx = (x-16), dy = (y-10);
-        const inside = (dx*dx)/(9.5*9.5) + (dy*dy)/(7.0*7.0) <= 1;
-        if(!inside) continue;
-        if(y > 12 && x > 13 && x < 19) px(x, y + bounce, PAL.dogLightGray);
-        else px(x, y + bounce, PAL.dogWhite);
-      }
-    }
-
-    // Spot on back
-    for(let y=18; y<=25; y++) {
-      for(let x=13; x<=19; x++) {
-        const dx = (x-16), dy = (y-22);
-        const inside = (dx*dx)/(3.5*3.5) + (dy*dy)/(3.5*3.5) <= 1;
-        if(inside) px(x, y + bounce, PAL.dogBlackSpot);
-      }
-    }
-
-    // Floppy ear
-    const earBaseY = ((8 + bounce + earFlop) | 0);
-    for(let yy=earBaseY; yy<=earBaseY+9; yy++) {
-      for(let xx=10; xx<=14; xx++) {
-        const dx = (xx-12), dy = (yy-(earBaseY+4.5));
-        const inside = (dx*dx)/(2.2*2.2) + (dy*dy)/(4.5*4.5) <= 1;
-        if(inside) px(xx, yy, PAL.dogEar);
-      }
-    }
-
-    // Eyes
-    const eyeY = 10 + bounce;
-    if(faint) {
-      [[14,eyeY],[16,eyeY],[18,eyeY]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
-    } else if(blink) {
-      for(let x=13; x<=15; x++) px(x, eyeY+1, PAL.dogEyes);
-      for(let x=17; x<=19; x++) px(x, eyeY+1, PAL.dogEyes);
-    } else if(sad) {
-      px(14, eyeY+1, PAL.dogEyes); px(15, eyeY+1, PAL.dogEyes);
-      px(18, eyeY+1, PAL.dogEyes); px(19, eyeY+1, PAL.dogEyes);
-    } else if(hungry) {
-      [[13,eyeY],[14,eyeY],[13,eyeY+1],[14,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
-      [[18,eyeY],[19,eyeY],[18,eyeY+1],[19,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
-    } else {
-      px(14, eyeY, PAL.dogEyes); px(18, eyeY, PAL.dogEyes);
-      px(14, eyeY+1, PAL.dogEyes); px(18, eyeY+1, PAL.dogEyes);
-    }
-
-    // Nose
-    for(let y=12; y<=14; y++) {
-      for(let x=15; x<=17; x++) {
-        const dx = (x-16), dy = (y-13);
-        const inside = (dx*dx)/(1.2*1.2) + (dy*dy)/(1.2*1.2) <= 1;
-        if(inside) px(x, y+bounce, PAL.dogNose);
-      }
-    }
-    px(16, 12+bounce, PAL.dogLightGray);
-
-    // Mouth
-    const mouthY = 15 + bounce;
-    if(hungry) {
-      for(let x=14; x<=18; x++) {
-        px(x, mouthY, PAL.dogNose);
-        if(x >= 15 && x <= 17) {
-          px(x, mouthY+1, PAL.dogTongue);
-          if(x === 16) px(x, mouthY+2, PAL.dogTongue);
+        const dx = (x-baseX), dy = (y-(baseY+6));
+        const bodyShape = (dx*dx)/(10*10) + (dy*dy)/(7*7) <= 1;
+        if(bodyShape) {
+          px(x, y + stretch, PAL.catMain);
+          if((x+y) % 5 === 0 || y > 22) px(x, y + stretch, PAL.catStripes);
         }
       }
-    } else if(sad) {
-      px(15, mouthY+1, PAL.dogNose); px(16, mouthY, PAL.dogNose); px(17, mouthY+1, PAL.dogNose);
-    } else if(happy || chilling) {
-      for(let x=14; x<=18; x++) px(x, mouthY, PAL.dogNose);
-      px(15, mouthY-1, PAL.dogNose); px(17, mouthY-1, PAL.dogNose);
-    } else {
-      for(let x=15; x<=17; x++) px(x, mouthY, PAL.dogNose);
+    }
+    const bodyOutline = [
+      [9,15],[10,14],[11,13],[12,13],[20,13],[21,13],[22,14],[23,15],
+      [24,16],[24,18],[24,20],[23,22],[22,24],[21,25],[20,26],
+      [12,26],[11,25],[10,24],[9,22],[8,20],[8,18],[8,16]
+    ];
+    bodyOutline.forEach(([x,y]) => px(x, y+stretch, PAL.catOutline));
+
+    // HEAD
+    for(let y=4; y<=16; y++) {
+      for(let x=8; x<=24; x++) {
+        const dx = (x-baseX), dy = (y-(baseY-6));
+        const headShape = (dx*dx)/(8*8) + (dy*dy)/(6*6) <= 1;
+        if(headShape) px(x, y + stretch, PAL.catMain);
+      }
+    }
+    const headOutline = [
+      [10,5],[11,4],[12,4],[20,4],[21,4],[22,5],
+      [23,6],[24,8],[24,10],[24,12],[23,14],[22,15],
+      [10,15],[9,14],[8,12],[8,10],[8,8],[9,6]
+    ];
+    headOutline.forEach(([x,y]) => px(x, y+stretch, PAL.catOutline));
+
+    // EARS
+    [[12,5],[13,3],[14,5]].forEach(([x,y]) => px(x, y+stretch, PAL.catMain));
+    [[12,5],[13,3],[14,5],[12,6],[14,6]].forEach(([x,y]) => px(x, y+stretch, PAL.catOutline));
+    px(13, 4+stretch, PAL.catLight);
+
+    [[20,5],[19,3],[18,5]].forEach(([x,y]) => px(x, y+stretch, PAL.catMain));
+    [[20,5],[19,3],[18,5],[20,6],[18,6]].forEach(([x,y]) => px(x, y+stretch, PAL.catOutline));
+    px(19, 4+stretch, PAL.catLight);
+
+    // CHEEKS
+    for(let y=12; y<=14; y++) {
+      for(let x=12; x<=20; x++) {
+        const dx = (x-baseX), dy = (y-(baseY-2));
+        if(dx*dx + dy*dy < 25) px(x, y+stretch, PAL.catLight);
+      }
     }
 
-    // Collar
+    // EYES
+    const eyeY = 10 + stretch;
+    if(faint) {
+      [[13,eyeY],[14,eyeY],[15,eyeY],[17,eyeY],[18,eyeY],[19,eyeY]].forEach(([x,y]) => px(x, y, PAL.catOutline));
+      px(16, eyeY+1, PAL.catOutline);
+    } else if(blink) {
+      for(let x=13; x<=15; x++) px(x, eyeY+1, PAL.catOutline);
+      for(let x=17; x<=19; x++) px(x, eyeY+1, PAL.catOutline);
+    } else {
+      [[13,eyeY],[14,eyeY],[13,eyeY+1],[14,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.catEyes));
+      [[18,eyeY],[19,eyeY],[18,eyeY+1],[19,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.catEyes));
+      px(14, eyeY, PAL.catWhisker);
+      px(19, eyeY, PAL.catWhisker);
+    }
+
+    // NOSE (kept clean so it won’t read as a third eye)
+    const nosePoints = [
+      [baseX, 12+stretch],
+      [baseX-1, 13+stretch],
+      [baseX+1, 13+stretch]
+    ];
+    nosePoints.forEach(([x,y]) => px(x, y, PAL.catNose));
+    [[baseX,11+stretch],[baseX-2,13+stretch],[baseX+2,13+stretch]].forEach(([x,y]) => px(x, y, PAL.catOutline));
+
+    // MOUTH
+    const mouthY = 15 + stretch;
+    if(hungry) {
+      for(let x=14; x<=18; x++) px(x, mouthY, PAL.catOutline);
+      px(16, mouthY+1, PAL.catOutline);
+      px(16, mouthY+2, PAL.catNose);
+    } else if(sad) {
+      px(15, mouthY+1, PAL.catOutline);
+      px(16, mouthY, PAL.catOutline);
+      px(17, mouthY+1, PAL.catOutline);
+    } else if(happy) {
+      px(15, mouthY-1, PAL.catOutline);
+      px(16, mouthY, PAL.catOutline);
+      px(17, mouthY-1, PAL.catOutline);
+      px(16, mouthY+1, PAL.catOutline);
+    } else {
+      for(let x=15; x<=17; x++) px(x, mouthY, PAL.catOutline);
+    }
+
+    // WHISKERS
+    [[8,11],[9,11],[10,11],[8,13],[9,13],[10,13]].forEach(([x,y]) => px(x, y+stretch, PAL.catWhisker));
+    [[22,11],[23,11],[24,11],[22,13],[23,13],[24,13]].forEach(([x,y]) => px(x, y+stretch, PAL.catWhisker));
+
+    // STRIPES
+    const stripes = [
+      [13,7,PAL.catStripes],[19,7,PAL.catStripes],
+      [11,10,PAL.catStripes],[21,10,PAL.catStripes],
+      [12,17,PAL.catStripes],[13,18,PAL.catStripes],
+      [19,18,PAL.catStripes],[20,17,PAL.catStripes],
+      [11,22,PAL.catStripes],[21,22,PAL.catStripes]
+    ];
+    stripes.forEach(([x,y,c]) => {
+      px(x, y+stretch, c);
+      px(x-1, y+stretch, PAL.catDark);
+      px(x+1, y+stretch, PAL.catDark);
+    });
+
+    // PAWS
+    [10,11,12].forEach(x => {
+      px(x, 27+stretch, PAL.catPaws);
+      px(x, 28+stretch, PAL.catPaws);
+      px(x, 26+stretch, PAL.catOutline);
+      px(x, 29+stretch, PAL.catOutline);
+    });
+    [20,21,22].forEach(x => {
+      px(x, 27+stretch, PAL.catPaws);
+      px(x, 28+stretch, PAL.catPaws);
+      px(x, 26+stretch, PAL.catOutline);
+      px(x, 29+stretch, PAL.catOutline);
+    });
+
+    // TAIL (outlined)
+    const tailBaseX = 24, tailBaseY = 22 + stretch;
+    const tailSegments = [
+      [tailBaseX, tailBaseY],
+      [tailBaseX+1, tailBaseY-1+tailMove],
+      [tailBaseX+2, tailBaseY-2+tailMove],
+      [tailBaseX+3, tailBaseY-1+tailMove],
+      [tailBaseX+2, tailBaseY+tailMove]
+    ];
+    tailSegments.forEach(([x,y], i) => {
+      px(x, y, i % 2 === 0 ? PAL.catMain : PAL.catStripes);
+      px(x-1, y, PAL.catOutline);
+      px(x+1, y, PAL.catOutline);
+    });
+    px(tailBaseX+3, tailBaseY-1+tailMove, PAL.catLight);
+  }
+
+  // ✅ IMPROVED DOG (your updated version, with safe px() preventing spill)
+  function spriteDog({t, mood}) {
+    const blink = ((t/50)|0) % 20 === 0;
+    const bounce = Math.sin(t/20) > 0 ? 1 : 0;
+    const earFlop = (((Math.sin(t/20))*2)|0);
+    const tailWag = (((Math.sin(t/10))*5)|0);
+
+    const hungry = (mood === "hungry");
+    const sad = (mood === "sad");
+    const faint = (mood === "fainted");
+    const happy = (mood === "happy");
+
+    const baseX = 16, baseY = 16;
+
+    // BODY
+    for(let y=14; y<=28; y++) {
+      for(let x=8; x<=24; x++) {
+        const dx = (x-baseX), dy = (y-(baseY+6));
+        const bodyShape = (dx*dx)/(11*11) + (dy*dy)/(8*8) <= 1;
+        if(bodyShape) px(x, y + bounce, PAL.dogWhite);
+      }
+    }
+    const bodyOutline = [
+      [8,15],[9,14],[10,13],[11,13],[21,13],[22,13],[23,14],[24,15],
+      [25,16],[25,18],[25,20],[24,22],[23,24],[22,25],[21,26],
+      [11,26],[10,25],[9,24],[8,22],[7,20],[7,18],[7,16]
+    ];
+    bodyOutline.forEach(([x,y]) => px(x, y+bounce, PAL.dogOutline));
+
+    // SPOT
+    const spotX = 16, spotY = 22;
+    for(let y=spotY-3; y<=spotY+3; y++) {
+      for(let x=spotX-4; x<=spotX+4; x++) {
+        const dx = (x-spotX), dy = (y-spotY);
+        if(dx*dx + dy*dy < 16) px(x, y+bounce, PAL.dogDark);
+      }
+    }
+    for(let y=spotY-4; y<=spotY+4; y++) {
+      for(let x=spotX-5; x<=spotX+5; x++) {
+        const dx = (x-spotX), dy = (y-spotY);
+        const d = dx*dx + dy*dy;
+        if(d >= 16 && d < 20) px(x, y+bounce, PAL.dogOutline);
+      }
+    }
+
+    // HEAD
+    for(let y=4; y<=16; y++) {
+      for(let x=7; x<=25; x++) {
+        const dx = (x-baseX), dy = (y-(baseY-6));
+        const headShape = (dx*dx)/(9*9) + (dy*dy)/(7*7) <= 1;
+        if(headShape) px(x, y + bounce, PAL.dogWhite);
+      }
+    }
+    const headOutline = [
+      [9,5],[10,4],[11,4],[21,4],[22,4],[23,5],
+      [24,6],[25,8],[25,10],[25,12],[24,14],[23,15],
+      [9,15],[8,14],[7,12],[7,10],[7,8],[8,6]
+    ];
+    headOutline.forEach(([x,y]) => px(x, y+bounce, PAL.dogOutline));
+
+    // FLOPPY EAR (outlined)
+    const earBaseX = 10, earBaseY = 8 + bounce + earFlop;
+    for(let y=earBaseY; y<=earBaseY+10; y++) {
+      for(let x=earBaseX; x<=earBaseX+5; x++) {
+        const dx = (x-(earBaseX+2.5)), dy = (y-(earBaseY+5));
+        const earShape = (dx*dx)/(2.5*2.5) + (dy*dy)/(5*5) <= 1;
+        if(earShape) px(x, y, PAL.dogEar);
+      }
+    }
+    const earOutline = [
+      [earBaseX, earBaseY+2],[earBaseX+1, earBaseY],[earBaseX+2, earBaseY-1],
+      [earBaseX+3, earBaseY],[earBaseX+4, earBaseY+2],
+      [earBaseX+5, earBaseY+5],[earBaseX+5, earBaseY+8],
+      [earBaseX+4, earBaseY+10],[earBaseX+1, earBaseY+10],
+      [earBaseX, earBaseY+8],[earBaseX, earBaseY+5]
+    ];
+    earOutline.forEach(([x,y]) => px(x, y, PAL.dogOutline));
+
+    for(let y=earBaseY+2; y<=earBaseY+8; y++) {
+      for(let x=earBaseX+1; x<=earBaseX+4; x++) {
+        const dx = (x-(earBaseX+2.5)), dy = (y-(earBaseY+5));
+        if(dx*dx + dy*dy < 4) px(x, y, PAL.dogLight);
+      }
+    }
+
+    // SNOUT LIGHT
+    for(let y=12; y<=16; y++) {
+      for(let x=12; x<=20; x++) {
+        const dx = (x-baseX), dy = (y-(baseY-2));
+        if(dx*dx + dy*dy < 36) px(x, y+bounce, PAL.dogLight);
+      }
+    }
+
+    // EYES (no extra dots = no “3 eyes”)
+    const eyeY = 10 + bounce;
+    if(faint) {
+      [[13,eyeY],[14,eyeY],[15,eyeY],[17,eyeY],[18,eyeY],[19,eyeY]].forEach(([x,y]) => px(x, y, PAL.dogOutline));
+    } else if(blink) {
+      for(let x=13; x<=15; x++) px(x, eyeY+1, PAL.dogOutline);
+      for(let x=17; x<=19; x++) px(x, eyeY+1, PAL.dogOutline);
+    } else {
+      [[13,eyeY],[14,eyeY],[13,eyeY+1],[14,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
+      [[18,eyeY],[19,eyeY],[18,eyeY+1],[19,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
+      px(14, eyeY, PAL.dogWhite);
+      px(19, eyeY, PAL.dogWhite);
+    }
+
+    // NOSE (outlined, with tiny highlight)
+    for(let y=12; y<=14; y++) {
+      for(let x=15; x<=17; x++) {
+        const dx = (x-baseX), dy = (y-(baseY-2));
+        if(dx*dx + dy*dy < 6) px(x, y+bounce, PAL.dogNose);
+      }
+    }
+    const noseOutline = [
+      [14,11],[15,11],[16,11],[17,11],[18,11],
+      [14,15],[15,15],[16,15],[17,15],[18,15],
+      [14,12],[14,13],[14,14],
+      [18,12],[18,13],[18,14]
+    ];
+    noseOutline.forEach(([x,y]) => px(x, y+bounce, PAL.dogOutline));
+    px(16, 12+bounce, PAL.dogLight);
+
+    // MOUTH
+    const mouthY = 16 + bounce;
+    if(hungry) {
+      for(let x=14; x<=18; x++) px(x, mouthY, PAL.dogOutline);
+      px(16, mouthY+1, PAL.dogTongue);
+      px(15, mouthY+1, PAL.dogTongue);
+      px(17, mouthY+1, PAL.dogTongue);
+      px(16, mouthY+2, PAL.dogTongue);
+    } else if(sad) {
+      px(15, mouthY+1, PAL.dogOutline);
+      px(16, mouthY, PAL.dogOutline);
+      px(17, mouthY+1, PAL.dogOutline);
+    } else if(happy) {
+      for(let x=14; x<=18; x++) px(x, mouthY-1, PAL.dogOutline);
+      px(15, mouthY, PAL.dogOutline);
+      px(17, mouthY, PAL.dogOutline);
+    } else {
+      for(let x=15; x<=17; x++) px(x, mouthY, PAL.dogOutline);
+    }
+
+    // COLLAR
     for(let x=11; x<=21; x++) {
       px(x, 19+bounce, PAL.dogCollar);
-      if(x === 16) px(x, 18+bounce, PAL.dogCollar);
+      px(x, 18+bounce, PAL.dogOutline);
+      px(x, 20+bounce, PAL.dogOutline);
     }
-    px(16, 19+bounce, PAL.dogLightGray);
+    [[16,18],[16,19],[16,20],[15,19],[17,19]].forEach(([x,y]) => px(x, y+bounce, PAL.dogLight));
 
-    // Paws
-    [10,11,12].forEach(x => { px(x, 27+bounce, PAL.dogWhite); px(x, 28+bounce, PAL.dogWhite); });
-    [20,21,22].forEach(x => { px(x, 27+bounce, PAL.dogWhite); px(x, 28+bounce, PAL.dogWhite); });
+    // PAWS
+    [10,11,12].forEach(x => {
+      px(x, 27+bounce, PAL.dogWhite);
+      px(x, 28+bounce, PAL.dogWhite);
+      px(x, 26+bounce, PAL.dogOutline);
+      px(x, 29+bounce, PAL.dogOutline);
+      if(x === 11) { px(x, 28+bounce, PAL.dogDark); px(x, 29+bounce, PAL.dogDark); }
+    });
+    [20,21,22].forEach(x => {
+      px(x, 27+bounce, PAL.dogWhite);
+      px(x, 28+bounce, PAL.dogWhite);
+      px(x, 26+bounce, PAL.dogOutline);
+      px(x, 29+bounce, PAL.dogOutline);
+      if(x === 21) { px(x, 28+bounce, PAL.dogDark); px(x, 29+bounce, PAL.dogDark); }
+    });
 
-    // Tail
+    // TAIL (safe px() prevents any out-of-grid spill)
     const tailBaseX = 24, tailBaseY = 22 + bounce;
     const tailPoints = [
-      [tailBaseX, tailBaseY, PAL.dogWhite],
-      [tailBaseX+1, tailBaseY-1+tailWag, PAL.dogWhite],
-      [tailBaseX+2, tailBaseY-2+tailWag, PAL.dogWhite],
-      [tailBaseX+3, tailBaseY-1+tailWag, PAL.dogWhite],
-      [tailBaseX+2, tailBaseY+tailWag, PAL.dogWhite],
-      [tailBaseX+1, tailBaseY+1+tailWag, PAL.dogWhite]
+      [tailBaseX, tailBaseY],
+      [tailBaseX+2, tailBaseY-2+tailWag],
+      [tailBaseX+4, tailBaseY-4+tailWag],
+      [tailBaseX+6, tailBaseY-2+tailWag],
+      [tailBaseX+4, tailBaseY+tailWag],
+      [tailBaseX+2, tailBaseY+2+tailWag]
     ];
-    tailPoints.forEach(([x,y,c]) => px(x, y, c));
-    px(tailBaseX+2, tailBaseY-1+tailWag, PAL.dogTailTip);
-    px(tailBaseX+3, tailBaseY+tailWag, PAL.dogTailTip);
+    tailPoints.forEach(([x,y]) => {
+      px(x, y, PAL.dogWhite);
+      px(x-1, y, PAL.dogOutline);
+      px(x+1, y, PAL.dogOutline);
+    });
+    px(tailBaseX+6, tailBaseY-2+tailWag, PAL.dogDark);
+    px(tailBaseX+5, tailBaseY-1+tailWag, PAL.dogDark);
 
-    // Fur texture
+    // FUR TEXTURE
     const furPoints = [
-      [9,15],[23,15],[10,17],[22,17],
-      [9,19],[23,19],[10,21],[22,21],
-      [9,23],[23,23],[10,25],[22,25]
+      [9,16],[23,16],[10,18],[22,18],
+      [9,20],[23,20],[10,22],[22,22],
+      [9,24],[23,24]
     ];
-    furPoints.forEach(([x,y]) => px(x, y+bounce, PAL.dogLightGray));
+    furPoints.forEach(([x,y]) => {
+      px(x, y+bounce, PAL.dogLight);
+      px(x+1, y+bounce, PAL.dogOutline);
+    });
   }
 
   // -------------------------
@@ -1056,6 +1118,7 @@
     }
 
     if(overlay) drawOverlayIcon(overlay === "food" ? "food" : "empty");
+
     requestAnimationFrame(renderPet);
   }
 
