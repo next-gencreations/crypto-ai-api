@@ -469,15 +469,14 @@
 
   // -------------------------
   // Canvas sprite drawing (32x32 scaled up)
-  // Pixel-perfect (no fractional coords)
   // -------------------------
   const petCanvas = document.getElementById("petCanvas");
   const ctx = petCanvas.getContext("2d");
 
-  // "Ink" is dark navy (not black) so it reads on dark UI.
+  // NEW PALETTE (with compat aliases so nothing else breaks)
   const PAL = {
     ink: "#0b1228",
-    ink2:"#121a34",
+    ink2: "#121a34",
     shadow: "rgba(0,0,0,.25)",
 
     eggA: "#f8fafc",
@@ -486,19 +485,41 @@
     eggY: "#ffd166",
     eggP: "#ff7aa2",
 
-    catA: "#ffbe5a",   // ginger light
-    catB: "#ff8f20",   // ginger mid
-    catC: "#c85b12",   // ginger dark stripe
-    catW: "#fff1da",   // muzzle/whisker
-    catS: "#ffe8a6",   // eyelid
-    catP: "#ff6b8a",   // nose
+    // Ginger cat
+    catOrange: "#ff8c00",
+    catDarkOrange: "#e67e00",
+    catStripes: "#b35900",
+    catNose: "#ff6b8a",
+    catMouth: "#8b4513",
+    catEyes: "#2c3e50",
+    catInnerEar: "#ffcc80",
+    catPaws: "#ffcc80",
+    catWhiskers: "#f5f5f5",
 
-    dogA: "#ffffff",
-    dogB: "#e7f0ff",
-    dogP: "#ff6b8a",   // collar
-    dogK: "#162047",   // patch navy (visible)
-    dogN: "#141a34"
+    // Spot dog
+    dogWhite: "#ffffff",
+    dogLightGray: "#f0f8ff",
+    dogBlackSpot: "#2c3e50",
+    dogNose: "#000000",
+    dogCollar: "#ff4d4d",
+    dogEyes: "#000000",
+    dogEar: "#8b7355",
+    dogTongue: "#ff6b8a",
+    dogTailTip: "#2c3e50"
   };
+
+  // Backwards-compatible aliases (egg/old code safety)
+  PAL.catA = PAL.catOrange;
+  PAL.catB = PAL.catDarkOrange;
+  PAL.catC = PAL.catStripes;
+  PAL.catW = PAL.catPaws;
+  PAL.catS = PAL.catInnerEar;
+  PAL.catP = PAL.catNose;
+
+  PAL.dogA = PAL.dogWhite;
+  PAL.dogB = PAL.dogLightGray;
+  PAL.dogK = PAL.dogBlackSpot;
+  PAL.dogN = PAL.dogNose;
 
   function clearPetCanvas(){
     ctx.clearRect(0,0,petCanvas.width,petCanvas.height);
@@ -524,20 +545,20 @@
     ctx.restore();
   }
 
+  // SAFE pixel plot (fixes blur + out-of-bounds writes)
   function px(x,y, c){
-    // snap to ints so pixel art never “breaks”
-    x = x|0; y = y|0;
+    x = x | 0;
+    y = y | 0;
+    if (x < 0 || x > 31 || y < 0 || y > 31) return;
     ctx.fillStyle = c;
     ctx.fillRect(x, y, 1, 1);
   }
 
   function drawSprite32(drawFn, opts){
     const w = petCanvas.width, h = petCanvas.height;
-
-    // Larger sprite presence (32*7=224) fits 250 frame nicely
-    const scale = 7;
-    const sx = ((w - 32*scale)/2) | 0;
-    const sy = ((h - 32*scale)/2) | 0;
+    const scale = 7; // 32*7 = 224px
+    const sx = Math.floor((w - 32*scale)/2);
+    const sy = Math.floor((h - 32*scale)/2);
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -551,7 +572,6 @@
     ctx.fill();
 
     drawFn(opts);
-
     ctx.restore();
   }
 
@@ -560,9 +580,25 @@
     ctx.save();
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = "rgba(0,0,0,.25)";
-    ctx.beginPath();
-    ctx.roundRect(w-74, 16, 54, 36, 14);
-    ctx.fill();
+
+    // roundRect fallback safety
+    const x = w-74, y = 16, rw = 54, rh = 36, r = 14;
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(x, y, rw, rh, r);
+      ctx.fill();
+    } else {
+      // manual rounded rect
+      ctx.beginPath();
+      ctx.moveTo(x+r, y);
+      ctx.arcTo(x+rw, y, x+rw, y+rh, r);
+      ctx.arcTo(x+rw, y+rh, x, y+rh, r);
+      ctx.arcTo(x, y+rh, x, y, r);
+      ctx.arcTo(x, y, x+rw, y, r);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     ctx.fillStyle = "rgba(255,255,255,.92)";
     ctx.font = "22px system-ui, Apple Color Emoji, Segoe UI Emoji";
     ctx.textAlign = "center";
@@ -571,12 +607,9 @@
     ctx.restore();
   }
 
-  // -------------------------
-  // Sprites (original but “classic cartoon” cat/dog)
-  // -------------------------
-
+  // --- EGG (your original, still works with new PAL)
   function spriteEgg({t, mood}){
-    const blink = ((t/35)|0) % 14 === 0;
+    const blink = (Math.floor(t/35) % 14 === 0);
     const crack = (mood === "hungry" || mood === "fainted");
 
     for(let y=6;y<=28;y++){
@@ -584,13 +617,14 @@
         const dx = (x-16), dy = (y-17);
         const inside = (dx*dx)/(8.5*8.5) + (dy*dy)/(11.5*11.5) <= 1;
         if(!inside) continue;
+
         let c = PAL.eggA;
         if(dx > 3) c = PAL.eggB;
         if(dy > 5) c = PAL.eggC;
+
         px(x,y,c);
       }
     }
-
     const outlinePts = [
       [16,6],[13,7],[19,7],[11,8],[21,8],[10,9],[22,9],[9,10],[23,10],
       [8,12],[24,12],[8,14],[24,14],[8,16],[24,16],[8,18],[24,18],
@@ -633,233 +667,267 @@
     }
   }
 
-  // Cat: clear ears + whiskers + tabby stripes + tail up
-  function spriteCat({t, mood}){
+  // --- NEW CAT (Ginger)
+  function spriteCat({t, mood}) {
     const blink = ((t/40)|0) % 16 === 0;
-    const bob = (((t/18)|0) % 2) ? 1 : 0; // integer bob 0/1
-    const sway = (((Math.sin(t/10))*2)|0);
+    const lazyStretch = (((t/30)|0) % 2) ? 1 : 0;
+    const tailSway = (((Math.sin(t/12))*2)|0);
 
     const hungry = (mood === "hungry");
     const sad = (mood === "sad");
     const faint = (mood === "fainted");
+    const happy = (mood === "happy");
+    const chilling = (mood === "chilling");
 
     // Body
-    for(let y=12;y<=28;y++){
-      for(let x=8;x<=24;x++){
-        const dx=(x-16), dy=(y-21);
-        const inside=(dx*dx)/(9.2*9.2) + (dy*dy)/(7.2*7.2) <= 1;
+    for(let y=14; y<=28; y++) {
+      for(let x=8; x<=24; x++) {
+        const dx = (x-16), dy = (y-22);
+        const inside = (dx*dx)/(12.5*12.5) + (dy*dy)/(7.5*7.5) <= 1;
         if(!inside) continue;
-        let c = PAL.catA;
-        if(dx>3) c = PAL.catB;
-        if(dy>4) c = PAL.catC;
-        px(x, y + bob, c);
-      }
-    }
-
-    // Head (bigger, chunkier)
-    for(let y=4;y<=18;y++){
-      for(let x=6;x<=26;x++){
-        const dx=(x-16), dy=(y-11);
-        const inside=(dx*dx)/(9.8*9.8) + (dy*dy)/(7.4*7.4) <= 1;
-        if(!inside) continue;
-        let c = PAL.catA;
-        if(dx>3) c = PAL.catB;
-        if(dy>4) c = PAL.catC;
-        px(x, y + bob, c);
-      }
-    }
-
-    // Ears (pointy = cat!)
-    const earL = [[9,9],[10,8],[11,7],[12,6],[13,7],[14,8],[15,9]];
-    const earR = [[17,9],[18,8],[19,7],[20,6],[21,7],[22,8],[23,9]];
-    earL.forEach(([x,y])=>px(x,y+bob,PAL.catB));
-    earR.forEach(([x,y])=>px(x,y+bob,PAL.catB));
-    // inner ear
-    px(12,7+bob,PAL.catW); px(20,7+bob,PAL.catW);
-
-    // Outline (ink)
-    const outline = [
-      [12,4],[13,4],[14,4],[18,4],[19,4],[20,4],
-      [9,6],[8,8],[7,10],[7,12],[8,14],[9,16],[10,17],[12,18],[20,18],[22,17],[23,16],[24,14],[25,12],[25,10],[24,8],[23,6]
-    ];
-    outline.forEach(([x,y])=>px(x,y+bob,PAL.ink));
-
-    // Face
-    const eyeY = 11 + bob;
-    if(faint){
-      // X eyes
-      [[12,eyeY],[14,eyeY],[13,eyeY+1],[12,eyeY+2],[14,eyeY+2]].forEach(([x,y])=>px(x,y,PAL.ink));
-      [[18,eyeY],[20,eyeY],[19,eyeY+1],[18,eyeY+2],[20,eyeY+2]].forEach(([x,y])=>px(x,y,PAL.ink));
-    }else if(blink){
-      for(let i=-2;i<=2;i++){ px(13+i, eyeY+1, PAL.ink); }
-      for(let i=-2;i<=2;i++){ px(19+i, eyeY+1, PAL.ink); }
-    }else{
-      // eyelids
-      px(12,eyeY,PAL.catS); px(13,eyeY,PAL.catS); px(14,eyeY,PAL.catS);
-      px(18,eyeY,PAL.catS); px(19,eyeY,PAL.catS); px(20,eyeY,PAL.catS);
-      // pupils
-      px(13,eyeY+1,PAL.ink); px(19,eyeY+1,PAL.ink);
-      px(13,eyeY+2,PAL.ink); px(19,eyeY+2,PAL.ink);
-    }
-
-    // Muzzle (lighter area)
-    for(let y=13;y<=16;y++){
-      for(let x=11;x<=21;x++){
-        const dx=(x-16), dy=(y-15);
-        const inside=(dx*dx)/(6.2*6.2) + (dy*dy)/(3.2*3.2) <= 1;
-        if(inside) px(x, y+bob, PAL.catW);
-      }
-    }
-
-    // Nose + mouth
-    px(16,14+bob,PAL.catP); px(15,14+bob,PAL.catP); px(17,14+bob,PAL.catP);
-    px(16,15+bob,PAL.ink);
-
-    if(hungry){
-      px(15,16+bob,PAL.ink); px(16,16+bob,PAL.ink); px(17,16+bob,PAL.ink);
-      px(16,17+bob,PAL.ink);
-    }else if(sad){
-      px(15,17+bob,PAL.ink); px(16,16+bob,PAL.ink); px(17,17+bob,PAL.ink);
-    }else{
-      px(15,16+bob,PAL.ink); px(16,17+bob,PAL.ink); px(17,16+bob,PAL.ink);
-    }
-
-    // Whiskers (super “cat” cue)
-    const wy = 15 + bob;
-    [[9,wy],[10,wy],[11,wy],[21,wy],[22,wy],[23,wy]].forEach(([x,y])=>px(x,y,PAL.ink2));
-    [[9,wy+1],[10,wy+1],[11,wy+1],[21,wy+1],[22,wy+1],[23,wy+1]].forEach(([x,y])=>px(x,y,PAL.ink2));
-
-    // Tabby stripes
-    const stripes = [
-      [12,9],[13,9],[19,9],[20,9],
-      [10,12],[11,12],[21,12],[22,12],
-      [11,20],[12,20],[20,20],[21,20],
-      [12,23],[13,23],[19,23],[20,23]
-    ];
-    stripes.forEach(([x,y])=>px(x,y+bob,PAL.catC));
-
-    // Paws
-    [10,11,12].forEach(x=>px(x,27+bob,PAL.catW));
-    [20,21,22].forEach(x=>px(x,27+bob,PAL.catW));
-
-    // Tail (up + swish)
-    const tail = [
-      [24,22+bob],[25,21+bob+sway],[26,20+bob+sway],[26,19+bob+sway],[25,18+bob+sway]
-    ];
-    tail.forEach(([x,y])=>{
-      px(x,y,PAL.catB);
-      px(x-1,y,PAL.ink); // small outline edge
-    });
-  }
-
-  // Dog: droopy ear + snout + beagle spot + collar + wag
-  function spriteDog({t, mood}){
-    const blink = ((t/42)|0) % 18 === 0;
-    const bob = (((t/18)|0) % 2) ? 1 : 0;
-    const wag = (((Math.sin(t/9))*2)|0);
-
-    const hungry = (mood === "hungry");
-    const sad = (mood === "sad");
-    const faint = (mood === "fainted");
-
-    // Body
-    for(let y=12;y<=28;y++){
-      for(let x=8;x<=24;x++){
-        const dx=(x-16), dy=(y-21);
-        const inside=(dx*dx)/(9.6*9.6) + (dy*dy)/(7.2*7.2) <= 1;
-        if(!inside) continue;
-        let c = PAL.dogA;
-        if(dx>3) c = PAL.dogB;
-        px(x,y+bob,c);
+        let c = PAL.catOrange;
+        if(y > 20 || (x+y) % 5 === 0) c = PAL.catDarkOrange;
+        if((x+y) % 8 === 0) c = PAL.catStripes;
+        px(x, y + lazyStretch, c);
       }
     }
 
     // Head
-    for(let y=4;y<=18;y++){
-      for(let x=6;x<=26;x++){
-        const dx=(x-16), dy=(y-11);
-        const inside=(dx*dx)/(9.8*9.8) + (dy*dy)/(7.6*7.6) <= 1;
+    for(let y=4; y<=16; y++) {
+      for(let x=8; x<=24; x++) {
+        const dx = (x-16), dy = (y-10);
+        const inside = (dx*dx)/(9.5*9.5) + (dy*dy)/(7.5*7.5) <= 1;
         if(!inside) continue;
-        let c = PAL.dogA;
-        if(dx>3) c = PAL.dogB;
-        px(x,y+bob,c);
+        let c = PAL.catOrange;
+        if(y > 12 && x > 13 && x < 19) c = PAL.catPaws; // muzzle
+        else if(y < 8) c = PAL.catDarkOrange;
+        px(x, y + lazyStretch, c);
       }
     }
 
-    // Droopy ear (dark patch) — very “dog”
-    const ear = [
-      [8,9],[9,8],[9,9],[10,7],[10,8],[10,9],[11,6],[11,7],[11,8],[12,7],[12,8],[12,9],
-      [9,10],[10,10],[11,10],[12,10],[10,11],[11,11]
-    ];
-    ear.forEach(([x,y])=>px(x,y+bob,PAL.dogK));
-
-    // Outline
-    const outline = [
-      [12,4],[13,4],[14,4],[18,4],[19,4],[20,4],
-      [9,6],[8,8],[7,10],[7,12],[8,14],[9,16],[10,17],[12,18],[20,18],[22,17],[23,16],[24,14],[25,12],[25,10],[24,8],[23,6]
-    ];
-    outline.forEach(([x,y])=>px(x,y+bob,PAL.ink));
-
-    // Collar
-    for(let x=11;x<=21;x++) px(x,18+bob,PAL.dogP);
-    px(16,19+bob,PAL.dogP);
+    // Ears
+    [[12,6],[13,5],[14,6]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catOrange));
+    px(13, 6+lazyStretch, PAL.catInnerEar);
+    [[20,6],[19,5],[18,6]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catOrange));
+    px(19, 6+lazyStretch, PAL.catInnerEar);
 
     // Eyes
-    const eyeY = 11 + bob;
-    if(faint){
-      [[12,eyeY],[14,eyeY],[13,eyeY+1],[12,eyeY+2],[14,eyeY+2]].forEach(([x,y])=>px(x,y,PAL.ink));
-      [[18,eyeY],[20,eyeY],[19,eyeY+1],[18,eyeY+2],[20,eyeY+2]].forEach(([x,y])=>px(x,y,PAL.ink));
-    }else if(blink){
-      for(let i=-2;i<=2;i++){ px(13+i, eyeY+1, PAL.ink); }
-      for(let i=-2;i<=2;i++){ px(19+i, eyeY+1, PAL.ink); }
-    }else{
-      px(13,eyeY+1,PAL.ink); px(19,eyeY+1,PAL.ink);
-      px(13,eyeY+2,PAL.ink); px(19,eyeY+2,PAL.ink);
-    }
-
-    // Snout (longer = dog cue)
-    for(let y=13;y<=18;y++){
-      for(let x=11;x<=22;x++){
-        const dx=(x-17), dy=(y-16);
-        const inside=(dx*dx)/(7.0*7.0) + (dy*dy)/(3.2*3.2) <= 1;
-        if(inside) px(x,y+bob,PAL.dogB);
-      }
+    const eyeY = 10 + lazyStretch;
+    if(faint) {
+      [[14,eyeY],[16,eyeY],[18,eyeY]].forEach(([x,y]) => px(x, y, PAL.catEyes));
+    } else if(blink) {
+      for(let x=13; x<=15; x++) px(x, eyeY+1, PAL.catEyes);
+      for(let x=17; x<=19; x++) px(x, eyeY+1, PAL.catEyes);
+    } else if(sad || hungry) {
+      [[13,eyeY],[14,eyeY],[13,eyeY+1],[14,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.catEyes));
+      [[18,eyeY],[19,eyeY],[18,eyeY+1],[19,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.catEyes));
+    } else if(chilling || happy) {
+      px(14, eyeY+1, PAL.catEyes);
+      px(15, eyeY+1, PAL.catEyes);
+      px(18, eyeY+1, PAL.catEyes);
+      px(19, eyeY+1, PAL.catEyes);
+    } else {
+      px(14, eyeY, PAL.catEyes);
+      px(18, eyeY, PAL.catEyes);
+      px(14, eyeY+1, PAL.catEyes);
+      px(18, eyeY+1, PAL.catEyes);
     }
 
     // Nose
-    px(17,14+bob,PAL.dogN); px(16,14+bob,PAL.dogN); px(18,14+bob,PAL.dogN);
-    px(17,15+bob,PAL.ink);
+    px(16, 12+lazyStretch, PAL.catNose);
+    [[15,13],[16,13],[17,13]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catNose));
 
     // Mouth
-    if(hungry){
-      px(16,16+bob,PAL.ink); px(17,16+bob,PAL.ink); px(18,16+bob,PAL.ink);
-      px(17,17+bob,PAL.ink);
-    }else if(sad){
-      px(16,17+bob,PAL.ink); px(17,16+bob,PAL.ink); px(18,17+bob,PAL.ink);
-    }else{
-      px(16,16+bob,PAL.ink); px(17,17+bob,PAL.ink); px(18,16+bob,PAL.ink);
+    const mouthY = 15 + lazyStretch;
+    if(hungry) {
+      for(let x=14; x<=18; x++) px(x, mouthY, PAL.catMouth);
+      px(16, mouthY+1, PAL.catMouth);
+      px(15, mouthY-1, PAL.catWhiskers);
+      px(17, mouthY-1, PAL.catWhiskers);
+    } else if(sad) {
+      px(15, mouthY+1, PAL.catMouth);
+      px(16, mouthY, PAL.catMouth);
+      px(17, mouthY+1, PAL.catMouth);
+    } else if(happy || chilling) {
+      for(let x=15; x<=17; x++) px(x, mouthY, PAL.catMouth);
+      px(16, mouthY-1, PAL.catMouth);
+    } else {
+      for(let x=15; x<=17; x++) px(x, mouthY, PAL.catMouth);
     }
 
-    // Beagle spot (navy-ish)
-    for(let y=19;y<=25;y++){
-      for(let x=14;x<=22;x++){
-        const dx=(x-18), dy=(y-22);
-        const inside=(dx*dx)/(4.8*4.8) + (dy*dy)/(3.2*3.2) <= 1;
-        if(inside) px(x,y+bob,PAL.dogK);
+    // Whiskers
+    [[9,11],[10,11],[11,11],[21,11],[22,11],[23,11]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catWhiskers));
+    [[9,13],[10,13],[11,13],[21,13],[22,13],[23,13]].forEach(([x,y]) => px(x, y+lazyStretch, PAL.catWhiskers));
+
+    // Stripes
+    const stripes = [
+      [12,7],[13,7],[19,7],[20,7],
+      [10,10],[11,10],[21,10],[22,10],
+      [11,14],[12,14],[20,14],[21,14],
+      [12,17],[13,17],[19,17],[20,17],
+      [11,20],[12,20],[20,20],[21,20],
+      [12,23],[13,23],[19,23],[20,23],
+      [13,26],[14,26],[18,26],[19,26]
+    ];
+    stripes.forEach(([x,y]) => px(x, y+lazyStretch, PAL.catStripes));
+
+    // Paws
+    [10,11,12].forEach(x => { px(x, 27+lazyStretch, PAL.catPaws); px(x, 28+lazyStretch, PAL.catPaws); });
+    [20,21,22].forEach(x => { px(x, 27+lazyStretch, PAL.catPaws); px(x, 28+lazyStretch, PAL.catPaws); });
+
+    // Tail (clamped sway)
+    const sway = clamp(tailSway, -2, 2);
+    const tailPoints = [
+      [24, 22+lazyStretch, PAL.catOrange],
+      [25, 21+lazyStretch+sway, PAL.catStripes],
+      [26, 20+lazyStretch+sway, PAL.catOrange],
+      [27, 19+lazyStretch+sway, PAL.catStripes],
+      [26, 18+lazyStretch+sway, PAL.catOrange]
+    ];
+    tailPoints.forEach(([x,y,c]) => px(x, y, c));
+
+    // Subtle outline
+    const outlinePoints = [
+      [10,14],[22,14],[9,16],[23,16],[8,18],[24,18],
+      [8,20],[24,20],[9,22],[23,22],[10,24],[22,24],
+      [11,26],[21,26],[12,28],[20,28]
+    ];
+    outlinePoints.forEach(([x,y]) => px(x, y+lazyStretch, PAL.ink2));
+  }
+
+  // --- NEW DOG (Spot)
+  function spriteDog({t, mood}) {
+    const blink = ((t/42)|0) % 18 === 0;
+    const bounce = (((t/20)|0) % 2) ? 1 : 0;
+    const earFlop = (((Math.sin(t/18))*1.5)|0);
+    const tailWagRaw = (((Math.sin(t/7))*3)|0);
+    const tailWag = clamp(tailWagRaw, -2, 2);
+
+    const hungry = (mood === "hungry");
+    const sad = (mood === "sad");
+    const faint = (mood === "fainted");
+    const happy = (mood === "happy");
+    const chilling = (mood === "chilling");
+
+    // Body
+    for(let y=14; y<=28; y++) {
+      for(let x=8; x<=24; x++) {
+        const dx = (x-16), dy = (y-22);
+        const inside = (dx*dx)/(11.5*11.5) + (dy*dy)/(7.5*7.5) <= 1;
+        if(!inside) continue;
+        px(x, y + bounce, PAL.dogWhite);
       }
     }
 
-    // Paws
-    [10,11,12].forEach(x=>px(x,27+bob,PAL.dogB));
-    [20,21,22].forEach(x=>px(x,27+bob,PAL.dogB));
+    // Head
+    for(let y=4; y<=16; y++) {
+      for(let x=8; x<=24; x++) {
+        const dx = (x-16), dy = (y-10);
+        const inside = (dx*dx)/(9.5*9.5) + (dy*dy)/(7.0*7.0) <= 1;
+        if(!inside) continue;
+        if(y > 12 && x > 13 && x < 19) px(x, y + bounce, PAL.dogLightGray);
+        else px(x, y + bounce, PAL.dogWhite);
+      }
+    }
 
-    // Tail wag
-    const baseX=24, baseY=22+bob;
-    const tailPts=[[baseX,baseY],[baseX+1,baseY-1+wag],[baseX+2,baseY-2+wag],[baseX+2,baseY-3+wag]];
-    tailPts.forEach(([x,y])=>{
-      px(x,y,PAL.dogB);
-      px(x-1,y,PAL.ink);
-    });
+    // Spot on back
+    for(let y=18; y<=25; y++) {
+      for(let x=13; x<=19; x++) {
+        const dx = (x-16), dy = (y-22);
+        const inside = (dx*dx)/(3.5*3.5) + (dy*dy)/(3.5*3.5) <= 1;
+        if(inside) px(x, y + bounce, PAL.dogBlackSpot);
+      }
+    }
+
+    // Floppy ear
+    const earBaseY = ((8 + bounce + earFlop) | 0);
+    for(let yy=earBaseY; yy<=earBaseY+9; yy++) {
+      for(let xx=10; xx<=14; xx++) {
+        const dx = (xx-12), dy = (yy-(earBaseY+4.5));
+        const inside = (dx*dx)/(2.2*2.2) + (dy*dy)/(4.5*4.5) <= 1;
+        if(inside) px(xx, yy, PAL.dogEar);
+      }
+    }
+
+    // Eyes
+    const eyeY = 10 + bounce;
+    if(faint) {
+      [[14,eyeY],[16,eyeY],[18,eyeY]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
+    } else if(blink) {
+      for(let x=13; x<=15; x++) px(x, eyeY+1, PAL.dogEyes);
+      for(let x=17; x<=19; x++) px(x, eyeY+1, PAL.dogEyes);
+    } else if(sad) {
+      px(14, eyeY+1, PAL.dogEyes); px(15, eyeY+1, PAL.dogEyes);
+      px(18, eyeY+1, PAL.dogEyes); px(19, eyeY+1, PAL.dogEyes);
+    } else if(hungry) {
+      [[13,eyeY],[14,eyeY],[13,eyeY+1],[14,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
+      [[18,eyeY],[19,eyeY],[18,eyeY+1],[19,eyeY+1]].forEach(([x,y]) => px(x, y, PAL.dogEyes));
+    } else {
+      px(14, eyeY, PAL.dogEyes); px(18, eyeY, PAL.dogEyes);
+      px(14, eyeY+1, PAL.dogEyes); px(18, eyeY+1, PAL.dogEyes);
+    }
+
+    // Nose
+    for(let y=12; y<=14; y++) {
+      for(let x=15; x<=17; x++) {
+        const dx = (x-16), dy = (y-13);
+        const inside = (dx*dx)/(1.2*1.2) + (dy*dy)/(1.2*1.2) <= 1;
+        if(inside) px(x, y+bounce, PAL.dogNose);
+      }
+    }
+    px(16, 12+bounce, PAL.dogLightGray);
+
+    // Mouth
+    const mouthY = 15 + bounce;
+    if(hungry) {
+      for(let x=14; x<=18; x++) {
+        px(x, mouthY, PAL.dogNose);
+        if(x >= 15 && x <= 17) {
+          px(x, mouthY+1, PAL.dogTongue);
+          if(x === 16) px(x, mouthY+2, PAL.dogTongue);
+        }
+      }
+    } else if(sad) {
+      px(15, mouthY+1, PAL.dogNose); px(16, mouthY, PAL.dogNose); px(17, mouthY+1, PAL.dogNose);
+    } else if(happy || chilling) {
+      for(let x=14; x<=18; x++) px(x, mouthY, PAL.dogNose);
+      px(15, mouthY-1, PAL.dogNose); px(17, mouthY-1, PAL.dogNose);
+    } else {
+      for(let x=15; x<=17; x++) px(x, mouthY, PAL.dogNose);
+    }
+
+    // Collar
+    for(let x=11; x<=21; x++) {
+      px(x, 19+bounce, PAL.dogCollar);
+      if(x === 16) px(x, 18+bounce, PAL.dogCollar);
+    }
+    px(16, 19+bounce, PAL.dogLightGray);
+
+    // Paws
+    [10,11,12].forEach(x => { px(x, 27+bounce, PAL.dogWhite); px(x, 28+bounce, PAL.dogWhite); });
+    [20,21,22].forEach(x => { px(x, 27+bounce, PAL.dogWhite); px(x, 28+bounce, PAL.dogWhite); });
+
+    // Tail
+    const tailBaseX = 24, tailBaseY = 22 + bounce;
+    const tailPoints = [
+      [tailBaseX, tailBaseY, PAL.dogWhite],
+      [tailBaseX+1, tailBaseY-1+tailWag, PAL.dogWhite],
+      [tailBaseX+2, tailBaseY-2+tailWag, PAL.dogWhite],
+      [tailBaseX+3, tailBaseY-1+tailWag, PAL.dogWhite],
+      [tailBaseX+2, tailBaseY+tailWag, PAL.dogWhite],
+      [tailBaseX+1, tailBaseY+1+tailWag, PAL.dogWhite]
+    ];
+    tailPoints.forEach(([x,y,c]) => px(x, y, c));
+    px(tailBaseX+2, tailBaseY-1+tailWag, PAL.dogTailTip);
+    px(tailBaseX+3, tailBaseY+tailWag, PAL.dogTailTip);
+
+    // Fur texture
+    const furPoints = [
+      [9,15],[23,15],[10,17],[22,17],
+      [9,19],[23,19],[10,21],[22,21],
+      [9,23],[23,23],[10,25],[22,25]
+    ];
+    furPoints.forEach(([x,y]) => px(x, y+bounce, PAL.dogLightGray));
   }
 
   // -------------------------
@@ -879,26 +947,21 @@
 
   function computeMood(p){
     if(!p.hatched){
-      if(p.hunger >= 85) return {mood:"Fainted", state:"fainted", desc:"Egg needs wins to hatch."};
-      if(p.hunger >= 65) return {mood:"Hungry", state:"hungry", desc:"Needs wins (food)."};
-      return {mood:"Hatching", state:"chilling", desc:"Watching the market..."};
+      if(p.hunger >= 85) return {mood:"Fainted ☠️", state:"fainted", desc:"Egg needs wins to hatch."};
+      if(p.hunger >= 65) return {mood:"Hungry 😿", state:"hungry", desc:"Needs wins (food)."};
+      return {mood:"Hatching 🥚", state:"chilling", desc:"Watching the market..."};
     }
-    if(p.hunger >= 90) return {mood:"Fainted", state:"fainted", desc:"It fainted from hunger — needs wins to revive."};
-    if(p.hunger >= 65) return {mood:"Hungry", state:"hungry", desc:"Losses = empty plate. Feed it wins."};
-    if(p.growth >= 90 && p.hunger <= 20) return {mood:"Chilling", state:"chilling", desc:"Calm, well-fed, and growing."};
-    if(p.growth >= 65) return {mood:"Happy", state:"happy", desc:"Wins are food. Keep it growing."};
-    if(p.growth <= 20) return {mood:"Sad", state:"sad", desc:"Needs steady wins to build up."};
-    return {mood:"Okay", state:"chilling", desc:"Doing fine. Keep it fed."};
-  }
-
-  function speciesEmoji(){
-    if(!pet.hatched) return "🥚";
-    return pet.species === "cat" ? "🐱" : "🐶";
+    if(p.hunger >= 90) return {mood:"Fainted ☠️", state:"fainted", desc:"It fainted from hunger — needs wins to revive."};
+    if(p.hunger >= 65) return {mood:"Hungry 😾", state:"hungry", desc:"Losses = empty plate. Feed it wins."};
+    if(p.growth >= 90 && p.hunger <= 20) return {mood:"Chilling 😌", state:"chilling", desc:"Calm, well-fed, and growing."};
+    if(p.growth >= 65) return {mood:"Happy 🙂", state:"happy", desc:"Wins are food. Keep it growing."};
+    if(p.growth <= 20) return {mood:"Sad 😔", state:"sad", desc:"Needs steady wins to build up."};
+    return {mood:"Okay 🙂", state:"chilling", desc:"Doing fine. Keep it fed."};
   }
 
   function applyPetUI(){
     const mood = computeMood(pet);
-    moodEl.textContent = `${mood.mood} ${speciesEmoji()}`;
+    moodEl.textContent = mood.mood;
     lineEl.textContent = mood.desc;
 
     growthFill.style.width = pet.growth + "%";
@@ -993,7 +1056,6 @@
     }
 
     if(overlay) drawOverlayIcon(overlay === "food" ? "food" : "empty");
-
     requestAnimationFrame(renderPet);
   }
 
