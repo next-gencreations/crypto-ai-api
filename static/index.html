@@ -963,12 +963,38 @@
       if(p.hunger >= 65) return {mood:"Hungry 😿", state:"hungry", desc:"Needs wins (food)."};
       return {mood:"Hatching 🥚", state:"chilling", desc:"Watching the market..."};
     }
-    if(p.hunger >= 90) return {mood:"Fainted ☠️", state:"fainted", desc:"It fainted from hunger — needs wins to revive."};
-    if(p.hunger >= 65) return {mood:"Hungry 😾", state:"hungry", desc:"Losses = empty plate. Feed it wins."};
-    if(p.growth >= 90 && p.hunger <= 20) return {mood:"Chilling 😌", state:"chilling", desc:"Calm, well-fed, and growing."};
-    if(p.growth >= 65) return {mood:"Happy 🙂", state:"happy", desc:"Wins are food. Keep it growing."};
-    if(p.growth <= 20) return {mood:"Sad 😔", state:"sad", desc:"Needs steady wins to build up."};
-    return {mood:"Okay 🙂", state:"chilling", desc:"Doing fine. Keep it fed."};
+    
+    // HATCHED PET LOGIC - FIXED
+    if(p.hunger >= 90) return {
+      mood: "Fainted 🌟", 
+      state: "fainted", 
+      desc: `It fainted from hunger — needs wins to revive.`
+    };
+    if(p.hunger >= 65) return {
+      mood: "Hungry 😾", 
+      state: "hungry", 
+      desc: `Losses = empty plate. Feed it wins.`
+    };
+    if(p.growth >= 90 && p.hunger <= 20) return {
+      mood: "Chilling 😌", 
+      state: "chilling", 
+      desc: `Calm, well-fed, and growing.`
+    };
+    if(p.growth >= 65) return {
+      mood: "Happy 🙂", 
+      state: "happy", 
+      desc: `Wins are food. Keep it growing.`
+    };
+    if(p.growth <= 20) return {
+      mood: "Sad 😔", 
+      state: "sad", 
+      desc: `Needs steady wins to build up.`
+    };
+    return {
+      mood: "Okay 🙂", 
+      state: "chilling", 
+      desc: `Doing fine. Keep it fed.`
+    };
   }
 
   function applyPetUI(){
@@ -976,10 +1002,20 @@
     moodEl.textContent = mood.mood;
     lineEl.textContent = mood.desc;
 
-    const speciesLabel = !pet.hatched
-      ? "Species: EGG 🥚"
-      : (pet.species === "cat" ? "Species: CAT 🐱" : "Species: DOG 🐶");
-    speciesEl.textContent = speciesLabel;
+    // FIXED: Show species correctly based on hatched state
+    if(!pet.hatched){
+      speciesEl.textContent = "Species: EGG 🥚";
+    } else {
+      // Check if species is set, otherwise determine from seed
+      if(!pet.species){
+        const rnd = mulberry32(pet.seed)();
+        pet.species = rnd < 0.5 ? "cat" : "dog";
+        savePet(pet);
+      }
+      speciesEl.textContent = pet.species === "cat" 
+        ? "Species: CAT 🐱" 
+        : "Species: DOG 🌟"; // Using star from your screenshot
+    }
 
     growthFill.style.width = pet.growth + "%";
     hungerFill.style.width = pet.hunger + "%";
@@ -1018,26 +1054,40 @@
     const dt = Math.min(10*60*1000, Math.max(0, nowMs() - (pet.lastUpdate||nowMs())));
     const minutes = dt / 60000;
 
+    // Degradation over time
     pet.hunger = clamp(pet.hunger + minutes*0.55, 0, 100);
     pet.growth = clamp(pet.growth - minutes*0.18, 0, 100);
 
-    if(dWins || dLoss){
+    // Apply wins and losses
+    if(dWins > 0){
+      // Wins reduce hunger and increase growth
       pet.hunger = clamp(pet.hunger - dWins*9, 0, 100);
       pet.growth = clamp(pet.growth + dWins*7, 0, 100);
-
+    }
+    
+    if(dLoss > 0){
+      // Losses increase hunger and reduce growth
       pet.hunger = clamp(pet.hunger + dLoss*10, 0, 100);
       pet.growth = clamp(pet.growth - dLoss*6, 0, 100);
-
-      if(pet.hatched && totalPnl > 0){
-        pet.growth = clamp(pet.growth + Math.min(6, totalPnl*0.2), 0, 100);
-      }
     }
 
+    // Bonus growth from positive PnL for hatched pets
+    if(pet.hatched && totalPnl > 0){
+      pet.growth = clamp(pet.growth + Math.min(6, totalPnl*0.2), 0, 100);
+    }
+
+    // Egg can't grow beyond 80%
     if(!pet.hatched){
       pet.growth = clamp(pet.growth, 0, 80);
     }
 
-    pet.lastTotals = { total_trades: totalTrades, wins, losses, total_pnl_usd: totalPnl };
+    // Update totals
+    pet.lastTotals = { 
+      total_trades: totalTrades, 
+      wins, 
+      losses, 
+      total_pnl_usd: totalPnl 
+    };
     pet.lastUpdate = nowMs();
     savePet(pet);
 
@@ -1063,10 +1113,17 @@
 
     if(!pet.hatched){
       drawSprite32(spriteEgg, {t, mood: mood.state});
-    }else{
+    } else {
+      // Make sure species is set
+      if(!pet.species){
+        const rnd = mulberry32(pet.seed)();
+        pet.species = rnd < 0.5 ? "cat" : "dog";
+        savePet(pet);
+      }
+      
       if(pet.species === "cat"){
         drawSprite32(spriteCat, {t, mood: mood.state});
-      }else{
+      } else {
         drawSprite32(spriteDog, {t, mood: mood.state});
       }
     }
