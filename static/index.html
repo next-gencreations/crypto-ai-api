@@ -1,104 +1,871 @@
-function spriteCat({ t, mood }) {
-  const blink = (Math.floor(t / 42) % 16 === 0);
-  const bob = Math.sin(t / 18) > 0 ? 1 : 0;
-  const tailWag = ((Math.sin(t / 10)) * 2) | 0;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Crypto AI Bot Dashboard</title>
+  <style>
+    :root{
+      --bg0:#070b14;
+      --bg1:#0b1020;
+      --stroke:rgba(255,255,255,.08);
+      --text:#e9eefb;
+      --muted:rgba(233,238,251,.65);
+      --accent:#3fb7ff;
+      --good:#35d07f;
+      --bad:#ff4d6d;
+      --shadow: 0 18px 70px rgba(0,0,0,.45);
+      --radius: 18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 700px at 20% 10%, rgba(63,183,255,.20), transparent 55%),
+                  radial-gradient(900px 600px at 80% 35%, rgba(53,208,127,.14), transparent 55%),
+                  linear-gradient(180deg, var(--bg0), var(--bg1));
+      color:var(--text);
+    }
+    .wrap{max-width: 1200px;margin: 0 auto;padding: 22px 16px 40px;}
+    header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom: 18px;}
+    .title h1{margin:0;font-size: 30px;letter-spacing:.2px;}
+    .title .sub{margin-top:6px;color:var(--muted);font-size: 14px;}
+    .grid{display:grid;grid-template-columns: repeat(12, 1fr);gap: 14px;}
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      position:relative;
+      overflow:hidden;
+    }
+    .card::before{
+      content:"";
+      position:absolute; inset:-2px;
+      background: radial-gradient(500px 220px at 18% 0%, rgba(63,183,255,.20), transparent 60%);
+      pointer-events:none;
+      opacity:.8;
+    }
+    .card > *{position:relative}
 
-  // Helper local colors (uses your PAL)
-  const O = PAL.catOrange || "#ff9800";
-  const S = PAL.catStripe || "#9a4b00";
-  const C = PAL.catCream || "#ffd49a";
-  const L = PAL.catOutline || "#3b2414";
-  const E = PAL.catEye || "#0b1228";
-  const N = PAL.catNose || "#ff6b8a";
-  const W = PAL.catWhisk || "#ffffff";
+    .kpi{display:flex;flex-direction:column;gap:6px;min-height:92px;justify-content:center;}
+    .kpi .label{color:var(--muted);font-weight:600;letter-spacing:.12em;font-size:12px;text-transform:uppercase;}
+    .kpi .value{font-size:34px;font-weight:800;line-height:1.05;}
+    .kpi .hint{color:var(--muted);font-size:13px;}
 
-  // ---- BODY (side oval) ----
-  for (let y = 16; y <= 28; y++) {
-    for (let x = 9; x <= 22; x++) {
-      const dx = x - 15.5, dy = y - 22;
-      const inside = (dx * dx) / (7.2 * 7.2) + (dy * dy) / (5.6 * 5.6) <= 1;
-      if (inside) px(x, y + bob, O);
+    .c1{grid-column: span 4;}
+    .c2{grid-column: span 4;}
+    .c3{grid-column: span 4;}
+    .c4{grid-column: span 4;}
+    .c5{grid-column: span 8;}
+    .full{grid-column: span 12;}
+
+    @media (max-width: 980px){
+      .c1,.c2,.c3,.c4,.c5{grid-column: span 12;}
+      header{align-items:flex-start; flex-direction:column}
+    }
+
+    .sectionTitle{
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: .18em;
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .statusRow{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+    .dot{width:10px;height:10px;border-radius:999px;background: var(--muted);box-shadow: 0 0 0 3px rgba(255,255,255,.06);display:inline-block;margin-right:8px;transform: translateY(1px);}
+    .dot.good{background: var(--good);}
+    .dot.bad{background: var(--bad);}
+    .small{color:var(--muted);font-size:13px;line-height:1.35;}
+
+    .petCard{display:grid;grid-template-columns: 290px 1fr;gap: 14px;align-items:center;}
+    @media (max-width: 980px){ .petCard{grid-template-columns: 1fr;} }
+
+    .petFrame{
+      width: 290px;height: 290px;border-radius: 22px;border: 1px solid var(--stroke);
+      background:
+        radial-gradient(260px 220px at 20% 10%, rgba(63,183,255,.18), rgba(0,0,0,0) 60%),
+        radial-gradient(280px 240px at 70% 90%, rgba(53,208,127,.12), rgba(0,0,0,0) 60%),
+        rgba(255,255,255,.02);
+      display:flex;align-items:center;justify-content:center;
+      position:relative;overflow:hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+    }
+    canvas{image-rendering: pixelated; image-rendering: crisp-edges;}
+    .petPulse{animation: pulse 0.55s infinite alternate;}
+    @keyframes pulse{from{ transform: scale(1);}to{ transform: scale(1.03);} }
+
+    .petInfo .mood{font-size:46px;font-weight:900;letter-spacing:-.02em;margin:0;}
+    .petInfo .moodLine{color:var(--muted);margin-top:6px;margin-bottom:10px;font-size:15px;}
+    .speciesLine{margin:0 0 10px;color: rgba(233,238,251,.70);letter-spacing:.12em;text-transform: uppercase;font-weight:800;font-size:12px;}
+
+    .bars{display:flex;flex-direction:column;gap:10px;margin: 10px 0 12px;}
+    .barRow{display:grid;grid-template-columns:72px 1fr 56px;gap:10px;align-items:center;}
+    .barRow .name{color:var(--muted)}
+    .bar{height:10px;background: rgba(255,255,255,.06);border-radius:999px;overflow:hidden;border: 1px solid rgba(255,255,255,.06);}
+    .fill{height:100%;width:0%;background: var(--accent);border-radius:999px;transition: width .35s ease;}
+    .fill.good{background: var(--good);}
+    .fill.bad{background: var(--bad);}
+
+    .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center;}
+    .btn{
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 999px;
+      color: var(--text);
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor:pointer;
+      transition: transform .08s ease, background .2s ease;
+    }
+    .btn:hover{background: rgba(255,255,255,.06)}
+    .btn:active{transform: translateY(1px)}
+    .note{color:var(--muted);font-size:13px;margin-top:10px;line-height:1.45;}
+
+    table{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px;}
+    th,td{padding:10px 10px;border-bottom: 1px solid rgba(255,255,255,.06);text-align:left;}
+    th{color:var(--muted);font-weight:700;letter-spacing:.08em;font-size:12px;text-transform:uppercase;}
+    td.right{text-align:right}
+    .pill{
+      display:inline-block;padding:4px 8px;border-radius:999px;font-weight:800;font-size:12px;
+      border: 1px solid rgba(255,255,255,.10);background: rgba(255,255,255,.03);
+    }
+    .pill.good{color: var(--good);}
+    .pill.bad{color: var(--bad);}
+
+    .chartWrap{
+      height: 260px;width:100%;
+      border-radius: 16px;border: 1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.18);
+      overflow:hidden;position:relative;
+    }
+    .chartWrap canvas{width:100%;height:100%;display:block;}
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <h1>Crypto AI Bot Dashboard</h1>
+        <div class="sub">Paper-trading stats from Render — <a href="/data" target="_blank" rel="noreferrer">raw stats</a></div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card c1">
+        <div class="kpi">
+          <div class="label">Total Trades</div>
+          <div class="value" id="k_totalTrades">—</div>
+          <div class="hint" id="k_wl">—</div>
+        </div>
+      </div>
+
+      <div class="card c2">
+        <div class="kpi">
+          <div class="label">Win Rate</div>
+          <div class="value" id="k_winRate">—</div>
+          <div class="hint" id="k_avgPerTrade">—</div>
+        </div>
+      </div>
+
+      <div class="card c3">
+        <div class="kpi">
+          <div class="label">PnL (Total)</div>
+          <div class="value" id="k_totalPnl">—</div>
+          <div class="hint">Based on closed trades only.</div>
+        </div>
+      </div>
+
+      <div class="card c4">
+        <div class="sectionTitle">Bot Status</div>
+        <div class="statusRow">
+          <div>
+            <div><span class="dot" id="statusDot"></span><span id="botStatusText">—</span></div>
+            <div class="small" id="hbText">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card c5">
+        <div class="sectionTitle">Bot Pet</div>
+
+        <div class="petCard">
+          <div class="petFrame" id="petFrame">
+            <canvas id="petCanvas" width="360" height="360"></canvas>
+          </div>
+
+          <div class="petInfo">
+            <p class="mood" id="petMood">—</p>
+            <div class="moodLine" id="petLine">—</div>
+            <div class="speciesLine" id="petSpecies">Species: —</div>
+
+            <div class="bars">
+              <div class="barRow">
+                <div class="name">Growth</div>
+                <div class="bar"><div class="fill good" id="growthFill"></div></div>
+                <div class="small" id="growthTxt">—%</div>
+              </div>
+              <div class="barRow">
+                <div class="name">Hunger</div>
+                <div class="bar"><div class="fill bad" id="hungerFill"></div></div>
+                <div class="small" id="hungerTxt">—%</div>
+              </div>
+            </div>
+
+            <div class="btnRow">
+              <button class="btn" id="resetPetBtn">Reset Pet</button>
+            </div>
+
+            <div class="note">
+              <b>Wins</b> are <b>food</b> 🍗. <b>Losses</b> are an <b>empty plate</b> 🍽️.<br/>
+              The egg hatches when <b>Total PnL goes positive</b> — then it never reverts.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card full">
+        <div class="sectionTitle">Equity Curve</div>
+        <div class="small" style="margin-bottom:10px;">Tracks paper-trading balance over time (USD).</div>
+        <div class="chartWrap">
+          <canvas id="equityChart" width="1100" height="260"></canvas>
+        </div>
+      </div>
+
+      <div class="card full">
+        <div class="sectionTitle">Per-Market Performance</div>
+        <div class="small">How the bot is doing on each market (paper trading).</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th class="right">Trades</th>
+              <th class="right">Win Rate</th>
+              <th class="right">Total PnL</th>
+              <th class="right">Avg PnL</th>
+            </tr>
+          </thead>
+          <tbody id="marketsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card full">
+        <div class="sectionTitle">Recent Trades</div>
+        <div class="small">Showing last 20 closed trades.</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Market</th>
+              <th class="right">PnL (USD)</th>
+            </tr>
+          </thead>
+          <tbody id="recentBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // -------------------------
+  // Helpers
+  // -------------------------
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const fmtUsd = (n) => {
+    const sign = n >= 0 ? "" : "-";
+    const v = Math.abs(n);
+    return sign + "$" + v.toFixed(2);
+  };
+  const fmtPct = (n) => (isFinite(n) ? n.toFixed(1) + "%" : "—");
+  const nowMs = () => Date.now();
+
+  // deterministic random
+  function mulberry32(a){
+    return function(){
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // -------------------------
+  // Pet state (persistent)
+  // -------------------------
+  const PET_KEY = "tradepilot_pet_v4";
+  const defaultPet = {
+    hatched: false,
+    species: null,       // "cat" | "dog"
+    seed: Math.floor(Math.random()*1e9),
+    growth: 0,
+    hunger: 65,
+    lastTotals: { total_trades: 0, wins: 0, losses: 0, total_pnl_usd: 0 },
+    lastUpdate: nowMs()
+  };
+  function loadPet(){
+    try{
+      const raw = localStorage.getItem(PET_KEY);
+      if(!raw) return {...defaultPet};
+      const p = JSON.parse(raw);
+      return {...defaultPet, ...p, lastTotals: {...defaultPet.lastTotals, ...(p.lastTotals||{})}};
+    }catch{
+      return {...defaultPet};
+    }
+  }
+  function savePet(p){ localStorage.setItem(PET_KEY, JSON.stringify(p)); }
+
+  // -------------------------
+  // Canvas setup
+  // -------------------------
+  const petCanvas = document.getElementById("petCanvas");
+  const ctx = petCanvas.getContext("2d");
+
+  const PAL = {
+    ink: "#0b1228",
+    ink2:"#1a243c",
+    shadow:"rgba(0,0,0,.35)",
+
+    // egg
+    eggA:"#f8fafc",
+    eggB:"#dbe6ff",
+    eggC:"#9bb4ff",
+    eggY:"#ffd166",
+    eggP:"#ff7aa2",
+
+    // cat (simple Garfield-ish vibe)
+    catOrange:"#ff9800",
+    catStripe:"#9a4b00",
+    catCream:"#ffd49a",
+    catOutline:"#3b2414",
+    catNose:"#ff6b8a",
+    catEye:"#0b1228",
+    catWhisk:"#ffffff",
+
+    // dog (simple Snoopy-ish vibe)
+    dogWhite:"#ffffff",
+    dogOutline:"#2d3748",
+    dogEar:"#0b1228",
+    dogNose:"#0b1228",
+    dogCollar:"#e53e3e",
+    dogCheek:"#f5f5f5"
+  };
+
+  function clearPetCanvas(){
+    ctx.clearRect(0,0,petCanvas.width,petCanvas.height);
+  }
+
+  function drawBg(){
+    const w = petCanvas.width, h = petCanvas.height;
+    ctx.save();
+    const g1 = ctx.createRadialGradient(w*0.25,h*0.2, 10, w*0.25,h*0.2, w*0.7);
+    g1.addColorStop(0, "rgba(63,183,255,.15)");
+    g1.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g1; ctx.fillRect(0,0,w,h);
+
+    const g2 = ctx.createRadialGradient(w*0.75,h*0.8, 10, w*0.75,h*0.8, w*0.75);
+    g2.addColorStop(0, "rgba(53,208,127,.10)");
+    g2.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g2; ctx.fillRect(0,0,w,h);
+
+    ctx.fillStyle = "rgba(255,255,255,.03)";
+    ctx.fillRect(0, h*0.70, w, h*0.30);
+    ctx.restore();
+  }
+
+  function px(x,y,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,1); }
+
+  function drawSprite32(drawFn, opts){
+    const w = petCanvas.width, h = petCanvas.height;
+    const scale = 9;              // 32*9 = 288 (nice + big)
+    const sx = Math.floor((w - 32*scale)/2);
+    const sy = Math.floor((h - 32*scale)/2);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(sx, sy);
+    ctx.scale(scale, scale);
+
+    // shadow
+    ctx.fillStyle = PAL.shadow;
+    ctx.beginPath();
+    ctx.ellipse(16, 28.5, 9.8, 2.4, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    drawFn(opts);
+    ctx.restore();
+  }
+
+  // -------------------------
+  // Sprites (clean + readable)
+  // -------------------------
+  function spriteEgg({t, mood}){
+    const blink = (Math.floor(t/35) % 14 === 0);
+    for(let y=6;y<=28;y++){
+      for(let x=8;x<=24;x++){
+        const dx=x-16, dy=y-17;
+        const inside=(dx*dx)/(8.5*8.5)+(dy*dy)/(11.5*11.5)<=1;
+        if(!inside) continue;
+        let c=PAL.eggA;
+        if(dx>2) c=PAL.eggB;
+        if(dy>5) c=PAL.eggC;
+        px(x,y,c);
+      }
+    }
+    // outline
+    const out=[[16,6],[13,7],[19,7],[11,8],[21,8],[10,9],[22,9],[9,10],[23,10],
+      [8,12],[24,12],[8,14],[24,14],[8,16],[24,16],[8,18],[24,18],
+      [9,20],[23,20],[10,22],[22,22],[11,24],[21,24],[13,26],[19,26],[16,28]];
+    out.forEach(([x,y])=>px(x,y,PAL.ink));
+
+    // spots
+    [[12,14,PAL.eggY],[20,13,PAL.eggP],[18,20,PAL.eggY],[14,21,PAL.eggP]].forEach(([x,y,c])=>{
+      px(x,y,c); px(x+1,y,c); px(x,y+1,c);
+    });
+
+    // face
+    const ey=17;
+    if(!blink){
+      px(13,ey,PAL.ink); px(19,ey,PAL.ink);
+      px(13,ey+1,PAL.ink); px(19,ey+1,PAL.ink);
+    } else {
+      for(let x=12;x<=14;x++) px(x,ey+1,PAL.ink);
+      for(let x=18;x<=20;x++) px(x,ey+1,PAL.ink);
+    }
+    // mouth
+    if(mood==="hungry"){ px(15,20,PAL.ink); px(16,20,PAL.ink); px(17,20,PAL.ink); px(16,21,PAL.ink); }
+    else if(mood==="fainted"){ px(14,20,PAL.ink); px(18,20,PAL.ink); px(16,21,PAL.ink); }
+    else { px(15,20,PAL.ink); px(16,20,PAL.ink); px(17,20,PAL.ink); }
+  }
+
+  // CAT: unmistakable orange tabby (Garfield-ish)
+  function spriteCat({t, mood}){
+    const blink = (Math.floor(t/42) % 16 === 0);
+    const bob = Math.sin(t/18) > 0 ? 1 : 0;
+    const tail = ((Math.sin(t/10))*2)|0;
+
+    // body fill
+    for(let y=14;y<=28;y++){
+      for(let x=10;x<=22;x++){
+        const dx=x-16, dy=y-22;
+        const inside=(dx*dx)/(7.5*7.5)+(dy*dy)/(5.7*5.7)<=1;
+        if(!inside) continue;
+        px(x,y+bob,PAL.catOrange);
+      }
+    }
+    // head fill
+    for(let y=6;y<=16;y++){
+      for(let x=10;x<=22;x++){
+        const dx=x-16, dy=y-11;
+        const inside=(dx*dx)/(6.8*6.8)+(dy*dy)/(5.5*5.5)<=1;
+        if(!inside) continue;
+        // cream muzzle
+        if(y>=12 && x>=12 && x<=20) px(x,y+bob,PAL.catCream);
+        else px(x,y+bob,PAL.catOrange);
+      }
+    }
+    // ears
+    [[12,7],[13,6],[14,7]].forEach(([x,y])=>px(x,y+bob,PAL.catOrange));
+    [[18,7],[19,6],[20,7]].forEach(([x,y])=>px(x,y+bob,PAL.catOrange));
+
+    // outline (simple)
+    const outline=[
+      // head outline
+      [12,6],[13,5],[14,6],[18,6],[19,5],[20,6],
+      [10,9],[9,11],[10,13],[11,15],[13,16],[16,16],[19,16],[21,15],[22,13],[23,11],[22,9],
+      // body outline
+      [11,17],[10,19],[10,21],[10,23],[11,25],[12,27],[14,28],[16,28],[18,28],[20,27],[21,25],[22,23],[22,21],[22,19],[21,17],
+    ];
+    outline.forEach(([x,y])=>px(x,y+bob,PAL.catOutline));
+
+    // stripes (subtle, not blob)
+    [[12,10],[20,10],[12,18],[20,18],[13,20],[19,20]].forEach(([x,y])=>px(x,y+bob,PAL.catStripe));
+
+    // eyes
+    const ey=11+bob;
+    if(mood==="fainted"){
+      // X eyes
+      [[13,ey],[14,ey+1],[14,ey],[13,ey+1]].forEach(([x,y])=>px(x,y,PAL.catEye));
+      [[19,ey],[20,ey+1],[20,ey],[19,ey+1]].forEach(([x,y])=>px(x,y,PAL.catEye));
+    } else if(blink || mood==="chilling"){
+      for(let x=12;x<=15;x++) px(x,ey+1,PAL.catEye);
+      for(let x=17;x<=20;x++) px(x,ey+1,PAL.catEye);
+    } else {
+      px(14,ey,PAL.catEye); px(18,ey,PAL.catEye);
+      px(14,ey+1,PAL.catEye); px(18,ey+1,PAL.catEye);
+    }
+
+    // nose + mouth
+    px(16,13+bob,PAL.catNose);
+    px(15,14+bob,PAL.catOutline); px(16,14+bob,PAL.catOutline); px(17,14+bob,PAL.catOutline);
+
+    // whiskers
+    [[10,13],[9,13],[10,14],[22,13],[23,13],[22,14]].forEach(([x,y])=>px(x,y+bob,PAL.catWhisk));
+
+    // paws
+    [[12,27],[13,27],[19,27],[20,27]].forEach(([x,y])=>px(x,y+bob,PAL.catCream));
+
+    // tail (striped)
+    const tailPts=[[23,22+tail],[24,21+tail],[25,20+tail],[24,19+tail]];
+    tailPts.forEach(([x,y],i)=>px(x,y+bob,(i%2?PAL.catStripe:PAL.catOrange)));
+    tailPts.forEach(([x,y])=>px(x,y+bob,PAL.catOutline));
+  }
+
+  // DOG: unmistakable Snoopy-ish white dog (black ear + red collar), NO belly blob
+  function spriteDog({t, mood}){
+    const blink = (Math.floor(t/44) % 16 === 0);
+    const bob = Math.sin(t/18) > 0 ? 1 : 0;
+    const tail = ((Math.sin(t/10))*2)|0;
+
+    // body fill
+    for(let y=14;y<=28;y++){
+      for(let x=10;x<=22;x++){
+        const dx=x-16, dy=y-22;
+        const inside=(dx*dx)/(7.8*7.8)+(dy*dy)/(5.8*5.8)<=1;
+        if(!inside) continue;
+        px(x,y+bob,PAL.dogWhite);
+      }
+    }
+    // head fill
+    for(let y=6;y<=16;y++){
+      for(let x=9;x<=23;x++){
+        const dx=x-16, dy=y-11;
+        const inside=(dx*dx)/(7.3*7.3)+(dy*dy)/(5.6*5.6)<=1;
+        if(!inside) continue;
+        px(x,y+bob,PAL.dogWhite);
+      }
+    }
+
+    // black ear (right side)
+    for(let y=8;y<=16;y++){
+      for(let x=20;x<=23;x++){
+        const dx=x-22, dy=y-12;
+        const inside=(dx*dx)/(2.2*2.2)+(dy*dy)/(4.5*4.5)<=1;
+        if(inside) px(x,y+bob,PAL.dogEar);
+      }
+    }
+
+    // outline
+    const outline=[
+      // head outline
+      [11,7],[10,9],[9,11],[10,13],[11,15],[13,16],[16,16],[19,16],[21,15],[22,13],[23,11],[22,9],
+      // body outline
+      [11,17],[10,19],[10,21],[10,23],[11,25],[12,27],[14,28],[16,28],[18,28],[20,27],[21,25],[22,23],[22,21],[22,19],[21,17],
+    ];
+    outline.forEach(([x,y])=>px(x,y+bob,PAL.dogOutline));
+
+    // eyes
+    const ey=11+bob;
+    if(mood==="fainted"){
+      [[13,ey],[14,ey+1],[14,ey],[13,ey+1]].forEach(([x,y])=>px(x,y,PAL.dogOutline));
+      [[18,ey],[19,ey+1],[19,ey],[18,ey+1]].forEach(([x,y])=>px(x,y,PAL.dogOutline));
+    } else if(blink || mood==="chilling"){
+      for(let x=12;x<=15;x++) px(x,ey+1,PAL.dogOutline);
+      for(let x=17;x<=20;x++) px(x,ey+1,PAL.dogOutline);
+    } else {
+      px(14,ey,PAL.dogOutline); px(18,ey,PAL.dogOutline);
+      px(14,ey+1,PAL.dogOutline); px(18,ey+1,PAL.dogOutline);
+    }
+
+    // nose (small)
+    px(16,13+bob,PAL.dogNose);
+    px(15,14+bob,PAL.dogOutline); px(16,14+bob,PAL.dogOutline); px(17,14+bob,PAL.dogOutline);
+
+    // collar (red, clear)
+    for(let x=12;x<=20;x++) px(x,18+bob,PAL.dogCollar);
+    px(16,18+bob,PAL.dogOutline);
+
+    // paws
+    [[12,27],[13,27],[19,27],[20,27]].forEach(([x,y])=>px(x,y+bob,PAL.dogCheek));
+
+    // tail (simple wag)
+    const tailPts=[[23,22+tail],[24,21+tail],[25,20+tail]];
+    tailPts.forEach(([x,y])=>px(x,y+bob,PAL.dogWhite));
+    tailPts.forEach(([x,y])=>px(x,y+bob,PAL.dogOutline));
+  }
+
+  // -------------------------
+  // Pet logic + UI
+  // -------------------------
+  const petFrameEl = document.getElementById("petFrame");
+  const moodEl = document.getElementById("petMood");
+  const lineEl = document.getElementById("petLine");
+  const speciesEl = document.getElementById("petSpecies");
+  const growthFill = document.getElementById("growthFill");
+  const hungerFill = document.getElementById("hungerFill");
+  const growthTxt = document.getElementById("growthTxt");
+  const hungerTxt = document.getElementById("hungerTxt");
+  const resetBtn = document.getElementById("resetPetBtn");
+
+  let pet = loadPet();
+  let t = 0;
+
+  function computeMood(p){
+    if(!p.hatched){
+      if(p.hunger >= 85) return {mood:"Fainted ☠️", state:"fainted", desc:"Egg needs wins to hatch."};
+      if(p.hunger >= 65) return {mood:"Hungry 🥚", state:"hungry", desc:"Needs wins (food)."};
+      return {mood:"Hatching 🥚", state:"chilling", desc:"Watching the market..."};
+    }
+    if(p.hunger >= 90) return {mood:"Fainted ☠️", state:"fainted", desc:"It fainted from hunger — needs wins to revive."};
+    if(p.hunger >= 65) return {mood:"Hungry 😾", state:"hungry", desc:"Losses = empty plate. Feed it wins."};
+    if(p.growth >= 70) return {mood:"Happy 🙂", state:"happy", desc:"Looking good. Keep it fed."};
+    if(p.growth <= 20) return {mood:"Sad 😔", state:"sad", desc:"Needs steady wins to build up."};
+    return {mood:"Okay 🙂", state:"chilling", desc:"Doing fine. Keep it steady."};
+  }
+
+  function hatchIfNeeded(totalPnl){
+    if(pet.hatched) return;
+    if(totalPnl > 0){
+      const rnd = mulberry32(pet.seed)();
+      pet.hatched = true;
+      pet.species = rnd < 0.5 ? "cat" : "dog";
+      pet.growth = clamp(pet.growth + 25, 0, 100);
+      pet.hunger = clamp(pet.hunger - 20, 0, 100);
+      savePet(pet);
     }
   }
 
-  // Belly cream
-  for (let y = 20; y <= 27; y++) {
-    for (let x = 12; x <= 18; x++) {
-      const dx = x - 14.5, dy = y - 24;
-      if ((dx * dx) / (4.0 * 4.0) + (dy * dy) / (3.0 * 3.0) <= 1) px(x, y + bob, C);
+  function applyPetUI(){
+    const mood = computeMood(pet);
+    moodEl.textContent = mood.mood;
+    lineEl.textContent = mood.desc;
+
+    if(!pet.hatched){
+      speciesEl.textContent = "Species: EGG 🥚";
+    } else {
+      if(!pet.species){
+        const rnd = mulberry32(pet.seed)();
+        pet.species = rnd < 0.5 ? "cat" : "dog";
+        savePet(pet);
+      }
+      speciesEl.textContent = pet.species === "cat" ? "Species: CAT 🐱" : "Species: DOG 🐶";
+    }
+
+    growthFill.style.width = pet.growth + "%";
+    hungerFill.style.width = pet.hunger + "%";
+    growthTxt.textContent = pet.growth.toFixed(0) + "%";
+    hungerTxt.textContent = pet.hunger.toFixed(0) + "%";
+
+    const needsAttention = (pet.hunger >= 65 || pet.growth <= 18);
+    petFrameEl.classList.toggle("petPulse", needsAttention);
+  }
+
+  function updatePetFromStats(stats){
+    const lt = pet.lastTotals || defaultPet.lastTotals;
+
+    const wins = stats.wins || 0;
+    const losses = stats.losses || 0;
+    const totalTrades = stats.total_trades || 0;
+    const totalPnl = stats.total_pnl_usd || 0;
+
+    const dWins = Math.max(0, wins - (lt.wins||0));
+    const dLoss = Math.max(0, losses - (lt.losses||0));
+
+    hatchIfNeeded(totalPnl);
+
+    const dt = Math.min(10*60*1000, Math.max(0, nowMs() - (pet.lastUpdate||nowMs())));
+    const minutes = dt / 60000;
+
+    // passive drift
+    pet.hunger = clamp(pet.hunger + minutes*0.55, 0, 100);
+    pet.growth = clamp(pet.growth - minutes*0.18, 0, 100);
+
+    if(dWins > 0){
+      pet.hunger = clamp(pet.hunger - dWins*9, 0, 100);
+      pet.growth = clamp(pet.growth + dWins*7, 0, 100);
+    }
+    if(dLoss > 0){
+      pet.hunger = clamp(pet.hunger + dLoss*10, 0, 100);
+      pet.growth = clamp(pet.growth - dLoss*6, 0, 100);
+    }
+
+    if(pet.hatched && totalPnl > 0){
+      pet.growth = clamp(pet.growth + Math.min(6, totalPnl*0.2), 0, 100);
+    }
+    if(!pet.hatched){
+      pet.growth = clamp(pet.growth, 0, 80);
+    }
+
+    pet.lastTotals = { total_trades: totalTrades, wins, losses, total_pnl_usd: totalPnl };
+    pet.lastUpdate = nowMs();
+    savePet(pet);
+
+    applyPetUI();
+  }
+
+  resetBtn.addEventListener("click", () => {
+    pet = {...defaultPet, seed: Math.floor(Math.random()*1e9)};
+    savePet(pet);
+    applyPetUI();
+  });
+
+  // animation loop
+  function renderPet(){
+    t++;
+    clearPetCanvas();
+    drawBg();
+
+    const mood = computeMood(pet);
+
+    if(!pet.hatched){
+      drawSprite32(spriteEgg, {t, mood: mood.state});
+    } else {
+      if(!pet.species){
+        const rnd = mulberry32(pet.seed)();
+        pet.species = rnd < 0.5 ? "cat" : "dog";
+        savePet(pet);
+      }
+      if(pet.species === "cat") drawSprite32(spriteCat, {t, mood: mood.state});
+      else drawSprite32(spriteDog, {t, mood: mood.state});
+    }
+
+    requestAnimationFrame(renderPet);
+  }
+
+  // -------------------------
+  // Dashboard
+  // -------------------------
+  const k_totalTrades = document.getElementById("k_totalTrades");
+  const k_wl = document.getElementById("k_wl");
+  const k_winRate = document.getElementById("k_winRate");
+  const k_avgPerTrade = document.getElementById("k_avgPerTrade");
+  const k_totalPnl = document.getElementById("k_totalPnl");
+
+  const statusDot = document.getElementById("statusDot");
+  const botStatusText = document.getElementById("botStatusText");
+  const hbText = document.getElementById("hbText");
+
+  const marketsBody = document.getElementById("marketsBody");
+  const recentBody = document.getElementById("recentBody");
+
+  const equityChart = document.getElementById("equityChart");
+  const ectx = equityChart.getContext("2d");
+
+  function drawEquity(curve){
+    const w = equityChart.width, h = equityChart.height;
+    ectx.clearRect(0,0,w,h);
+
+    ectx.save();
+    ectx.strokeStyle = "rgba(255,255,255,.06)";
+    ectx.lineWidth = 1;
+    for(let i=1;i<5;i++){
+      const y = (h/5)*i;
+      ectx.beginPath(); ectx.moveTo(0,y); ectx.lineTo(w,y); ectx.stroke();
+    }
+    ectx.restore();
+
+    if(!curve || curve.length < 2){
+      ectx.fillStyle = "rgba(233,238,251,.65)";
+      ectx.font = "14px system-ui";
+      ectx.fillText("No equity data yet.", 14, 24);
+      return;
+    }
+
+    const vals = curve.map(p => p.equity_usd).filter(v => typeof v === "number" && isFinite(v));
+    if(vals.length < 2) return;
+
+    let min = Math.min(...vals);
+    let max = Math.max(...vals);
+    if(max - min < 0.01){ max = min + 0.01; }
+
+    const pad = 18;
+    const xFor = (i) => pad + (i/(vals.length-1))*(w - pad*2);
+    const yFor = (v) => (h - pad) - ((v - min)/(max - min))*(h - pad*2);
+
+    ectx.save();
+    ectx.strokeStyle = "rgba(63,183,255,.95)";
+    ectx.lineWidth = 3;
+    ectx.lineJoin = "round";
+    ectx.lineCap = "round";
+    ectx.beginPath();
+    ectx.moveTo(xFor(0), yFor(vals[0]));
+    for(let i=1;i<vals.length;i++) ectx.lineTo(xFor(i), yFor(vals[i]));
+    ectx.stroke();
+    ectx.restore();
+  }
+
+  function renderTables(markets, recent){
+    marketsBody.innerHTML = "";
+    (markets || []).forEach(m => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${m.market || "—"}</td>
+        <td class="right">${(m.trades ?? 0)}</td>
+        <td class="right">${fmtPct(m.win_rate ?? 0)}</td>
+        <td class="right">${fmtUsd(m.total_pnl ?? 0)}</td>
+        <td class="right">${fmtUsd(m.avg_pnl ?? 0)}</td>
+      `;
+      marketsBody.appendChild(tr);
+    });
+
+    recentBody.innerHTML = "";
+    (recent || []).forEach(r => {
+      const pnl = Number(r.pnl_usd || 0);
+      const pillClass = pnl >= 0 ? "good" : "bad";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${(r.time || "—").toString().replace("T"," ").replace("+00:00"," UTC")}</td>
+        <td>${r.market || "—"}</td>
+        <td class="right"><span class="pill ${pillClass}">${fmtUsd(pnl)}</span></td>
+      `;
+      recentBody.appendChild(tr);
+    });
+  }
+
+  function updateKPIs(d){
+    const totalTrades = d.total_trades || 0;
+    const wins = d.wins || 0;
+    const losses = d.losses || 0;
+    const winRate = d.win_rate || 0;
+    const pnl = d.total_pnl_usd || 0;
+
+    k_totalTrades.textContent = String(totalTrades);
+    k_wl.textContent = `${wins} wins / ${losses} losses`;
+
+    k_winRate.textContent = fmtPct(winRate);
+    const avg = totalTrades ? (pnl/totalTrades) : 0;
+    k_avgPerTrade.textContent = `Avg ${fmtUsd(avg)} per trade`;
+
+    k_totalPnl.textContent = fmtUsd(pnl);
+    k_totalPnl.style.color = pnl >= 0 ? "var(--good)" : "var(--bad)";
+
+    const st = d.bot_status?.status || "unknown";
+    const ok = (st || "").toLowerCase() === "running";
+    statusDot.className = "dot " + (ok ? "good" : "bad");
+    botStatusText.textContent = ok ? "Running" : st;
+    hbText.textContent = d.bot_status?.last_heartbeat
+      ? `Last heartbeat: ${String(d.bot_status.last_heartbeat).replace("T"," ").replace("+00:00"," UTC")}`
+      : "Last heartbeat: —";
+
+    updatePetFromStats(d);
+  }
+
+  async function fetchData(){
+    const res = await fetch("/data", {cache:"no-store"});
+    if(!res.ok) throw new Error("Failed to fetch /data");
+    return await res.json();
+  }
+
+  async function tick(){
+    try{
+      const d = await fetchData();
+      updateKPIs(d);
+      drawEquity(d.equity_curve || []);
+      renderTables(d.per_market || [], d.recent_trades || []);
+    }catch(e){
+      console.warn(e);
     }
   }
 
-  // ---- HEAD (side) ----
-  for (let y = 8; y <= 18; y++) {
-    for (let x = 13; x <= 26; x++) {
-      const dx = x - 19.5, dy = y - 13;
-      const inside = (dx * dx) / (6.3 * 6.3) + (dy * dy) / (4.9 * 4.9) <= 1;
-      if (inside) px(x, y + bob, O);
-    }
-  }
-
-  // Muzzle / snout (cream)
-  for (let y = 12; y <= 17; y++) {
-    for (let x = 20; x <= 27; x++) {
-      const dx = x - 24.0, dy = y - 14.5;
-      if ((dx * dx) / (3.7 * 3.7) + (dy * dy) / (2.8 * 2.8) <= 1) px(x, y + bob, C);
-    }
-  }
-
-  // Ear (top)
-  [[16,9],[17,7],[18,9]].forEach(([x,y]) => px(x, y + bob, O));
-  [[16,9],[17,7],[18,9],[17,8]].forEach(([x,y]) => px(x, y + bob, L));
-
-  // ---- OUTLINE (simple but clear) ----
-  const outline = [
-    // head outline
-    [15,9],[14,11],[13,13],[14,15],[15,17],[17,18],[19,18],[21,18],[23,17],[25,16],[26,14],[26,12],[25,10],[23,9],
-    // body outline
-    [10,18],[9,20],[9,22],[9,24],[10,26],[12,28],[14,29],[16,29],[18,28],[20,27],[21,25],[22,23],[22,21],[21,19],
-  ];
-  outline.forEach(([x,y]) => px(x, y + bob, L));
-
-  // ---- STRIPES (small marks only) ----
-  [[14,12],[15,13],[14,14],[12,20],[11,22],[12,24],[18,21],[19,23]].forEach(([x,y]) => px(x, y + bob, S));
-
-  // ---- EYE (single, side profile) ----
-  const ey = 12 + bob;
-  if (mood === "fainted") {
-    // X eye
-    px(19, ey, E); px(20, ey+1, E);
-    px(20, ey, E); px(19, ey+1, E);
-  } else if (blink || mood === "chilling") {
-    px(19, ey+1, E); px(20, ey+1, E);
-  } else {
-    px(20, ey, E); px(20, ey+1, E);
-  }
-
-  // ---- NOSE ----
-  px(27, 14 + bob, N);
-
-  // ---- MOUTH ----
-  const my = 16 + bob;
-  if (mood === "hungry") {
-    px(24, my, L); px(25, my, L); px(26, my, L);
-    px(25, my+1, L);
-  } else if (mood === "sad") {
-    px(25, my+1, L); px(26, my, L);
-  } else {
-    px(24, my, L); px(25, my, L);
-  }
-
-  // ---- WHISKERS ----
-  [[23,14],[22,14],[23,15],[22,16],[23,16]].forEach(([x,y]) => px(x, y + bob, W));
-
-  // ---- PAWS ----
-  [[12,28],[13,28],[18,28],[19,28]].forEach(([x,y]) => px(x, y + bob, C));
-  [[12,29],[19,29]].forEach(([x,y]) => px(x, y + bob, L));
-
-  // ---- TAIL ----
-  const tail = [
-    [8,22+tailWag],[7,21+tailWag],[6,20+tailWag],[7,19+tailWag]
-  ];
-  tail.forEach(([x,y], i) => px(x, y + bob, (i % 2 ? S : O)));
-  tail.forEach(([x,y]) => px(x, y + bob, L));
-}
+  // Init
+  applyPetUI();
+  renderPet();
+  tick();
+  setInterval(tick, 6000);
+})();
+</script>
+</body>
+</html>
