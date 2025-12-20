@@ -81,20 +81,29 @@
     .dot.bad{background: var(--bad);}
     .small{color:var(--muted);font-size:13px;line-height:1.35;}
 
-    .petCard{display:grid;grid-template-columns: 290px 1fr;gap: 14px;align-items:center;}
+    /* ✅ BIGGER PET AREA */
+    .petCard{display:grid;grid-template-columns: 340px 1fr;gap: 14px;align-items:center;}
     @media (max-width: 980px){ .petCard{grid-template-columns: 1fr;} }
 
     .petFrame{
-      width: 290px;height: 290px;border-radius: 22px;border: 1px solid var(--stroke);
+      width: 340px;height: 340px;border-radius: 22px;border: 1px solid var(--stroke);
       background:
-        radial-gradient(260px 220px at 20% 10%, rgba(63,183,255,.18), rgba(0,0,0,0) 60%),
-        radial-gradient(280px 240px at 70% 90%, rgba(53,208,127,.12), rgba(0,0,0,0) 60%),
+        radial-gradient(300px 260px at 20% 10%, rgba(63,183,255,.18), rgba(0,0,0,0) 60%),
+        radial-gradient(320px 280px at 70% 90%, rgba(53,208,127,.12), rgba(0,0,0,0) 60%),
         rgba(255,255,255,.02);
       display:flex;align-items:center;justify-content:center;
       position:relative;overflow:hidden;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+      transform-origin:center;
     }
-    canvas{image-rendering: pixelated; image-rendering: crisp-edges;}
+
+    /* ✅ CRISPER CANVAS ON MOBILE */
+    canvas{
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      -ms-interpolation-mode: nearest-neighbor;
+    }
+
     .petPulse{animation: pulse 0.55s infinite alternate;}
     @keyframes pulse{from{ transform: scale(1);}to{ transform: scale(1.03);} }
 
@@ -195,7 +204,8 @@
 
         <div class="petCard">
           <div class="petFrame" id="petFrame">
-            <canvas id="petCanvas" width="360" height="360"></canvas>
+            <!-- ✅ bigger internal canvas too -->
+            <canvas id="petCanvas" width="480" height="480"></canvas>
           </div>
 
           <div class="petInfo">
@@ -284,7 +294,6 @@
   const fmtPct = (n) => (isFinite(n) ? n.toFixed(1) + "%" : "—");
   const nowMs = () => Date.now();
 
-  // deterministic random
   function mulberry32(a){
     return function(){
       let t = a += 0x6D2B79F5;
@@ -297,7 +306,7 @@
   // -------------------------
   // Pet state (persistent)
   // -------------------------
-  const PET_KEY = "tradepilot_pet_v4";
+  const PET_KEY = "tradepilot_pet_v5_big";
   const defaultPet = {
     hatched: false,
     species: null,       // "cat" | "dog"
@@ -327,7 +336,6 @@
 
   const PAL = {
     ink: "#0b1228",
-    ink2:"#1a243c",
     shadow:"rgba(0,0,0,.35)",
 
     // egg
@@ -337,7 +345,7 @@
     eggY:"#ffd166",
     eggP:"#ff7aa2",
 
-    // cat (simple Garfield-ish vibe)
+    // cat
     catOrange:"#ff9800",
     catStripe:"#9a4b00",
     catCream:"#ffd49a",
@@ -346,7 +354,7 @@
     catEye:"#0b1228",
     catWhisk:"#ffffff",
 
-    // dog (simple Snoopy-ish vibe)
+    // dog (Snoopy-ish)
     dogWhite:"#ffffff",
     dogOutline:"#2d3748",
     dogEar:"#0b1228",
@@ -355,9 +363,7 @@
     dogCheek:"#f5f5f5"
   };
 
-  function clearPetCanvas(){
-    ctx.clearRect(0,0,petCanvas.width,petCanvas.height);
-  }
+  function clearPetCanvas(){ ctx.clearRect(0,0,petCanvas.width,petCanvas.height); }
 
   function drawBg(){
     const w = petCanvas.width, h = petCanvas.height;
@@ -373,26 +379,29 @@
     ctx.fillStyle = g2; ctx.fillRect(0,0,w,h);
 
     ctx.fillStyle = "rgba(255,255,255,.03)";
-    ctx.fillRect(0, h*0.70, w, h*0.30);
+    ctx.fillRect(0, h*0.72, w, h*0.28);
     ctx.restore();
   }
 
   function px(x,y,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,1); }
 
-  function drawSprite32(drawFn, opts){
-    const w = petCanvas.width, h = petCanvas.height;
-    const scale = 9;              // 32*9 = 288 (nice + big)
-    const sx = Math.floor((w - 32*scale)/2);
-    const sy = Math.floor((h - 32*scale)/2);
+  // ✅ draw on a 48x48 grid, scaled up = more detail, still pixel-crisp
+  function drawSpriteGrid(drawFn, opts){
+    const W = petCanvas.width, H = petCanvas.height;
+    const grid = 48;
+    const scale = 8;           // 48*8 = 384px sprite inside 480 canvas
+    const sx = Math.floor((W - grid*scale)/2);
+    const sy = Math.floor((H - grid*scale)/2);
+
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.translate(sx, sy);
     ctx.scale(scale, scale);
 
-    // shadow
+    // shadow (grid coordinates)
     ctx.fillStyle = PAL.shadow;
     ctx.beginPath();
-    ctx.ellipse(16, 28.5, 9.8, 2.4, 0, 0, Math.PI*2);
+    ctx.ellipse(24, 43.0, 15.5, 3.2, 0, 0, Math.PI*2);
     ctx.fill();
 
     drawFn(opts);
@@ -400,189 +409,252 @@
   }
 
   // -------------------------
-  // Sprites (clean + readable)
+  // Sprites (48x48) — clearer features
   // -------------------------
-  function spriteEgg({t, mood}){
+  function spriteEgg48({t, mood}){
     const blink = (Math.floor(t/35) % 14 === 0);
-    for(let y=6;y<=28;y++){
-      for(let x=8;x<=24;x++){
-        const dx=x-16, dy=y-17;
-        const inside=(dx*dx)/(8.5*8.5)+(dy*dy)/(11.5*11.5)<=1;
+
+    // egg fill (ellipse)
+    for(let y=8;y<=44;y++){
+      for(let x=12;x<=36;x++){
+        const dx=x-24, dy=y-26;
+        const inside=(dx*dx)/(11.2*11.2) + (dy*dy)/(16.0*16.0) <= 1;
         if(!inside) continue;
-        let c=PAL.eggA;
-        if(dx>2) c=PAL.eggB;
-        if(dy>5) c=PAL.eggC;
+        let c = PAL.eggA;
+        if(dx > 3) c = PAL.eggB;
+        if(dy > 6) c = PAL.eggC;
         px(x,y,c);
       }
     }
-    // outline
-    const out=[[16,6],[13,7],[19,7],[11,8],[21,8],[10,9],[22,9],[9,10],[23,10],
-      [8,12],[24,12],[8,14],[24,14],[8,16],[24,16],[8,18],[24,18],
-      [9,20],[23,20],[10,22],[22,22],[11,24],[21,24],[13,26],[19,26],[16,28]];
-    out.forEach(([x,y])=>px(x,y,PAL.ink));
+
+    // outline (cheap outline by stamping ring)
+    for(let y=8;y<=44;y++){
+      for(let x=12;x<=36;x++){
+        const dx=x-24, dy=y-26;
+        const v=(dx*dx)/(11.2*11.2) + (dy*dy)/(16.0*16.0);
+        if(v<=1 && v>=0.92) px(x,y,PAL.ink);
+      }
+    }
 
     // spots
-    [[12,14,PAL.eggY],[20,13,PAL.eggP],[18,20,PAL.eggY],[14,21,PAL.eggP]].forEach(([x,y,c])=>{
-      px(x,y,c); px(x+1,y,c); px(x,y+1,c);
+    const spots = [
+      [16,22,PAL.eggY],[30,20,PAL.eggP],[28,32,PAL.eggY],[18,34,PAL.eggP],[32,28,PAL.eggY]
+    ];
+    spots.forEach(([x,y,c])=>{
+      for(let yy=0;yy<3;yy++) for(let xx=0;xx<3;xx++) px(x+xx,y+yy,c);
     });
 
     // face
-    const ey=17;
+    const ey = 28;
     if(!blink){
-      px(13,ey,PAL.ink); px(19,ey,PAL.ink);
-      px(13,ey+1,PAL.ink); px(19,ey+1,PAL.ink);
+      px(18,ey,PAL.ink); px(30,ey,PAL.ink);
+      px(18,ey+1,PAL.ink); px(30,ey+1,PAL.ink);
     } else {
-      for(let x=12;x<=14;x++) px(x,ey+1,PAL.ink);
-      for(let x=18;x<=20;x++) px(x,ey+1,PAL.ink);
+      for(let x=16;x<=20;x++) px(x,ey+1,PAL.ink);
+      for(let x=28;x<=32;x++) px(x,ey+1,PAL.ink);
     }
+
     // mouth
-    if(mood==="hungry"){ px(15,20,PAL.ink); px(16,20,PAL.ink); px(17,20,PAL.ink); px(16,21,PAL.ink); }
-    else if(mood==="fainted"){ px(14,20,PAL.ink); px(18,20,PAL.ink); px(16,21,PAL.ink); }
-    else { px(15,20,PAL.ink); px(16,20,PAL.ink); px(17,20,PAL.ink); }
+    if(mood==="fainted"){
+      px(22,33,PAL.ink); px(26,33,PAL.ink);
+      px(24,35,PAL.ink);
+    } else if(mood==="hungry"){
+      for(let x=21;x<=27;x++) px(x,33,PAL.ink);
+      px(24,34,PAL.ink);
+    } else {
+      for(let x=22;x<=26;x++) px(x,33,PAL.ink);
+    }
   }
 
-  // CAT: unmistakable orange tabby (Garfield-ish)
-  function spriteCat({t, mood}){
+  // CAT: clearer orange tabby face/body
+  function spriteCat48({t, mood}){
     const blink = (Math.floor(t/42) % 16 === 0);
     const bob = Math.sin(t/18) > 0 ? 1 : 0;
     const tail = ((Math.sin(t/10))*2)|0;
 
-    // body fill
-    for(let y=14;y<=28;y++){
-      for(let x=10;x<=22;x++){
-        const dx=x-16, dy=y-22;
-        const inside=(dx*dx)/(7.5*7.5)+(dy*dy)/(5.7*5.7)<=1;
+    // body
+    for(let y=22;y<=44;y++){
+      for(let x=12;x<=36;x++){
+        const dx=x-24, dy=y-34;
+        const inside=(dx*dx)/(13.0*13.0) + (dy*dy)/(9.0*9.0) <= 1;
         if(!inside) continue;
         px(x,y+bob,PAL.catOrange);
       }
     }
-    // head fill
-    for(let y=6;y<=16;y++){
-      for(let x=10;x<=22;x++){
-        const dx=x-16, dy=y-11;
-        const inside=(dx*dx)/(6.8*6.8)+(dy*dy)/(5.5*5.5)<=1;
+
+    // head
+    for(let y=10;y<=26;y++){
+      for(let x=12;x<=36;x++){
+        const dx=x-24, dy=y-18;
+        const inside=(dx*dx)/(12.0*12.0) + (dy*dy)/(9.0*9.0) <= 1;
         if(!inside) continue;
-        // cream muzzle
-        if(y>=12 && x>=12 && x<=20) px(x,y+bob,PAL.catCream);
+
+        // cream muzzle area
+        if(y>=18 && y<=26 && x>=16 && x<=32) px(x,y+bob,PAL.catCream);
         else px(x,y+bob,PAL.catOrange);
       }
     }
+
     // ears
-    [[12,7],[13,6],[14,7]].forEach(([x,y])=>px(x,y+bob,PAL.catOrange));
-    [[18,7],[19,6],[20,7]].forEach(([x,y])=>px(x,y+bob,PAL.catOrange));
+    const earL = [[16,12],[17,11],[18,10],[19,11],[20,12]];
+    const earR = [[28,12],[29,11],[30,10],[31,11],[32,12]];
+    earL.forEach(([x,y])=>px(x,y+bob,PAL.catOrange));
+    earR.forEach(([x,y])=>px(x,y+bob,PAL.catOrange));
 
-    // outline (simple)
-    const outline=[
-      // head outline
-      [12,6],[13,5],[14,6],[18,6],[19,5],[20,6],
-      [10,9],[9,11],[10,13],[11,15],[13,16],[16,16],[19,16],[21,15],[22,13],[23,11],[22,9],
-      // body outline
-      [11,17],[10,19],[10,21],[10,23],[11,25],[12,27],[14,28],[16,28],[18,28],[20,27],[21,25],[22,23],[22,21],[22,19],[21,17],
+    // outline ring (head+body ring)
+    function ringEllipse(cx,cy,rx,ry,y0,y1){
+      for(let y=y0;y<=y1;y++){
+        for(let x=10;x<=38;x++){
+          const dx=x-cx, dy=y-cy;
+          const v=(dx*dx)/(rx*rx) + (dy*dy)/(ry*ry);
+          if(v<=1 && v>=0.92) px(x,y+bob,PAL.catOutline);
+        }
+      }
+    }
+    ringEllipse(24,18,12.0,9.0,10,26);
+    ringEllipse(24,34,13.0,9.0,22,44);
+
+    // stripes (tabby)
+    const stripes = [
+      [18,16],[30,16],[16,20],[32,20],
+      [16,30],[32,30],[18,34],[30,34]
     ];
-    outline.forEach(([x,y])=>px(x,y+bob,PAL.catOutline));
-
-    // stripes (subtle, not blob)
-    [[12,10],[20,10],[12,18],[20,18],[13,20],[19,20]].forEach(([x,y])=>px(x,y+bob,PAL.catStripe));
+    stripes.forEach(([x,y])=>{
+      px(x,y+bob,PAL.catStripe);
+      px(x+1,y+bob,PAL.catStripe);
+      px(x,y+1+bob,PAL.catStripe);
+    });
 
     // eyes
-    const ey=11+bob;
+    const ey = 18 + bob;
     if(mood==="fainted"){
       // X eyes
-      [[13,ey],[14,ey+1],[14,ey],[13,ey+1]].forEach(([x,y])=>px(x,y,PAL.catEye));
-      [[19,ey],[20,ey+1],[20,ey],[19,ey+1]].forEach(([x,y])=>px(x,y,PAL.catEye));
+      [[18,ey],[19,ey+1],[19,ey],[18,ey+1]].forEach(([x,y])=>px(x,y,PAL.catEye));
+      [[28,ey],[29,ey+1],[29,ey],[28,ey+1]].forEach(([x,y])=>px(x,y,PAL.catEye));
     } else if(blink || mood==="chilling"){
-      for(let x=12;x<=15;x++) px(x,ey+1,PAL.catEye);
-      for(let x=17;x<=20;x++) px(x,ey+1,PAL.catEye);
+      for(let x=16;x<=21;x++) px(x,ey+2,PAL.catEye);
+      for(let x=27;x<=32;x++) px(x,ey+2,PAL.catEye);
     } else {
-      px(14,ey,PAL.catEye); px(18,ey,PAL.catEye);
-      px(14,ey+1,PAL.catEye); px(18,ey+1,PAL.catEye);
+      // larger eyes
+      for(let yy=0;yy<3;yy++){
+        px(19,ey+yy,PAL.catEye); px(20,ey+yy,PAL.catEye);
+        px(28,ey+yy,PAL.catEye); px(29,ey+yy,PAL.catEye);
+      }
+      px(20,ey,PAL.catWhisk);
+      px(29,ey,PAL.catWhisk);
     }
 
     // nose + mouth
-    px(16,13+bob,PAL.catNose);
-    px(15,14+bob,PAL.catOutline); px(16,14+bob,PAL.catOutline); px(17,14+bob,PAL.catOutline);
+    px(24,25+bob,PAL.catNose);
+    for(let x=22;x<=26;x++) px(x,28+bob,PAL.catOutline);
+    px(24,29+bob,PAL.catOutline);
 
-    // whiskers
-    [[10,13],[9,13],[10,14],[22,13],[23,13],[22,14]].forEach(([x,y])=>px(x,y+bob,PAL.catWhisk));
+    // whiskers (more obvious)
+    const whisk = [
+      [12,24],[13,24],[14,25],[12,26],[13,26],
+      [36,24],[35,24],[34,25],[36,26],[35,26]
+    ];
+    whisk.forEach(([x,y])=>px(x,y+bob,PAL.catWhisk));
 
     // paws
-    [[12,27],[13,27],[19,27],[20,27]].forEach(([x,y])=>px(x,y+bob,PAL.catCream));
+    for(let x=16;x<=20;x++) px(x,43+bob,PAL.catCream);
+    for(let x=28;x<=32;x++) px(x,43+bob,PAL.catCream);
 
-    // tail (striped)
-    const tailPts=[[23,22+tail],[24,21+tail],[25,20+tail],[24,19+tail]];
+    // tail (striped, clearer)
+    const tailPts = [[36,34+tail],[38,33+tail],[40,32+tail],[41,31+tail],[40,30+tail],[38,29+tail]];
     tailPts.forEach(([x,y],i)=>px(x,y+bob,(i%2?PAL.catStripe:PAL.catOrange)));
     tailPts.forEach(([x,y])=>px(x,y+bob,PAL.catOutline));
   }
 
-  // DOG: unmistakable Snoopy-ish white dog (black ear + red collar), NO belly blob
-  function spriteDog({t, mood}){
+  // DOG: clearer Snoopy-ish dog (big black ear, red collar, no belly blob)
+  function spriteDog48({t, mood}){
     const blink = (Math.floor(t/44) % 16 === 0);
     const bob = Math.sin(t/18) > 0 ? 1 : 0;
     const tail = ((Math.sin(t/10))*2)|0;
 
-    // body fill
-    for(let y=14;y<=28;y++){
-      for(let x=10;x<=22;x++){
-        const dx=x-16, dy=y-22;
-        const inside=(dx*dx)/(7.8*7.8)+(dy*dy)/(5.8*5.8)<=1;
-        if(!inside) continue;
-        px(x,y+bob,PAL.dogWhite);
-      }
-    }
-    // head fill
-    for(let y=6;y<=16;y++){
-      for(let x=9;x<=23;x++){
-        const dx=x-16, dy=y-11;
-        const inside=(dx*dx)/(7.3*7.3)+(dy*dy)/(5.6*5.6)<=1;
+    // body
+    for(let y=22;y<=44;y++){
+      for(let x=12;x<=36;x++){
+        const dx=x-24, dy=y-34;
+        const inside=(dx*dx)/(13.5*13.5) + (dy*dy)/(9.2*9.2) <= 1;
         if(!inside) continue;
         px(x,y+bob,PAL.dogWhite);
       }
     }
 
-    // black ear (right side)
-    for(let y=8;y<=16;y++){
-      for(let x=20;x<=23;x++){
-        const dx=x-22, dy=y-12;
-        const inside=(dx*dx)/(2.2*2.2)+(dy*dy)/(4.5*4.5)<=1;
+    // head (slightly wider than cat)
+    for(let y=10;y<=28;y++){
+      for(let x=10;x<=38;x++){
+        const dx=x-24, dy=y-19;
+        const inside=(dx*dx)/(14.0*14.0) + (dy*dy)/(10.2*10.2) <= 1;
+        if(!inside) continue;
+        px(x,y+bob,PAL.dogWhite);
+      }
+    }
+
+    // black ear (right)
+    for(let y=12;y<=30;y++){
+      for(let x=30;x<=39;x++){
+        const dx=x-35, dy=y-21;
+        const inside=(dx*dx)/(4.2*4.2) + (dy*dy)/(8.0*8.0) <= 1;
         if(inside) px(x,y+bob,PAL.dogEar);
       }
     }
 
-    // outline
-    const outline=[
-      // head outline
-      [11,7],[10,9],[9,11],[10,13],[11,15],[13,16],[16,16],[19,16],[21,15],[22,13],[23,11],[22,9],
-      // body outline
-      [11,17],[10,19],[10,21],[10,23],[11,25],[12,27],[14,28],[16,28],[18,28],[20,27],[21,25],[22,23],[22,21],[22,19],[21,17],
-    ];
-    outline.forEach(([x,y])=>px(x,y+bob,PAL.dogOutline));
+    // outline ring (head + body)
+    function ring(cx,cy,rx,ry,x0,x1,y0,y1){
+      for(let y=y0;y<=y1;y++){
+        for(let x=x0;x<=x1;x++){
+          const dx=x-cx, dy=y-cy;
+          const v=(dx*dx)/(rx*rx) + (dy*dy)/(ry*ry);
+          if(v<=1 && v>=0.92) px(x,y+bob,PAL.dogOutline);
+        }
+      }
+    }
+    ring(24,19,14.0,10.2,10,38,10,28);
+    ring(24,34,13.5,9.2,12,36,22,44);
 
-    // eyes
-    const ey=11+bob;
-    if(mood==="fainted"){
-      [[13,ey],[14,ey+1],[14,ey],[13,ey+1]].forEach(([x,y])=>px(x,y,PAL.dogOutline));
-      [[18,ey],[19,ey+1],[19,ey],[18,ey+1]].forEach(([x,y])=>px(x,y,PAL.dogOutline));
-    } else if(blink || mood==="chilling"){
-      for(let x=12;x<=15;x++) px(x,ey+1,PAL.dogOutline);
-      for(let x=17;x<=20;x++) px(x,ey+1,PAL.dogOutline);
-    } else {
-      px(14,ey,PAL.dogOutline); px(18,ey,PAL.dogOutline);
-      px(14,ey+1,PAL.dogOutline); px(18,ey+1,PAL.dogOutline);
+    // snout highlight (helps "dog" read instantly)
+    for(let y=22;y<=28;y++){
+      for(let x=16;x<=30;x++){
+        const dx=x-23, dy=y-25;
+        const inside=(dx*dx)/(8.0*8.0) + (dy*dy)/(4.2*4.2) <= 1;
+        if(inside) px(x,y+bob,PAL.dogCheek);
+      }
     }
 
-    // nose (small)
-    px(16,13+bob,PAL.dogNose);
-    px(15,14+bob,PAL.dogOutline); px(16,14+bob,PAL.dogOutline); px(17,14+bob,PAL.dogOutline);
+    // eyes
+    const ey = 18 + bob;
+    if(mood==="fainted"){
+      [[18,ey],[19,ey+1],[19,ey],[18,ey+1]].forEach(([x,y])=>px(x,y,PAL.dogOutline));
+      [[27,ey],[28,ey+1],[28,ey],[27,ey+1]].forEach(([x,y])=>px(x,y,PAL.dogOutline));
+    } else if(blink || mood==="chilling"){
+      for(let x=16;x<=21;x++) px(x,ey+2,PAL.dogOutline);
+      for(let x=26;x<=31;x++) px(x,ey+2,PAL.dogOutline);
+    } else {
+      for(let yy=0;yy<3;yy++){
+        px(19,ey+yy,PAL.dogOutline); px(20,ey+yy,PAL.dogOutline);
+        px(28,ey+yy,PAL.dogOutline); px(29,ey+yy,PAL.dogOutline);
+      }
+    }
 
-    // collar (red, clear)
-    for(let x=12;x<=20;x++) px(x,18+bob,PAL.dogCollar);
-    px(16,18+bob,PAL.dogOutline);
+    // nose (small but clear)
+    for(let x=23;x<=25;x++) px(x,24+bob,PAL.dogNose);
+    px(24,23+bob,PAL.dogNose);
+
+    // mouth line
+    for(let x=21;x<=27;x++) px(x,28+bob,PAL.dogOutline);
+
+    // collar (big and unmistakable)
+    for(let x=14;x<=34;x++) px(x,31+bob,PAL.dogCollar);
+    for(let x=16;x<=32;x+=2) px(x,32+bob,PAL.dogOutline);
 
     // paws
-    [[12,27],[13,27],[19,27],[20,27]].forEach(([x,y])=>px(x,y+bob,PAL.dogCheek));
+    for(let x=16;x<=20;x++) px(x,43+bob,PAL.dogCheek);
+    for(let x=28;x<=32;x++) px(x,43+bob,PAL.dogCheek);
 
-    // tail (simple wag)
-    const tailPts=[[23,22+tail],[24,21+tail],[25,20+tail]];
+    // tail wag
+    const tailPts = [[36,34+tail],[38,33+tail],[40,32+tail],[41,31+tail]];
     tailPts.forEach(([x,y])=>px(x,y+bob,PAL.dogWhite));
     tailPts.forEach(([x,y])=>px(x,y+bob,PAL.dogOutline));
   }
@@ -669,7 +741,6 @@
     const dt = Math.min(10*60*1000, Math.max(0, nowMs() - (pet.lastUpdate||nowMs())));
     const minutes = dt / 60000;
 
-    // passive drift
     pet.hunger = clamp(pet.hunger + minutes*0.55, 0, 100);
     pet.growth = clamp(pet.growth - minutes*0.18, 0, 100);
 
@@ -711,15 +782,15 @@
     const mood = computeMood(pet);
 
     if(!pet.hatched){
-      drawSprite32(spriteEgg, {t, mood: mood.state});
+      drawSpriteGrid(spriteEgg48, {t, mood: mood.state});
     } else {
       if(!pet.species){
         const rnd = mulberry32(pet.seed)();
         pet.species = rnd < 0.5 ? "cat" : "dog";
         savePet(pet);
       }
-      if(pet.species === "cat") drawSprite32(spriteCat, {t, mood: mood.state});
-      else drawSprite32(spriteDog, {t, mood: mood.state});
+      if(pet.species === "cat") drawSpriteGrid(spriteCat48, {t, mood: mood.state});
+      else drawSpriteGrid(spriteDog48, {t, mood: mood.state});
     }
 
     requestAnimationFrame(renderPet);
