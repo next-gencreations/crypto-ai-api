@@ -292,7 +292,7 @@
     };
   }
 
-  const PET_KEY = "tradepilot_pet_catfix_v2";
+  const PET_KEY = "tradepilot_pet_catfix_v3";
   const defaultPet = {
     hatched: false,
     species: null,
@@ -433,100 +433,106 @@
     }
   }
 
-  // CAT v2: single curved tail, slimmer body, tighter neck, whiskers, paws
+  // CAT v3: SHORT NECK + CAT LEGS + PAWS + CURVED TAIL
   function spriteCat48({t, mood}){
     const blink = (Math.floor(t/42) % 16 === 0);
     const bob = Math.sin(t/18) > 0 ? 1 : 0;
-    const wag = (Math.sin(t/10)); // -1..1
+    const wag = Math.sin(t/10);
 
     const O = PAL.catOrange, C = PAL.catCream, S = PAL.catStripe, K = PAL.catOutline, E = PAL.catEye;
 
-    // Body (slimmer + cat-like)
-    for(let y=29;y<=41;y++){
-      for(let x=20;x<=42;x++){
+    // Body (slightly shorter + higher so legs aren't long)
+    for(let y=30;y<=40;y++){
+      for(let x=22;x<=42;x++){
         const dx=x-32, dy=y-35;
-        const inside=(dx*dx)/(11.8*11.8) + (dy*dy)/(5.4*5.4) <= 1;
+        const inside=(dx*dx)/(10.8*10.8) + (dy*dy)/(4.9*4.9) <= 1;
         if(inside) px(x,y+bob,O);
       }
     }
 
     // Belly patch
-    for(let y=32;y<=40;y++){
-      for(let x=22;x<=33;x++){
-        const dx=x-27.0, dy=y-35.5;
-        const inside=(dx*dx)/(6.2*6.2) + (dy*dy)/(3.8*3.8) <= 1;
+    for(let y=32;y<=39;y++){
+      for(let x=24;x<=33;x++){
+        const dx=x-28.0, dy=y-35.3;
+        const inside=(dx*dx)/(5.4*5.4) + (dy*dy)/(3.4*3.4) <= 1;
         if(inside) px(x,y+bob,C);
       }
     }
 
-    // Neck (fills the "gap")
-    for(let y=28;y<=33;y++){
-      for(let x=16;x<=21;x++){
-        const dx=x-19, dy=y-30;
-        const inside=(dx*dx)/(3.2*3.2)+(dy*dy)/(3.8*3.8)<=1;
-        if(inside) px(x,y+bob,O);
-      }
-    }
-
-    // Head (pointier + clearer snout)
-    for(let y=16;y<=31;y++){
-      for(let x=5;x<=22;x++){
-        const dx=x-13.0, dy=y-24;
-        const inside=(dx*dx)/(8.4*8.4) + (dy*dy)/(6.9*6.9) <= 1;
+    // Head moved RIGHT (closer to body) + slightly lower
+    for(let y=18;y<=30;y++){
+      for(let x=9;x<=24;x++){
+        const dx=x-16.5, dy=y-24.5;
+        const inside=(dx*dx)/(7.6*7.6) + (dy*dy)/(6.2*6.2) <= 1;
         if(!inside) continue;
 
-        // Cream muzzle area
-        if(x<=12 && y>=23) px(x,y+bob,C);
+        // Cream muzzle
+        if(x<=15 && y>=23) px(x,y+bob,C);
         else px(x,y+bob,O);
       }
     }
 
-    // Snout tip (makes it NOT pig)
-    px(4,25+bob,K);
-    px(5,25+bob,O);
-    px(4,26+bob,K);
-
-    // Ears (more pointy)
-    [[8,18],[9,17],[10,16],[11,17],[12,18]].forEach(([x,y])=>px(x,y+bob,O));
-    [[13,18],[14,17],[15,16],[16,17],[17,18]].forEach(([x,y])=>px(x,y+bob,O));
-    [[10,17],[15,17]].forEach(([x,y])=>px(x,y+bob,K));
-
-    // Eye (single cat eye)
-    const ey = 23 + bob;
-    if(mood === "fainted"){
-      px(12,ey,E); px(13,ey+1,E); px(13,ey,E); px(12,ey+1,E);
-    } else if(blink || mood === "chilling"){
-      for(let x=11;x<=14;x++) px(x,ey+2,E);
-    } else {
-      px(13,ey,E); px(13,ey+1,E);
-      px(12,ey+1,E);
-    }
-
-    // Nose + mouth
-    px(7,26+bob,PAL.catNose);
-    px(9,28+bob,K); px(10,28+bob,K); px(11,28+bob,K);
-
-    // Whiskers (strong cat signal)
-    [[6,24],[5,24],[6,25],[5,26],[6,27],
-     [8,24],[9,24],[8,26],[9,26]].forEach(([x,y])=>px(x,y+bob,PAL.catWhisk));
-
-    // Stripes
-    [[26,30],[31,29],[36,31],[29,34],[35,36],[39,35]].forEach(([x,y])=>{
-      px(x,y+bob,S); px(x+1,y+bob,S);
-    });
-
-    // Legs (thinner + paws)
-    const legs = [24, 30, 37, 41];
-    for(let i=0;i<legs.length;i++){
-      const lx = legs[i];
-      for(let y=41;y<=44;y++){
-        px(lx,y+bob,C);
-        if(y===44) { px(lx-1,y+bob,C); px(lx+1,y+bob,C); } // paw flare
+    // Short neck connector (thicker + only small)
+    for(let y=27;y<=33;y++){
+      for(let x=21;x<=24;x++){
+        const dx=x-23, dy=y-30;
+        const inside=(dx*dx)/(2.0*2.0)+(dy*dy)/(2.6*2.6)<=1;
+        if(inside) px(x,y+bob,O);
       }
     }
 
-    // Tail (single curved tail, no dotted look)
-    // Curve height changes slightly with wag
+    // Snout tip (tiny)
+    px(8,25+bob,K);
+    px(9,25+bob,O);
+
+    // Ears (on head)
+    [[12,19],[13,18],[14,17],[15,18],[16,19]].forEach(([x,y])=>px(x,y+bob,O));
+    [[17,19],[18,18],[19,17],[20,18],[21,19]].forEach(([x,y])=>px(x,y+bob,O));
+    [[14,18],[19,18]].forEach(([x,y])=>px(x,y+bob,K));
+
+    // Eye
+    const ey = 23 + bob;
+    if(mood === "fainted"){
+      px(16,ey,E); px(17,ey+1,E); px(17,ey,E); px(16,ey+1,E);
+    } else if(blink || mood === "chilling"){
+      for(let x=15;x<=18;x++) px(x,ey+2,E);
+    } else {
+      px(17,ey,E); px(17,ey+1,E);
+      px(16,ey+1,E);
+    }
+
+    // Nose + mouth
+    px(11,26+bob,PAL.catNose);
+    px(13,28+bob,K); px(14,28+bob,K); px(15,28+bob,K);
+
+    // Whiskers (strong)
+    [[10,24],[9,24],[10,25],[9,26],[10,27],
+     [12,24],[13,24],[12,26],[13,26]].forEach(([x,y])=>px(x,y+bob,PAL.catWhisk));
+
+    // Stripes
+    [[26,31],[30,30],[35,31],[29,34],[35,35],[39,34]].forEach(([x,y])=>{
+      px(x,y+bob,S); px(x+1,y+bob,S);
+    });
+
+    // Cat legs (short + paws)
+    const legs = [26, 31, 38, 41];
+    legs.forEach((lx, i) => {
+      for(let y=40;y<=43;y++){
+        // tapered leg
+        px(lx,y+bob,C);
+        if(y===40) px(lx,y+bob,C);
+        if(y===41) { px(lx,y+bob,C); }
+        if(y===42) { px(lx,y+bob,C); }
+        if(y===43){
+          // paw
+          px(lx-1,y+bob,C); px(lx,y+bob,C); px(lx+1,y+bob,C);
+        }
+      }
+      // front paws a touch forward
+      if(i<2) px(lx-1,43+bob,C);
+    });
+
+    // Tail (single curve)
     const up = wag > 0 ? -1 : 1;
     const tailPts = [
       [42,33],[44,32+up],[45,30+up],[45,28+up],[44,26+up],[42,25+up],[40,25+up]
@@ -534,24 +540,24 @@
     tailPts.forEach(([x,y],i)=>px(x,y+bob,(i%3===0?S:O)));
     tailPts.forEach(([x,y])=>px(x,y+bob,K));
 
-    // Outline body/head (clean edge)
-    for(let y=29;y<=41;y++){
-      for(let x=20;x<=42;x++){
+    // Outline body/head
+    for(let y=30;y<=40;y++){
+      for(let x=22;x<=42;x++){
         const dx=x-32, dy=y-35;
-        const v=(dx*dx)/(11.8*11.8) + (dy*dy)/(5.4*5.4);
+        const v=(dx*dx)/(10.8*10.8) + (dy*dy)/(4.9*4.9);
         if(v<=1 && v>=0.92) px(x,y+bob,K);
       }
     }
-    for(let y=16;y<=31;y++){
-      for(let x=5;x<=22;x++){
-        const dx=x-13.0, dy=y-24;
-        const v=(dx*dx)/(8.4*8.4) + (dy*dy)/(6.9*6.9);
+    for(let y=18;y<=30;y++){
+      for(let x=9;x<=24;x++){
+        const dx=x-16.5, dy=y-24.5;
+        const v=(dx*dx)/(7.6*7.6) + (dy*dy)/(6.2*6.2);
         if(v<=1 && v>=0.92) px(x,y+bob,K);
       }
     }
   }
 
-  // Dog kept the same as your “good” version (sideways can come later)
+  // DOG (kept stable)
   function spriteDog48({t, mood}){
     const blink = (Math.floor(t/44) % 16 === 0);
     const bob = Math.sin(t/18) > 0 ? 1 : 0;
@@ -774,7 +780,7 @@
     requestAnimationFrame(renderPet);
   }
 
-  // Dashboard stuff (unchanged)
+  // Dashboard
   const k_totalTrades = document.getElementById("k_totalTrades");
   const k_wl = document.getElementById("k_wl");
   const k_winRate = document.getElementById("k_winRate");
