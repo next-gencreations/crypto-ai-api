@@ -1,60 +1,26 @@
 import os
 import json
-import time
 import sqlite3
-import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
-
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-# ============================================================
-# Logging
-# ============================================================
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("crypto-ai-api")
-
-# ============================================================
-# Config
-# ============================================================
-
-DB_PATH = os.getenv("DB_PATH", "data.db").strip() or "data.db"
-PORT = int(os.getenv("PORT", "10000"))
-
-# Markets to serve for /prices and /history (optional)
-DEFAULT_MARKETS = os.getenv("MARKETS", "BTC-USD,ETH-USD,SOL-USD,ADA-USD,LTC-USD,BCH-USD")
-MARKETS = [m.strip().upper() for m in DEFAULT_MARKETS.split(",") if m.strip()]
-
-# Candle settings
-COINBASE_CANDLE_GRANULARITY = int(os.getenv("CANDLE_GRANULARITY", "3600"))  # 1h
-
+# -----------------------------------------------------------------------------
+# App
+# -----------------------------------------------------------------------------
 app = Flask(__name__)
+CORS(app)
 
-# ============================================================
-# Helpers
-# ============================================================
+# -----------------------------------------------------------------------------
+# Config
+# -----------------------------------------------------------------------------
+DB_PATH = os.environ.get("DB_PATH", "data.db")
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-def http_get_json(url: str, timeout: int = 12) -> Optional[dict]:
-    try:
-        req = Request(url, headers={"User-Agent": "crypto-ai-api/1.0"})
-        with urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            return json.loads(raw)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as e:
-        log.warning(f"GET failed {url}: {e}")
-        return None
-    except Exception as e:
-        log.warning(f"GET failed {url}: {e}")
-        return None
-
-def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+def db():
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -62,268 +28,436 @@ def init_db():
     conn = db()
     cur = conn.cursor()
 
+    # heartbeat = single row
     cur.execute("""
     CREATE TABLE IF NOT EXISTS heartbeat (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY CHECK (id = 1),
         time_utc TEXT,
-        payload TEXT
+        status TEXT,
+        survival_mode TEXT,
+        equity_usd REAL,
+        open_positions INTEGER,
+        prices_ok INTEGER,
+        markets TEXT,
+        losses INTEGER,
+        total_trades INTEGER,
+        wins INTEGER,
+        total_pnl_usd REAL
     )
     """)
+
+    # pet = single row
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pet (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY CHECK (id = 1),
         time_utc TEXT,
-        payload TEXT
+        stage TEXT,
+        mood TEXT,
+        health REAL,
+        hunger REAL,
+        growth REAL,
+        fainted_until_utc TEXT,
+        survival_mode TEXT
     )
     """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS equity (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        time_utc TEXT,
-        equity_usd REAL,
-        payload TEXT
-    )
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS trades (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        time_utc TEXT,
-        market TEXT,
-        pnl_usd REAL,
-        payload TEXT
-    )
-    """)
+
+    # events = list
     cur.execute("""
     CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         time_utc TEXT,
         type TEXT,
         message TEXT,
-        payload TEXT
+        details TEXT
     )
     """)
+
+    # equity timeline
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS training_events (
+    CREATE TABLE IF NOT EXISTS equity (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         time_utc TEXT,
-        event TEXT,
-        payload TEXT
+        equity_usd REAL
+    )
+    """)
+
+    # trades list
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS trades (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        time_utc TEXT,
+        market TEXT,
+        side TEXT,
+        size_usd REAL,
+        price REAL,
+        pnl_usd REAL,
+        reason TEXT,
+        confidence REAL
+    )
+    """)
+
+    # prices snapshot (single row)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS prices (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        time_utc TEXT,
+        json TEXT
     )
     """)
 
     conn.commit()
     conn.close()
 
-def insert_row(table: str, time_utc: str, fields: Dict[str, Any], payload: Dict[str, Any]):
+init_db()
+
+# -----------------------------------------------------------------------------
+# Helpers: read state
+# -----------------------------------------------------------------------------
+def get_heartbeat():
     conn = db()
-    cur = conn.cursor()
-
-    cols = ["time_utc"] + list(fields.keys()) + ["payload"]
-    vals = [time_utc] + list(fields.values()) + [json.dumps(payload)]
-
-    placeholders = ",".join(["?"] * len(cols))
-    col_sql = ",".join(cols)
-    cur.execute(f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})", vals)
-
-    conn.commit()
+    row = conn.execute("SELECT * FROM heartbeat WHERE id=1").fetchone()
     conn.close()
+    return dict(row) if row else None
 
-def fetch_one(table: str) -> Optional[dict]:
+def get_pet():
     conn = db()
-    cur = conn.cursor()
-    cur.execute(f"SELECT payload FROM {table} ORDER BY id DESC LIMIT 1")
-    row = cur.fetchone()
+    row = conn.execute("SELECT * FROM pet WHERE id=1").fetchone()
     conn.close()
-    if not row:
-        return None
-    try:
-        return json.loads(row["payload"])
-    except Exception:
-        return None
+    return dict(row) if row else None
 
-def fetch_many(table: str, limit: int = 200) -> List[dict]:
+def get_events(limit=200):
     conn = db()
-    cur = conn.cursor()
-    cur.execute(f"SELECT payload FROM {table} ORDER BY id DESC LIMIT ?", (limit,))
-    rows = cur.fetchall()
+    rows = conn.execute(
+        "SELECT time_utc, type, message, details FROM events ORDER BY id DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
     conn.close()
     out = []
     for r in rows:
-        try:
-            out.append(json.loads(r["payload"]))
-        except Exception:
-            pass
-    out.reverse()
-    return out
+        out.append({
+            "time_utc": r["time_utc"],
+            "type": r["type"],
+            "message": r["message"],
+            "details": json.loads(r["details"]) if r["details"] else None
+        })
+    return list(reversed(out))
 
-def compute_stats(trades: List[dict]) -> Dict[str, Any]:
-    if not trades:
-        return {
-            "total_trades": 0,
-            "wins": 0,
-            "losses": 0,
-            "win_rate": 0.0,
-            "total_pnl_usd": 0.0,
-            "avg_pnl": 0.0,
+def get_equity(limit=500):
+    conn = db()
+    rows = conn.execute(
+        "SELECT time_utc, equity_usd FROM equity ORDER BY id DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    out = [{"time_utc": r["time_utc"], "equity_usd": r["equity_usd"]} for r in rows]
+    return list(reversed(out))
+
+def get_trades(limit=200):
+    conn = db()
+    rows = conn.execute(
+        "SELECT time_utc, market, side, size_usd, price, pnl_usd, reason, confidence FROM trades ORDER BY id DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        out.append({
+            "time_utc": r["time_utc"],
+            "market": r["market"],
+            "side": r["side"],
+            "size_usd": r["size_usd"],
+            "price": r["price"],
+            "pnl_usd": r["pnl_usd"],
+            "reason": r["reason"],
+            "confidence": r["confidence"],
+        })
+    return list(reversed(out))
+
+def get_prices():
+    conn = db()
+    row = conn.execute("SELECT json FROM prices WHERE id=1").fetchone()
+    conn.close()
+    if not row or not row["json"]:
+        return {}
+    try:
+        return json.loads(row["json"])
+    except Exception:
+        return {}
+
+# -----------------------------------------------------------------------------
+# Public GET endpoints (for browser/dashboard)
+# -----------------------------------------------------------------------------
+@app.get("/")
+def root():
+    return jsonify({
+        "ok": True,
+        "service": "crypto-ai-api",
+        "time_utc": utc_now_iso(),
+        "endpoints": {
+            "GET": ["/data", "/heartbeat", "/pet", "/events", "/equity", "/trades", "/prices"],
+            "POST": ["/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices"],
+            "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity"]
         }
-    pnls = []
-    wins = 0
-    losses = 0
-    for t in trades:
-        p = float(t.get("pnl_usd", 0.0) or 0.0)
-        pnls.append(p)
-        if p >= 0:
-            wins += 1
-        else:
-            losses += 1
-    total = sum(pnls)
-    total_trades = len(trades)
+    })
+
+@app.get("/data")
+def data():
+    return jsonify({
+        "equity": get_equity(),
+        "events": get_events(),
+        "heartbeat": get_heartbeat(),
+        "pet": get_pet(),
+        "stats": _stats(),
+        "trades": get_trades(),
+        "prices": get_prices()
+    })
+
+@app.get("/heartbeat")
+def heartbeat_get():
+    return jsonify(get_heartbeat() or {})
+
+@app.get("/pet")
+def pet_get():
+    return jsonify(get_pet() or {})
+
+@app.get("/events")
+def events_get():
+    limit = int(request.args.get("limit", "200"))
+    return jsonify(get_events(limit=limit))
+
+@app.get("/equity")
+def equity_get():
+    limit = int(request.args.get("limit", "500"))
+    return jsonify(get_equity(limit=limit))
+
+@app.get("/trades")
+def trades_get():
+    limit = int(request.args.get("limit", "200"))
+    return jsonify(get_trades(limit=limit))
+
+@app.get("/prices")
+def prices_get():
+    return jsonify(get_prices())
+
+# -----------------------------------------------------------------------------
+# Stats (simple computed summary)
+# -----------------------------------------------------------------------------
+def _stats():
+    hb = get_heartbeat() or {}
+    conn = db()
+
+    # trades summary
+    row = conn.execute("""
+        SELECT
+            COUNT(*) AS total_trades,
+            COALESCE(SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END),0) AS wins,
+            COALESCE(SUM(CASE WHEN pnl_usd <= 0 THEN 1 ELSE 0 END),0) AS losses,
+            COALESCE(SUM(pnl_usd),0) AS total_pnl_usd
+        FROM trades
+    """).fetchone()
+
+    conn.close()
+
+    total_trades = int(row["total_trades"] or 0)
+    wins = int(row["wins"] or 0)
+    losses = int(row["losses"] or 0)
+    total_pnl_usd = float(row["total_pnl_usd"] or 0.0)
+    win_rate = (wins / total_trades) if total_trades > 0 else 0.0
+    avg_pnl = (total_pnl_usd / total_trades) if total_trades > 0 else 0.0
+
     return {
         "total_trades": total_trades,
         "wins": wins,
         "losses": losses,
-        "win_rate": (wins / total_trades) * 100.0 if total_trades else 0.0,
-        "total_pnl_usd": total,
-        "avg_pnl": total / total_trades if total_trades else 0.0,
+        "win_rate": win_rate,
+        "total_pnl_usd": total_pnl_usd,
+        "avg_pnl": avg_pnl,
+        "equity_usd": hb.get("equity_usd", None),
     }
 
-# ============================================================
-# Price endpoints (Coinbase spot + candles)
-# ============================================================
-
-def coinbase_spot_price(product: str) -> Optional[float]:
-    # Coinbase public spot API
-    # https://api.coinbase.com/v2/prices/BTC-USD/spot
-    data = http_get_json(f"https://api.coinbase.com/v2/prices/{product}/spot")
-    try:
-        amt = data["data"]["amount"]
-        return float(amt)
-    except Exception:
-        return None
-
-def coinbase_candles(product: str, limit: int = 180) -> List[float]:
-    # Coinbase Exchange candles (public)
-    # https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600
-    url = f"https://api.exchange.coinbase.com/products/{product}/candles?granularity={COINBASE_CANDLE_GRANULARITY}"
-    data = http_get_json(url)
-    closes: List[float] = []
-    if isinstance(data, list):
-        # Each item: [time, low, high, open, close, volume]
-        for row in data:
-            if isinstance(row, list) and len(row) >= 5:
-                c = row[4]
-                if isinstance(c, (int, float)) and c > 0:
-                    closes.append(float(c))
-    closes.reverse()  # oldest -> newest
-    if limit and len(closes) > limit:
-        closes = closes[-limit:]
-    return closes
-
-# ============================================================
-# Routes
-# ============================================================
-
-@app.get("/health")
-def health():
-    return jsonify({"ok": True, "time_utc": utc_now_iso()})
-
-@app.get("/prices")
-def prices():
-    out: Dict[str, float] = {}
-    # If MARKETS empty, still return something safe
-    markets = MARKETS or ["BTC-USD", "ETH-USD"]
-    for m in markets:
-        px = coinbase_spot_price(m)
-        if px is not None:
-            out[m] = px
-    return jsonify(out)
-
-@app.get("/history")
-def history():
-    market = (request.args.get("market") or "").strip().upper()
-    limit = int(request.args.get("limit") or "180")
-    if not market:
-        return jsonify({"error": "missing market"}), 400
-    closes = coinbase_candles(market, limit=limit)
-    return jsonify({"market": market, "closes": closes})
-
-@app.get("/data")
-def data():
-    hb = fetch_one("heartbeat")
-    pet = fetch_one("pet")
-    equity = fetch_many("equity", limit=400)
-    trades = fetch_many("trades", limit=500)
-    events = fetch_many("events", limit=300)
-    training_events = fetch_many("training_events", limit=200)
-
-    stats = compute_stats(trades)
-
-    return jsonify({
-        "heartbeat": hb,
-        "pet": pet,
-        "equity": equity,
-        "trades": trades,
-        "events": events,
-        "training_events": training_events,
-        "stats": stats,
-    })
-
-# ---------------- Ingest endpoints ----------------
-
+# -----------------------------------------------------------------------------
+# Ingest POST endpoints (for the bot/worker)
+# -----------------------------------------------------------------------------
 @app.post("/ingest/heartbeat")
 def ingest_heartbeat():
     payload = request.get_json(force=True, silent=True) or {}
-    t = payload.get("time_utc") or utc_now_iso()
-    insert_row("heartbeat", t, {}, payload)
+    conn = db()
+    conn.execute("""
+        INSERT INTO heartbeat (id, time_utc, status, survival_mode, equity_usd, open_positions, prices_ok, markets, losses, total_trades, wins, total_pnl_usd)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          time_utc=excluded.time_utc,
+          status=excluded.status,
+          survival_mode=excluded.survival_mode,
+          equity_usd=excluded.equity_usd,
+          open_positions=excluded.open_positions,
+          prices_ok=excluded.prices_ok,
+          markets=excluded.markets,
+          losses=excluded.losses,
+          total_trades=excluded.total_trades,
+          wins=excluded.wins,
+          total_pnl_usd=excluded.total_pnl_usd
+    """, (
+        payload.get("time_utc", utc_now_iso()),
+        payload.get("status", "running"),
+        payload.get("survival_mode", "NORMAL"),
+        payload.get("equity_usd", 0.0),
+        payload.get("open_positions", 0),
+        1 if payload.get("prices_ok", True) else 0,
+        json.dumps(payload.get("markets", [])),
+        payload.get("losses", 0),
+        payload.get("total_trades", 0),
+        payload.get("wins", 0),
+        payload.get("total_pnl_usd", 0.0),
+    ))
+    conn.commit()
+    conn.close()
     return jsonify({"ok": True})
 
 @app.post("/ingest/pet")
 def ingest_pet():
     payload = request.get_json(force=True, silent=True) or {}
-    t = payload.get("time_utc") or utc_now_iso()
-    insert_row("pet", t, {}, payload)
-    return jsonify({"ok": True})
-
-@app.post("/ingest/equity")
-def ingest_equity():
-    payload = request.get_json(force=True, silent=True) or {}
-    t = payload.get("time_utc") or utc_now_iso()
-    equity_usd = float(payload.get("equity_usd") or 0.0)
-    insert_row("equity", t, {"equity_usd": equity_usd}, payload)
-    return jsonify({"ok": True})
-
-@app.post("/ingest/trade")
-def ingest_trade():
-    payload = request.get_json(force=True, silent=True) or {}
-    t = payload.get("exit_time") or payload.get("time_utc") or utc_now_iso()
-    market = str(payload.get("market") or "")
-    pnl_usd = float(payload.get("pnl_usd") or 0.0)
-    insert_row("trades", t, {"market": market, "pnl_usd": pnl_usd}, payload)
+    conn = db()
+    conn.execute("""
+        INSERT INTO pet (id, time_utc, stage, mood, health, hunger, growth, fainted_until_utc, survival_mode)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          time_utc=excluded.time_utc,
+          stage=excluded.stage,
+          mood=excluded.mood,
+          health=excluded.health,
+          hunger=excluded.hunger,
+          growth=excluded.growth,
+          fainted_until_utc=excluded.fainted_until_utc,
+          survival_mode=excluded.survival_mode
+    """, (
+        payload.get("time_utc", utc_now_iso()),
+        payload.get("stage", "egg"),
+        payload.get("mood", "focused"),
+        payload.get("health", 100.0),
+        payload.get("hunger", 50.0),
+        payload.get("growth", 0.0),
+        payload.get("fainted_until_utc", ""),
+        payload.get("survival_mode", "NORMAL"),
+    ))
+    conn.commit()
+    conn.close()
     return jsonify({"ok": True})
 
 @app.post("/ingest/event")
 def ingest_event():
     payload = request.get_json(force=True, silent=True) or {}
-    t = payload.get("time_utc") or utc_now_iso()
-    etype = str(payload.get("type") or "")
-    msg = str(payload.get("message") or "")
-    insert_row("events", t, {"type": etype, "message": msg}, payload)
+    conn = db()
+    conn.execute("""
+        INSERT INTO events (time_utc, type, message, details)
+        VALUES (?, ?, ?, ?)
+    """, (
+        payload.get("time_utc", utc_now_iso()),
+        payload.get("type", "info"),
+        payload.get("message", ""),
+        json.dumps(payload.get("details", {}))
+    ))
+    conn.commit()
+    conn.close()
     return jsonify({"ok": True})
 
-@app.post("/ingest/training_event")
-def ingest_training_event():
+@app.post("/ingest/equity")
+def ingest_equity():
     payload = request.get_json(force=True, silent=True) or {}
-    t = payload.get("time_utc") or utc_now_iso()
-    ev = str(payload.get("event") or "")
-    insert_row("training_events", t, {"event": ev}, payload)
+    conn = db()
+    conn.execute("""
+        INSERT INTO equity (time_utc, equity_usd)
+        VALUES (?, ?)
+    """, (
+        payload.get("time_utc", utc_now_iso()),
+        float(payload.get("equity_usd", 0.0))
+    ))
+    conn.commit()
+    conn.close()
     return jsonify({"ok": True})
 
-# ============================================================
-# Boot
-# ============================================================
+@app.post("/ingest/trade")
+def ingest_trade():
+    payload = request.get_json(force=True, silent=True) or {}
+    conn = db()
+    conn.execute("""
+        INSERT INTO trades (time_utc, market, side, size_usd, price, pnl_usd, reason, confidence)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        payload.get("time_utc", utc_now_iso()),
+        payload.get("market", ""),
+        payload.get("side", ""),
+        float(payload.get("size_usd", 0.0)),
+        float(payload.get("price", 0.0)),
+        float(payload.get("pnl_usd", 0.0)),
+        payload.get("reason", ""),
+        float(payload.get("confidence", 0.0)),
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
-init_db()
+@app.post("/ingest/prices")
+def ingest_prices():
+    payload = request.get_json(force=True, silent=True) or {}
+    conn = db()
+    conn.execute("""
+        INSERT INTO prices (id, time_utc, json)
+        VALUES (1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          time_utc=excluded.time_utc,
+          json=excluded.json
+    """, (
+        payload.get("time_utc", utc_now_iso()),
+        json.dumps(payload.get("prices", payload))
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
+# -----------------------------------------------------------------------------
+# DELETE endpoints (wipe/reset)
+# -----------------------------------------------------------------------------
+@app.delete("/reset/all")
+def reset_all():
+    conn = db()
+    conn.execute("DELETE FROM events")
+    conn.execute("DELETE FROM equity")
+    conn.execute("DELETE FROM trades")
+    conn.execute("DELETE FROM heartbeat")
+    conn.execute("DELETE FROM pet")
+    conn.execute("DELETE FROM prices")
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "reset": "all"})
+
+@app.delete("/reset/events")
+def reset_events():
+    conn = db()
+    conn.execute("DELETE FROM events")
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "reset": "events"})
+
+@app.delete("/reset/trades")
+def reset_trades():
+    conn = db()
+    conn.execute("DELETE FROM trades")
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "reset": "trades"})
+
+@app.delete("/reset/equity")
+def reset_equity():
+    conn = db()
+    conn.execute("DELETE FROM equity")
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "reset": "equity"})
+
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    log.info(f"Starting api on 0.0.0.0:{PORT} db={DB_PATH}")
-    app.run(host="0.0.0.0", port=PORT)
+    port = int(os.environ.get("PORT", "10000"))
+    app.run(host="0.0.0.0", port=port)
