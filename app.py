@@ -17,37 +17,63 @@ TRADES_FILE = os.path.join(DATA_DIR, "trades.csv")
 EQUITY_FILE = os.path.join(DATA_DIR, "equity_curve.csv")
 TRAINING_FILE = os.path.join(DATA_DIR, "training_events.csv")
 HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.json")
+PET_FILE = os.path.join(DATA_DIR, "pet.json")
+EVENTS_FILE = os.path.join(DATA_DIR, "events.csv")  # sounds/thoughts/status
 
 app = Flask(__name__, static_folder=STATIC_DIR)
 
 # -----------------------------
 # Helpers
 # -----------------------------
-def utc_now():
+def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 def ensure_csv(path, headers):
     if not os.path.exists(path):
-        with open(path, "w", newline="") as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(headers)
 
 def append_csv(path, row):
-    with open(path, "a", newline="") as f:
+    with open(path, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(row)
 
-def read_csv(path):
+def read_csv(path, limit=None):
     if not os.path.exists(path):
         return []
-    with open(path, newline="") as f:
-        return list(csv.DictReader(f))
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+        if limit is not None:
+            return rows[-limit:]
+        return rows
 
 def to_float(val, default=0.0):
     try:
         return float(val)
-    except:
+    except Exception:
         return default
+
+def to_int(val, default=0):
+    try:
+        return int(val)
+    except Exception:
+        return default
+
+def safe_read_json(path, default):
+    try:
+        if not os.path.exists(path):
+            return default
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+def safe_write_json(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
 
 # -----------------------------
 # Ensure base CSVs exist
@@ -57,11 +83,28 @@ ensure_csv(TRADES_FILE, [
     "entry_price", "exit_price", "qty",
     "pnl_usd", "pnl_pct",
     "take_profit_pct", "stop_loss_pct",
-    "risk_mode", "trend_strength", "rsi", "volatility"
+    "risk_mode", "trend_strength", "rsi", "volatility",
+    "confidence", "reason"
 ])
 
 ensure_csv(EQUITY_FILE, ["time_utc", "equity_usd"])
 ensure_csv(TRAINING_FILE, ["time_utc", "event", "details"])
+
+ensure_csv(EVENTS_FILE, ["time_utc", "type", "message", "details_json"])
+
+# -----------------------------
+# Static UI (dashboard)
+# -----------------------------
+@app.get("/")
+def index():
+    # Serve static/index.html if you have one
+    if os.path.exists(os.path.join(STATIC_DIR, "index.html")):
+        return send_from_directory(STATIC_DIR, "index.html")
+    return "<h1>API is running</h1><p>Add static/index.html for a dashboard.</p>"
+
+@app.get("/health")
+def health():
+    return "OK", 200
 
 # -----------------------------
 # Ingest endpoints (BOT → API)
@@ -69,188 +112,150 @@ ensure_csv(TRAINING_FILE, ["time_utc", "event", "details"])
 @app.post("/ingest/heartbeat")
 def ingest_heartbeat():
     payload = request.json or {}
-    payload["time_utc"] = utc_now()
-
-    with open(HEARTBEAT_FILE, "w") as f:
-        json.dump(payload, f, indent=2)
-
+    payload["time_utc"] = utc_now_iso()
+    safe_write_json(HEARTBEAT_FILE, payload)
     return jsonify({"status": "ok"})
 
 @app.post("/ingest/trade")
 def ingest_trade():
-    d = request.json or {}
+    p = request.json or {}
 
-    append_csv(TRADES_FILE, [
-        d.get("entry_time"),
-        d.get("exit_time"),
-        d.get("hold_minutes"),
-        d.get("market"),
-        d.get("entry_price"),
-        d.get("exit_price"),
-        d.get("qty"),
-        d.get("pnl_usd"),
-        d.get("pnl_pct"),
-        d.get("take_profit_pct"),
-        d.get("stop_loss_pct"),
-        d.get("risk_mode"),
-        d.get("trend_strength"),
-        d.get("rsi"),
-        d.get("volatility"),
-    ])
+    # Required-ish fields with safe defaults
+    entry_time = p.get("entry_time") or utc_now_iso()
+    exit_time = p.get("exit_time") or utc_now_iso()
 
+    row = [
+        entry_time,
+        exit_time,
+        p.get("hold_minutes", ""),
+        p.get("market", ""),
+        p.get("entry_price", ""),
+        p.get("exit_price", ""),
+        p.get("qty", ""),
+        p.get("pnl_usd", ""),
+        p.get("pnl_pct", ""),
+        p.get("take_profit_pct", ""),
+        p.get("stop_loss_pct", ""),
+        p.get("risk_mode", ""),
+        p.get("trend_strength", ""),
+        p.get("rsi", ""),
+        p.get("volatility", ""),
+        p.get("confidence", ""),
+        p.get("reason", ""),
+    ]
+
+    append_csv(TRADES_FILE, row)
     return jsonify({"status": "ok"})
 
 @app.post("/ingest/equity")
 def ingest_equity():
-    d = request.json or {}
-
-    append_csv(EQUITY_FILE, [
-        d.get("time_utc", utc_now()),
-        d.get("equity_usd")
-    ])
-
+    p = request.json or {}
+    t = p.get("time_utc") or utc_now_iso()
+    eq = p.get("equity_usd")
+    append_csv(EQUITY_FILE, [t, eq])
     return jsonify({"status": "ok"})
 
-@app.post("/ingest/training")
-def ingest_training():
-    d = request.json or {}
+@app.post("/ingest/training_event")
+def ingest_training_event():
+    p = request.json or {}
+    t = p.get("time_utc") or utc_now_iso()
+    event = p.get("event", "event")
+    details = p.get("details", "")
+    append_csv(TRAINING_FILE, [t, event, details])
+    return jsonify({"status": "ok"})
 
-    append_csv(TRAINING_FILE, [
-        d.get("time_utc", utc_now()),
-        d.get("event"),
-        json.dumps(d.get("details", {}))
-    ])
+@app.post("/ingest/pet")
+def ingest_pet():
+    """
+    Bot can POST current pet state here.
+    Stored as JSON so dashboard can show it.
+    """
+    p = request.json or {}
+    if "time_utc" not in p:
+        p["time_utc"] = utc_now_iso()
+    safe_write_json(PET_FILE, p)
+    return jsonify({"status": "ok"})
 
+@app.post("/ingest/event")
+def ingest_event():
+    """
+    For pet noises / thoughts / status messages.
+    Example:
+      { "type": "sound", "message": "happy", "details": {"kind":"happy"} }
+    """
+    p = request.json or {}
+    t = p.get("time_utc") or utc_now_iso()
+    etype = p.get("type", "event")
+    msg = p.get("message", "")
+    details = p.get("details", {}) or {}
+    append_csv(EVENTS_FILE, [t, etype, msg, json.dumps(details, ensure_ascii=False)])
     return jsonify({"status": "ok"})
 
 # -----------------------------
-# Dashboard API
+# Dashboard read endpoints (UI → API)
 # -----------------------------
 @app.get("/data")
-def dashboard_data():
-    trades = read_csv(TRADES_FILE)
-    equity_rows = read_csv(EQUITY_FILE)
+def data():
+    """
+    Single endpoint the dashboard can call.
+    """
+    hb = safe_read_json(HEARTBEAT_FILE, {})
+    pet = safe_read_json(PET_FILE, {})
 
-    total_trades = len(trades)
+    trades = read_csv(TRADES_FILE, limit=250)
+    equity = read_csv(EQUITY_FILE, limit=800)
+    training = read_csv(TRAINING_FILE, limit=200)
+    events = read_csv(EVENTS_FILE, limit=60)
+
+    # Parse details_json safely
+    for e in events:
+        try:
+            e["details"] = json.loads(e.get("details_json", "") or "{}")
+        except Exception:
+            e["details"] = {}
+
+    # Metrics
     wins = 0
     losses = 0
-    pnl_total = 0.0
-    pnl_wins_sum = 0.0
-    pnl_losses_sum = 0.0
-
-    best_trade = None
-    worst_trade = None
-
-    per_market = {}
-    recent_trades = []
-
-    for t in trades[-20:][::-1]:
-        pnl = to_float(t.get("pnl_usd"))
-        market = t.get("market", "UNKNOWN")
-
-        pnl_total += pnl
+    total_pnl = 0.0
+    for t in trades:
+        pnl = to_float(t.get("pnl_usd"), 0.0)
+        total_pnl += pnl
         if pnl >= 0:
             wins += 1
-            pnl_wins_sum += pnl
         else:
             losses += 1
-            pnl_losses_sum += pnl
 
-        best_trade = pnl if best_trade is None else max(best_trade, pnl)
-        worst_trade = pnl if worst_trade is None else min(worst_trade, pnl)
-
-        if market not in per_market:
-            per_market[market] = {"trades": 0, "wins": 0, "total_pnl": 0.0}
-
-        per_market[market]["trades"] += 1
-        per_market[market]["total_pnl"] += pnl
-        if pnl >= 0:
-            per_market[market]["wins"] += 1
-
-        recent_trades.append({
-            "time": t.get("exit_time"),
-            "market": market,
-            "pnl_usd": pnl
-        })
-
-    win_rate = (wins / total_trades * 100.0) if total_trades else 0.0
-
-    markets = []
-    for m, v in per_market.items():
-        wr = (v["wins"] / v["trades"] * 100.0) if v["trades"] else 0.0
-        markets.append({
-            "market": m,
-            "trades": v["trades"],
-            "win_rate": wr,
-            "total_pnl": v["total_pnl"],
-            "avg_pnl": (v["total_pnl"] / v["trades"]) if v["trades"] else 0.0
-        })
-
-    markets.sort(key=lambda x: x["total_pnl"], reverse=True)
-
-    equity_curve = []
-    equity_vals = []
-
-    for r in equity_rows:
-        e = to_float(r.get("equity_usd"), None)
-        if e is None:
-            continue
-        equity_curve.append({
-            "time_utc": r.get("time_utc"),
-            "equity_usd": e
-        })
-        equity_vals.append(e)
-
-    max_drawdown = 0.0
-    if equity_vals:
-        peak = equity_vals[0]
-        for v in equity_vals:
-            peak = max(peak, v)
-            max_drawdown = max(max_drawdown, peak - v)
-
-    heartbeat = {}
-    status = "unknown"
-    last_heartbeat = None
-
-    if os.path.exists(HEARTBEAT_FILE):
-        with open(HEARTBEAT_FILE) as f:
-            heartbeat = json.load(f)
-            status = heartbeat.get("status", "unknown")
-            last_heartbeat = heartbeat.get("time_utc")
+    total = wins + losses
+    win_rate = (wins / total * 100.0) if total else 0.0
+    avg_pnl = (total_pnl / total) if total else 0.0
 
     return jsonify({
-        "total_trades": total_trades,
-        "wins": wins,
-        "losses": losses,
-        "win_rate": win_rate,
-        "total_pnl_usd": pnl_total,
-        "bot_status": {
-            "status": status,
-            "last_heartbeat": last_heartbeat
-        },
-        "advanced_metrics": {
-            "profit_factor": (pnl_wins_sum / abs(pnl_losses_sum)) if pnl_losses_sum < 0 else None,
-            "avg_win_usd": (pnl_wins_sum / wins) if wins else 0.0,
-            "avg_loss_usd": abs((pnl_losses_sum / losses)) if losses else 0.0,
-            "best_trade_usd": best_trade,
-            "worst_trade_usd": worst_trade,
-            "max_drawdown_usd": max_drawdown,
-            "recovery_factor": None,
-            "sharpe_ratio": None
-        },
-        "equity_curve": equity_curve,
-        "per_market": markets,
-        "recent_trades": recent_trades,
-        "total_events": len(read_csv(TRAINING_FILE))
+        "heartbeat": hb,
+        "pet": pet,
+        "events": events[::-1],          # newest first
+        "recent_trades": trades[::-1],   # newest first
+        "equity_series": equity,
+        "training_events": training[::-1],
+        "stats": {
+            "wins": wins,
+            "losses": losses,
+            "total_trades": total,
+            "win_rate": round(win_rate, 2),
+            "avg_pnl": round(avg_pnl, 4),
+            "total_pnl_usd": round(total_pnl, 6),
+        }
     })
 
-# -----------------------------
-# Static frontend
-# -----------------------------
-@app.get("/")
-def index():
-    return send_from_directory(STATIC_DIR, "index.html")
+@app.post("/pet/reset")
+def pet_reset():
+    safe_write_json(PET_FILE, {})
+    append_csv(EVENTS_FILE, [utc_now_iso(), "status", "pet_reset", json.dumps({}, ensure_ascii=False)])
+    return jsonify({"status": "ok"})
 
+# -----------------------------
+# Optional: serve other static files
+# -----------------------------
 @app.get("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)
