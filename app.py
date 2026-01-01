@@ -4,7 +4,6 @@ import json
 import time
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -22,7 +21,7 @@ EQUITY_FILE = os.path.join(DATA_DIR, "equity_curve.csv")
 TRAINING_FILE = os.path.join(DATA_DIR, "training_events.csv")
 HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.json")
 PET_FILE = os.path.join(DATA_DIR, "pet.json")
-EVENTS_FILE = os.path.join(DATA_DIR, "events.csv")  # sounds/thoughts/status messages
+EVENTS_FILE = os.path.join(DATA_DIR, "events.csv")  # sounds/thoughts/status
 
 app = Flask(__name__, static_folder=STATIC_DIR)
 
@@ -52,18 +51,6 @@ def read_csv(path, limit=None):
         return rows[-limit:]
     return rows
 
-def to_float(val, default=0.0):
-    try:
-        return float(val)
-    except Exception:
-        return default
-
-def to_int(val, default=0):
-    try:
-        return int(val)
-    except Exception:
-        return default
-
 def safe_read_json(path, default):
     try:
         if not os.path.exists(path):
@@ -79,6 +66,12 @@ def safe_write_json(path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
 
+def to_float(val, default=0.0):
+    try:
+        return float(val)
+    except Exception:
+        return default
+
 # -----------------------------
 # Ensure base files exist
 # -----------------------------
@@ -90,21 +83,19 @@ ensure_csv(TRADES_FILE, [
     "risk_mode", "trend_strength", "rsi", "volatility",
     "confidence", "reason"
 ])
-
 ensure_csv(EQUITY_FILE, ["time_utc", "equity_usd"])
 ensure_csv(TRAINING_FILE, ["time_utc", "event", "details"])
 ensure_csv(EVENTS_FILE, ["time_utc", "type", "message", "details_json"])
 
 # -----------------------------
-# Static UI (optional)
+# Basic routes
 # -----------------------------
 @app.get("/")
 def index():
-    # Serve static/index.html if you add one
     idx = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(idx):
         return send_from_directory(STATIC_DIR, "index.html")
-    return "<h1>API is running</h1><p>Endpoints: /health, /prices, /history, /data</p>", 200
+    return "<h1>API is running</h1><p>Try /health, /prices, /history, /data</p>", 200
 
 @app.get("/health")
 def health():
@@ -127,12 +118,9 @@ def ingest_heartbeat():
 @app.post("/ingest/trade")
 def ingest_trade():
     p = request.json or {}
-    entry_time = p.get("entry_time") or utc_now_iso()
-    exit_time = p.get("exit_time") or utc_now_iso()
-
     row = [
-        entry_time,
-        exit_time,
+        p.get("entry_time", utc_now_iso()),
+        p.get("exit_time", utc_now_iso()),
         p.get("hold_minutes", ""),
         p.get("market", ""),
         p.get("entry_price", ""),
@@ -172,18 +160,12 @@ def ingest_training_event():
 @app.post("/ingest/pet")
 def ingest_pet():
     p = request.json or {}
-    if "time_utc" not in p:
-        p["time_utc"] = utc_now_iso()
+    p["time_utc"] = p.get("time_utc") or utc_now_iso()
     safe_write_json(PET_FILE, p)
     return jsonify({"status": "ok"})
 
 @app.post("/ingest/event")
 def ingest_event():
-    """
-    For pet noises / thoughts / status messages.
-    Example:
-      { "type": "sound", "message": "purr", "details": {...} }
-    """
     p = request.json or {}
     t = p.get("time_utc") or utc_now_iso()
     etype = p.get("type", "event")
@@ -211,14 +193,12 @@ def data():
     training = read_csv(TRAINING_FILE, limit=200)
     events = read_csv(EVENTS_FILE, limit=120)
 
-    # parse event details_json
     for e in events:
         try:
             e["details"] = json.loads(e.get("details_json") or "{}")
         except Exception:
             e["details"] = {}
 
-    # basic stats
     wins = 0
     losses = 0
     total_pnl = 0.0
@@ -229,6 +209,7 @@ def data():
             wins += 1
         else:
             losses += 1
+
     total = wins + losses
     win_rate = (wins / total * 100.0) if total else 0.0
     avg_pnl = (total_pnl / total) if total else 0.0
@@ -236,8 +217,8 @@ def data():
     return jsonify({
         "heartbeat": hb,
         "pet": pet,
-        "events": list(reversed(events)),          # newest first
-        "recent_trades": list(reversed(trades)),   # newest first
+        "events": list(reversed(events)),
+        "recent_trades": list(reversed(trades)),
         "equity_series": equity,
         "training_events": list(reversed(training)),
         "stats": {
@@ -257,7 +238,6 @@ COINGECKO_BASE = os.environ.get("COINGECKO_BASE", "https://api.coingecko.com/api
 PRICE_CACHE_SECONDS = int(os.environ.get("PRICE_CACHE_SECONDS", "20"))
 HISTORY_CACHE_SECONDS = int(os.environ.get("HISTORY_CACHE_SECONDS", "120"))
 
-# Market -> CoinGecko id
 COIN_ID = {
     "BTC-USD": "bitcoin",
     "ETH-USD": "ethereum",
@@ -268,7 +248,7 @@ COIN_ID = {
 }
 
 _price_cache = {"t": 0.0, "data": {}}
-_hist_cache = {}  # key: (market, limit) -> {"t":..., "closes":[...]}
+_hist_cache = {}  # (market, limit) -> {"t":..., "closes":[...]}
 
 def http_get_json(url: str, timeout: int = 15):
     try:
@@ -276,8 +256,6 @@ def http_get_json(url: str, timeout: int = 15):
         with urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             return json.loads(raw)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
-        return None
     except Exception:
         return None
 
@@ -299,6 +277,7 @@ def get_prices(markets):
 
     url = f"{COINGECKO_BASE}/simple/price?ids={','.join(ids)}&vs_currencies=usd"
     data = http_get_json(url)
+
     out = {}
     if isinstance(data, dict):
         for cid, payload in data.items():
@@ -326,7 +305,6 @@ def get_history(market: str, limit: int):
     if not cid:
         return []
 
-    # pick enough days to get plenty of points
     days = max(1, min(90, int((limit / 24) + 2)))
     url = f"{COINGECKO_BASE}/coins/{cid}/market_chart?vs_currency=usd&days={days}"
     data = http_get_json(url)
@@ -349,17 +327,11 @@ def prices():
     markets = [m.strip().upper() for m in ms.split(",") if m.strip()] if ms else list(COIN_ID.keys())
     return jsonify(get_prices(markets))
 
-@app.get("/price")
-def price():
-    market = (request.args.get("market") or "BTC-USD").strip().upper()
-    p = get_prices([market]).get(market)
-    return jsonify({"market": market, "price": p})
-
 @app.get("/history")
 def history():
     market = (request.args.get("market") or "BTC-USD").strip().upper()
-    limit = request.args.get("limit", "180")
-    closes = get_history(market, int(limit))
+    limit = int(request.args.get("limit", "180"))
+    closes = get_history(market, limit)
     return jsonify({"market": market, "closes": closes})
 
 # -----------------------------
