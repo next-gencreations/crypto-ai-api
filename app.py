@@ -1,9 +1,16 @@
 import os
 import json
 import sqlite3
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timezone, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+log = logging.getLogger("crypto-ai-api")
 
 # -----------------------------------------------------------------------------
 # App
@@ -14,27 +21,53 @@ CORS(app)
 # -----------------------------------------------------------------------------
 # Config
 # -----------------------------------------------------------------------------
-# IMPORTANT:
-# On Render, attach a disk to THIS API service at /var/data
-# Then set DB_PATH environment variable to: /var/data/data.db
-DB_PATH = os.environ.get("DB_PATH", "data.db")
-
+# On Render: attach a disk to THIS API service at /var/data
+# Then set DB_PATH env var to /var/data/data.db
+DEFAULT_DB_PATH = "data.db"
+DB_PATH = os.environ.get("DB_PATH", DEFAULT_DB_PATH)
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _safe_json_loads(s):
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except Exception:
+        return None
+
+def ensure_db_dir(path: str) -> str:
+    """
+    Ensure the parent folder exists for SQLite db file.
+    If /var/data isn't mounted/writable, fallback to /tmp/data.db so service stays alive.
+    """
+    try:
+        parent = os.path.dirname(path) or "."
+        os.makedirs(parent, exist_ok=True)
+        # quick write test
+        testfile = os.path.join(parent, ".write_test")
+        with open(testfile, "w") as f:
+            f.write("ok")
+        os.remove(testfile)
+        return path
+    except Exception as e:
+        log.error(f"DB dir not writable for '{path}'. Reason: {e}")
+        fallback = "/tmp/data.db"
+        log.warning(f"Falling back to '{fallback}'. (Disk likely not attached/mounted yet.)")
+        return fallback
+
+DB_PATH = ensure_db_dir(DB_PATH)
 
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
     conn = db()
     cur = conn.cursor()
 
-    # heartbeat = single row
     cur.execute("""
     CREATE TABLE IF NOT EXISTS heartbeat (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -52,7 +85,6 @@ def init_db():
     )
     """)
 
-    # pet = single row
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pet (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -67,7 +99,6 @@ def init_db():
     )
     """)
 
-    # events = list
     cur.execute("""
     CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +109,6 @@ def init_db():
     )
     """)
 
-    # equity timeline
     cur.execute("""
     CREATE TABLE IF NOT EXISTS equity (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,7 +117,6 @@ def init_db():
     )
     """)
 
-    # trades list
     cur.execute("""
     CREATE TABLE IF NOT EXISTS trades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +131,6 @@ def init_db():
     )
     """)
 
-    # prices snapshot (single row)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS prices (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -111,7 +139,6 @@ def init_db():
     )
     """)
 
-    # NEW: deaths (crash/death log)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS deaths (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +149,6 @@ def init_db():
     )
     """)
 
-    # NEW: control (single row) - allows pausing/revive from API
     cur.execute("""
     CREATE TABLE IF NOT EXISTS control (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -132,7 +158,6 @@ def init_db():
     )
     """)
 
-    # ensure control row exists
     cur.execute("""
         INSERT INTO control (id, pause_until_utc, pause_reason, updated_time_utc)
         VALUES (1, '', '', ?)
@@ -142,22 +167,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-
 init_db()
 
 # -----------------------------------------------------------------------------
-# Helpers: json safe load
-# -----------------------------------------------------------------------------
-def _safe_json_loads(s):
-    if not s:
-        return None
-    try:
-        return json.loads(s)
-    except Exception:
-        return None
-
-# -----------------------------------------------------------------------------
-# Helpers: read state
+# Read helpers
 # -----------------------------------------------------------------------------
 def get_heartbeat():
     conn = db()
@@ -165,13 +178,11 @@ def get_heartbeat():
     conn.close()
     return dict(row) if row else None
 
-
 def get_pet():
     conn = db()
     row = conn.execute("SELECT * FROM pet WHERE id=1").fetchone()
     conn.close()
     return dict(row) if row else None
-
 
 def get_events(limit=200):
     conn = db()
@@ -190,7 +201,6 @@ def get_events(limit=200):
         })
     return list(reversed(out))
 
-
 def get_equity(limit=500):
     conn = db()
     rows = conn.execute(
@@ -200,7 +210,6 @@ def get_equity(limit=500):
     conn.close()
     out = [{"time_utc": r["time_utc"], "equity_usd": r["equity_usd"]} for r in rows]
     return list(reversed(out))
-
 
 def get_trades(limit=200):
     conn = db()
@@ -223,7 +232,6 @@ def get_trades(limit=200):
         })
     return list(reversed(out))
 
-
 def get_prices():
     conn = db()
     row = conn.execute("SELECT json FROM prices WHERE id=1").fetchone()
@@ -232,7 +240,6 @@ def get_prices():
         return {}
     data = _safe_json_loads(row["json"])
     return data if isinstance(data, dict) else {}
-
 
 def get_deaths(limit=200):
     conn = db()
@@ -251,30 +258,24 @@ def get_deaths(limit=200):
         })
     return list(reversed(out))
 
-
 def get_control():
     conn = db()
     row = conn.execute("SELECT * FROM control WHERE id=1").fetchone()
     conn.close()
     return dict(row) if row else {"pause_until_utc": "", "pause_reason": "", "updated_time_utc": utc_now_iso()}
 
-
 def is_paused_now():
     c = get_control()
     pause_until = c.get("pause_until_utc") or ""
     if not pause_until:
-        return False, None, None
+        return False, "", ""
     try:
-        # parse isoformat
         dt = datetime.fromisoformat(pause_until)
         now = datetime.now(timezone.utc)
         return dt > now, pause_until, c.get("pause_reason", "")
     except Exception:
         return False, pause_until, c.get("pause_reason", "")
 
-# -----------------------------------------------------------------------------
-# Stats (simple computed summary)
-# -----------------------------------------------------------------------------
 def _stats():
     hb = get_heartbeat() or {}
     conn = db()
@@ -288,11 +289,7 @@ def _stats():
         FROM trades
     """).fetchone()
 
-    drow = conn.execute("""
-        SELECT COUNT(*) AS total_deaths
-        FROM deaths
-    """).fetchone()
-
+    drow = conn.execute("SELECT COUNT(*) AS total_deaths FROM deaths").fetchone()
     conn.close()
 
     total_trades = int(row["total_trades"] or 0)
@@ -301,7 +298,6 @@ def _stats():
     total_pnl_usd = float(row["total_pnl_usd"] or 0.0)
     win_rate = (wins / total_trades) if total_trades > 0 else 0.0
     avg_pnl = (total_pnl_usd / total_trades) if total_trades > 0 else 0.0
-
     total_deaths = int(drow["total_deaths"] or 0)
 
     paused, pause_until, pause_reason = is_paused_now()
@@ -320,8 +316,17 @@ def _stats():
         "pause_reason": pause_reason or "",
     }
 
+def _add_event(t, message, details=None):
+    conn = db()
+    conn.execute("""
+        INSERT INTO events (time_utc, type, message, details)
+        VALUES (?, ?, ?, ?)
+    """, (utc_now_iso(), t, message, json.dumps(details or {})))
+    conn.commit()
+    conn.close()
+
 # -----------------------------------------------------------------------------
-# Public GET endpoints (for browser/dashboard)
+# Public GET endpoints
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
@@ -329,16 +334,14 @@ def root():
         "ok": True,
         "service": "crypto-ai-api",
         "time_utc": utc_now_iso(),
+        "db_path": DB_PATH,
+        "db_parent_exists": os.path.isdir(os.path.dirname(DB_PATH) or "."),
         "endpoints": {
             "GET": ["/data", "/heartbeat", "/pet", "/events", "/equity", "/trades", "/prices", "/deaths", "/control"],
-            "POST": [
-                "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices",
-                "/ingest/death", "/control/pause", "/control/revive"
-            ],
+            "POST": ["/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death", "/control/pause", "/control/revive"],
             "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/deaths"]
         }
     })
-
 
 @app.get("/data")
 def data():
@@ -354,52 +357,44 @@ def data():
         "control": get_control()
     })
 
-
 @app.get("/heartbeat")
 def heartbeat_get():
     return jsonify(get_heartbeat() or {})
 
-
 @app.get("/pet")
 def pet_get():
     return jsonify(get_pet() or {})
-
 
 @app.get("/events")
 def events_get():
     limit = int(request.args.get("limit", "200"))
     return jsonify(get_events(limit=limit))
 
-
 @app.get("/equity")
 def equity_get():
     limit = int(request.args.get("limit", "500"))
     return jsonify(get_equity(limit=limit))
-
 
 @app.get("/trades")
 def trades_get():
     limit = int(request.args.get("limit", "200"))
     return jsonify(get_trades(limit=limit))
 
-
 @app.get("/prices")
 def prices_get():
     return jsonify(get_prices())
-
 
 @app.get("/deaths")
 def deaths_get():
     limit = int(request.args.get("limit", "200"))
     return jsonify(get_deaths(limit=limit))
 
-
 @app.get("/control")
 def control_get():
     return jsonify(get_control())
 
 # -----------------------------------------------------------------------------
-# Ingest POST endpoints (for the bot/worker)
+# Ingest endpoints
 # -----------------------------------------------------------------------------
 @app.post("/ingest/heartbeat")
 def ingest_heartbeat():
@@ -437,7 +432,6 @@ def ingest_heartbeat():
     conn.close()
     return jsonify({"ok": True})
 
-
 @app.post("/ingest/pet")
 def ingest_pet():
     payload = request.get_json(force=True, silent=True) or {}
@@ -468,7 +462,6 @@ def ingest_pet():
     conn.close()
     return jsonify({"ok": True})
 
-
 @app.post("/ingest/event")
 def ingest_event():
     payload = request.get_json(force=True, silent=True) or {}
@@ -486,22 +479,17 @@ def ingest_event():
     conn.close()
     return jsonify({"ok": True})
 
-
 @app.post("/ingest/equity")
 def ingest_equity():
     payload = request.get_json(force=True, silent=True) or {}
     conn = db()
-    conn.execute("""
-        INSERT INTO equity (time_utc, equity_usd)
-        VALUES (?, ?)
-    """, (
+    conn.execute("INSERT INTO equity (time_utc, equity_usd) VALUES (?, ?)", (
         payload.get("time_utc", utc_now_iso()),
         float(payload.get("equity_usd", 0.0))
     ))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
-
 
 @app.post("/ingest/trade")
 def ingest_trade():
@@ -524,7 +512,6 @@ def ingest_trade():
     conn.close()
     return jsonify({"ok": True})
 
-
 @app.post("/ingest/prices")
 def ingest_prices():
     payload = request.get_json(force=True, silent=True) or {}
@@ -532,9 +519,7 @@ def ingest_prices():
     conn.execute("""
         INSERT INTO prices (id, time_utc, json)
         VALUES (1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          time_utc=excluded.time_utc,
-          json=excluded.json
+        ON CONFLICT(id) DO UPDATE SET time_utc=excluded.time_utc, json=excluded.json
     """, (
         payload.get("time_utc", utc_now_iso()),
         json.dumps(payload.get("prices", payload))
@@ -543,8 +528,6 @@ def ingest_prices():
     conn.close()
     return jsonify({"ok": True})
 
-
-# NEW: ingest death record
 @app.post("/ingest/death")
 def ingest_death():
     payload = request.get_json(force=True, silent=True) or {}
@@ -562,18 +545,16 @@ def ingest_death():
     conn.close()
     return jsonify({"ok": True})
 
-
 # -----------------------------------------------------------------------------
-# Control endpoints (API tells bot to pause/revive)
+# Control endpoints
 # -----------------------------------------------------------------------------
 @app.post("/control/pause")
 def control_pause():
     payload = request.get_json(force=True, silent=True) or {}
-    seconds = int(payload.get("seconds", 600))  # default 10 mins
+    seconds = int(payload.get("seconds", 600))
     reason = payload.get("reason", "pause requested")
 
-    now = datetime.now(timezone.utc)
-    pause_until = (now.replace(microsecond=0) + __import__("datetime").timedelta(seconds=seconds)).isoformat()
+    pause_until = (datetime.now(timezone.utc).replace(microsecond=0) + timedelta(seconds=seconds)).isoformat()
 
     conn = db()
     conn.execute("""
@@ -587,18 +568,14 @@ def control_pause():
     conn.commit()
     conn.close()
 
-    # also create an event
     _add_event("warning", f"Pause set for {seconds}s", {"pause_until_utc": pause_until, "reason": reason})
-
     return jsonify({"ok": True, "pause_until_utc": pause_until, "seconds": seconds, "reason": reason})
-
 
 @app.post("/control/revive")
 def control_revive():
     payload = request.get_json(force=True, silent=True) or {}
     reason = payload.get("reason", "revive requested")
 
-    # clear pause
     conn = db()
     conn.execute("""
         INSERT INTO control (id, pause_until_utc, pause_reason, updated_time_utc)
@@ -609,7 +586,6 @@ def control_revive():
           updated_time_utc=excluded.updated_time_utc
     """, (utc_now_iso(),))
 
-    # set pet back to egg-ish state (API side only; bot still needs logic to respect it)
     conn.execute("""
         INSERT INTO pet (id, time_utc, stage, mood, health, hunger, growth, fainted_until_utc, survival_mode)
         VALUES (1, ?, 'egg', 'focused', 100.0, 50.0, 0.0, '', 'NORMAL')
@@ -628,26 +604,10 @@ def control_revive():
     conn.close()
 
     _add_event("info", "Revive executed (pet reset to egg)", {"reason": reason})
-
     return jsonify({"ok": True})
 
-
-def _add_event(t, message, details=None):
-    conn = db()
-    conn.execute("""
-        INSERT INTO events (time_utc, type, message, details)
-        VALUES (?, ?, ?, ?)
-    """, (
-        utc_now_iso(),
-        t,
-        message,
-        json.dumps(details or {})
-    ))
-    conn.commit()
-    conn.close()
-
 # -----------------------------------------------------------------------------
-# DELETE endpoints (wipe/reset)
+# Reset endpoints
 # -----------------------------------------------------------------------------
 @app.delete("/reset/all")
 def reset_all():
@@ -664,7 +624,6 @@ def reset_all():
     conn.close()
     return jsonify({"ok": True, "reset": "all"})
 
-
 @app.delete("/reset/events")
 def reset_events():
     conn = db()
@@ -672,7 +631,6 @@ def reset_events():
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "reset": "events"})
-
 
 @app.delete("/reset/trades")
 def reset_trades():
@@ -682,7 +640,6 @@ def reset_trades():
     conn.close()
     return jsonify({"ok": True, "reset": "trades"})
 
-
 @app.delete("/reset/equity")
 def reset_equity():
     conn = db()
@@ -690,7 +647,6 @@ def reset_equity():
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "reset": "equity"})
-
 
 @app.delete("/reset/deaths")
 def reset_deaths():
