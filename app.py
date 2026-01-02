@@ -8,9 +8,17 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 
-# ✅ CORS: allow your Vercel dashboard to call Render API
-# (You can tighten this later to your Vercel domain only.)
-CORS(app, resources={r"/*": {"origins": "*"}})
+# ----------------------------
+# CORS
+# ----------------------------
+# Default: allow all (safe for now). Later, set CORS_ORIGINS to your Vercel domain:
+# e.g. CORS_ORIGINS="https://crypto-ai-dashboard-indol.vercel.app"
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+if CORS_ORIGINS.strip() == "*":
+    CORS(app, resources={r"/*": {"origins": "*"}})
+else:
+    allowed = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+    CORS(app, resources={r"/*": {"origins": allowed}})
 
 # ----------------------------
 # Database config
@@ -31,6 +39,10 @@ def get_conn():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
+
+# ----------------------------
+# Schema (base)
+# ----------------------------
 
 SCHEMA = [
     """
@@ -84,12 +96,12 @@ SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS trades (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      time_utc TEXT NOT NULL,
+      time_utc TEXT NOT NULL,             -- decision/entry time
       market TEXT NOT NULL,
-      side TEXT NOT NULL,                -- buy/sell
+      side TEXT NOT NULL,                 -- buy/sell
       size_usd REAL DEFAULT 0,
-      price REAL DEFAULT 0,
-      pnl_usd REAL DEFAULT 0,
+      price REAL DEFAULT 0,               -- entry price (legacy name)
+      pnl_usd REAL DEFAULT 0,             -- legacy: can remain 0 until known
       confidence REAL DEFAULT 0,
       reason TEXT DEFAULT ''
     )
@@ -111,6 +123,59 @@ SCHEMA = [
     """
 ]
 
+# ----------------------------
+# Migrations (add columns safely)
+# ----------------------------
+
+def table_columns(conn, table_name: str):
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table_name})")
+    return {row["name"] for row in cur.fetchall()}
+
+def add_column_if_missing(conn, table: str, col: str, col_def: str):
+    cols = table_columns(conn, table)
+    if col not in cols:
+        cur = conn.cursor()
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}")
+        conn.commit()
+
+def create_indexes(conn):
+    cur = conn.cursor()
+    # Helpful for dashboards and future training queries
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_prices_market_time ON prices(market, time_utc)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_equity_time ON equity(time_utc)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_trades_market_time ON trades(market, time_utc)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_heartbeat_time ON heartbeat(time_utc)")
+    conn.commit()
+
+def migrate_db():
+    conn = get_conn()
+
+    # --- trades upgrades (training-ready) ---
+    add_column_if_missing(conn, "trades", "simulated", "INTEGER DEFAULT 1")  # 1=sim, 0=live
+    add_column_if_missing(conn, "trades", "features_json", "TEXT DEFAULT '{}'")  # model inputs
+    add_column_if_missing(conn, "trades", "entry_time_utc", "TEXT DEFAULT ''")   # explicit
+    add_column_if_missing(conn, "trades", "entry_price", "REAL DEFAULT 0")       # explicit
+    add_column_if_missing(conn, "trades", "exit_time_utc", "TEXT DEFAULT ''")
+    add_column_if_missing(conn, "trades", "exit_price", "REAL DEFAULT 0")
+    add_column_if_missing(conn, "trades", "hold_seconds", "INTEGER DEFAULT 0")
+
+    # outcome labels / risk metrics
+    add_column_if_missing(conn, "trades", "result_label", "TEXT DEFAULT ''")  # win/loss/breakeven
+    add_column_if_missing(conn, "trades", "mae_usd", "REAL DEFAULT 0")        # max adverse excursion (optional)
+    add_column_if_missing(conn, "trades", "mfe_usd", "REAL DEFAULT 0")        # max favorable excursion (optional)
+    add_column_if_missing(conn, "trades", "max_adverse_price", "REAL DEFAULT 0")
+    add_column_if_missing(conn, "trades", "max_favorable_price", "REAL DEFAULT 0")
+
+    # link to bot cycle / run id if you ever want it
+    add_column_if_missing(conn, "trades", "run_id", "TEXT DEFAULT ''")
+
+    # --- heartbeat upgrades (optional fields) ---
+    add_column_if_missing(conn, "heartbeat", "notes", "TEXT DEFAULT ''")
+
+    create_indexes(conn)
+    conn.close()
+
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -124,11 +189,13 @@ def init_db():
             "INSERT INTO control (id, pause_reason, pause_until_utc, updated_time_utc) VALUES (1, '', '', ?)",
             (utc_now_iso(),)
         )
+
     conn.commit()
     conn.close()
 
-# Run init at startup so tables always exist
+# Run init + migrations at startup so tables/columns always exist
 init_db()
+migrate_db()
 
 # ----------------------------
 # Helpers
@@ -184,6 +251,18 @@ def parse_json_list(s, default):
     except Exception:
         return default
 
+def safe_json(obj, default="{}"):
+    try:
+        if obj is None:
+            return default
+        if isinstance(obj, str):
+            # already JSON string
+            json.loads(obj)
+            return obj
+        return json.dumps(obj)
+    except Exception:
+        return default
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -197,32 +276,64 @@ def home():
         "time_utc": utc_now_iso(),
         "db_parent_exists": os.path.exists(parent),
         "db_path": DB_PATH,
+        "cors_origins": CORS_ORIGINS,
         "endpoints": {
             "GET": ["/", "/data", "/heartbeat", "/pet", "/events", "/equity", "/trades", "/prices", "/deaths", "/control"],
-            "POST": ["/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
-                     "/control/pause", "/control/revive"],
+            "POST": [
+                "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
+                "/trade/close", "/trade/patch",
+                "/control/pause", "/control/revive"
+            ],
             "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/deaths"]
         }
     })
 
 @app.get("/data")
 def data():
-    # ✅ This is what the dashboard calls
+    # What the dashboard calls
     ctrl = fetch_one("control", order_by="id ASC")  # only row
     hb = fetch_one("heartbeat")
     pet = fetch_one("pet")
 
-    equity_points = fetch_many("equity", limit=100, order_by="id DESC")
+    equity_points = fetch_many("equity", limit=200, order_by="id DESC")
     equity_points.reverse()
 
     recent_trades = fetch_many("trades", limit=50, order_by="id DESC")
 
-    latest_prices = fetch_many("prices", limit=200, order_by="id DESC")
+    latest_prices = fetch_many("prices", limit=400, order_by="id DESC")
 
     # Normalize fields
     if hb:
         hb["markets"] = parse_json_list(hb.get("markets"), [])
         hb["prices_ok"] = int(hb.get("prices_ok") or 0)
+
+    # Trades: keep old fields + include new training fields (dashboard can ignore)
+    trades_out = []
+    for t in recent_trades:
+        # prefer explicit entry fields if present, otherwise fallback to legacy
+        entry_time = t.get("entry_time_utc") or t.get("time_utc")
+        entry_price = float(t.get("entry_price") or t.get("price") or 0)
+        trades_out.append({
+            "id": t.get("id"),
+            "time_utc": t.get("time_utc"),
+            "entry_time_utc": entry_time,
+            "market": t.get("market"),
+            "side": t.get("side"),
+            "size_usd": float(t.get("size_usd") or 0),
+            "price": float(t.get("price") or 0),
+            "entry_price": entry_price,
+            "exit_time_utc": t.get("exit_time_utc") or "",
+            "exit_price": float(t.get("exit_price") or 0),
+            "hold_seconds": int(t.get("hold_seconds") or 0),
+            "pnl_usd": float(t.get("pnl_usd") or 0),
+            "confidence": float(t.get("confidence") or 0),
+            "reason": t.get("reason") or "",
+            "simulated": int(t.get("simulated") or 1),
+            "result_label": t.get("result_label") or "",
+            "features_json": t.get("features_json") or "{}",
+            "mae_usd": float(t.get("mae_usd") or 0),
+            "mfe_usd": float(t.get("mfe_usd") or 0),
+        })
 
     payload = {
         "control": ctrl or {"id": 1, "pause_reason": "", "pause_until_utc": "", "updated_time_utc": ""},
@@ -232,25 +343,18 @@ def data():
             {"equity_usd": float(p["equity_usd"]), "time_utc": p["time_utc"]}
             for p in equity_points
         ],
-        "trades": [
-            {
-                "time_utc": t["time_utc"],
-                "market": t["market"],
-                "side": t["side"],
-                "size_usd": float(t.get("size_usd") or 0),
-                "price": float(t.get("price") or 0),
-                "pnl_usd": float(t.get("pnl_usd") or 0),
-                "confidence": float(t.get("confidence") or 0),
-                "reason": t.get("reason") or ""
-            } for t in recent_trades
-        ],
+        "trades": trades_out,
         "prices": latest_prices
     }
     return jsonify(payload)
 
 @app.get("/heartbeat")
 def get_heartbeat():
-    return jsonify(fetch_one("heartbeat") or {})
+    hb = fetch_one("heartbeat") or {}
+    if hb:
+        hb["markets"] = parse_json_list(hb.get("markets"), [])
+        hb["prices_ok"] = int(hb.get("prices_ok") or 0)
+    return jsonify(hb)
 
 @app.get("/pet")
 def get_pet():
@@ -262,17 +366,17 @@ def get_events():
 
 @app.get("/equity")
 def get_equity():
-    points = fetch_many("equity", limit=200, order_by="id DESC")
+    points = fetch_many("equity", limit=300, order_by="id DESC")
     points.reverse()
     return jsonify(points)
 
 @app.get("/trades")
 def get_trades():
-    return jsonify(fetch_many("trades", limit=200))
+    return jsonify(fetch_many("trades", limit=300))
 
 @app.get("/prices")
 def get_prices():
-    return jsonify(fetch_many("prices", limit=500))
+    return jsonify(fetch_many("prices", limit=800))
 
 @app.get("/deaths")
 def get_deaths():
@@ -284,7 +388,7 @@ def get_control():
     return jsonify(c or {"id": 1, "pause_reason": "", "pause_until_utc": "", "updated_time_utc": ""})
 
 # ----------------------------
-# Ingest endpoints (optional)
+# Ingest endpoints
 # ----------------------------
 
 @app.post("/ingest/equity")
@@ -307,6 +411,7 @@ def ingest_heartbeat():
         "prices_ok": int(bool(body.get("prices_ok", False))),
         "status": body.get("status", "running"),
         "survival_mode": body.get("survival_mode", "NORMAL"),
+        "notes": body.get("notes", "") or ""
     }
     insert_row("heartbeat", row)
     return jsonify({"ok": True})
@@ -328,19 +433,140 @@ def ingest_pet():
 
 @app.post("/ingest/trade")
 def ingest_trade():
+    """
+    Backward compatible.
+    New optional fields you can start sending now:
+      - simulated (bool/int)
+      - features_json (dict or json string)
+      - entry_time_utc, entry_price
+      - run_id
+    """
     body = request.get_json(force=True, silent=True) or {}
+
+    time_utc = body.get("time_utc") or utc_now_iso()
+    entry_time_utc = body.get("entry_time_utc") or time_utc
+
+    # legacy: "price" = entry price
+    entry_price = float(body.get("entry_price", body.get("price", 0)) or 0)
+
     row = {
-        "time_utc": body.get("time_utc") or utc_now_iso(),
+        "time_utc": time_utc,
+        "entry_time_utc": entry_time_utc,
         "market": body.get("market", "BTCUSDT"),
         "side": body.get("side", "buy"),
         "size_usd": float(body.get("size_usd", 0)),
-        "price": float(body.get("price", 0)),
+        "price": float(body.get("price", entry_price) or 0),
+        "entry_price": entry_price,
         "pnl_usd": float(body.get("pnl_usd", 0)),
         "confidence": float(body.get("confidence", 0)),
         "reason": body.get("reason", "") or "",
+        "simulated": int(bool(body.get("simulated", True))),
+        "features_json": safe_json(body.get("features_json", {})),
+        "run_id": body.get("run_id", "") or ""
     }
-    insert_row("trades", row)
+    new_id = insert_row("trades", row)
+    return jsonify({"ok": True, "id": new_id})
+
+@app.post("/trade/close")
+def trade_close():
+    """
+    Optional: Close a trade later when you know outcome.
+    Body:
+      { "id": 123, "exit_price": 42000, "exit_time_utc": "...", "pnl_usd": 1.23,
+        "result_label": "win", "mae_usd": 0.5, "mfe_usd": 2.0 }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    trade_id = int(body.get("id", 0))
+    if trade_id <= 0:
+        return jsonify({"ok": False, "error": "Missing id"}), 400
+
+    exit_time = body.get("exit_time_utc") or utc_now_iso()
+    exit_price = float(body.get("exit_price", 0) or 0)
+    pnl_usd = float(body.get("pnl_usd", 0) or 0)
+    result_label = (body.get("result_label") or "").strip()
+
+    mae_usd = float(body.get("mae_usd", 0) or 0)
+    mfe_usd = float(body.get("mfe_usd", 0) or 0)
+    max_adv = float(body.get("max_adverse_price", 0) or 0)
+    max_fav = float(body.get("max_favorable_price", 0) or 0)
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # fetch entry time to compute hold_seconds
+    cur.execute("SELECT time_utc, entry_time_utc FROM trades WHERE id=?", (trade_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"ok": False, "error": "Trade not found"}), 404
+
+    entry_time = row["entry_time_utc"] or row["time_utc"]
+    hold_seconds = 0
+    try:
+        hold_seconds = int((datetime.fromisoformat(exit_time) - datetime.fromisoformat(entry_time)).total_seconds())
+        if hold_seconds < 0:
+            hold_seconds = 0
+    except Exception:
+        hold_seconds = 0
+
+    cur.execute(
+        """
+        UPDATE trades
+        SET exit_time_utc=?,
+            exit_price=?,
+            hold_seconds=?,
+            pnl_usd=?,
+            result_label=?,
+            mae_usd=?,
+            mfe_usd=?,
+            max_adverse_price=?,
+            max_favorable_price=?
+        WHERE id=?
+        """,
+        (exit_time, exit_price, hold_seconds, pnl_usd, result_label, mae_usd, mfe_usd, max_adv, max_fav, trade_id)
+    )
+    conn.commit()
+    conn.close()
     return jsonify({"ok": True})
+
+@app.post("/trade/patch")
+def trade_patch():
+    """
+    Optional: patch any training fields without changing strategy.
+    Body:
+      { "id": 123, "features_json": {...} }  OR  { "id":123, "simulated":0 } etc.
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    trade_id = int(body.get("id", 0))
+    if trade_id <= 0:
+        return jsonify({"ok": False, "error": "Missing id"}), 400
+
+    allowed_fields = {
+        "features_json", "simulated", "run_id",
+        "result_label", "mae_usd", "mfe_usd", "max_adverse_price", "max_favorable_price"
+    }
+
+    updates = {}
+    for k, v in body.items():
+        if k in allowed_fields:
+            if k == "features_json":
+                updates[k] = safe_json(v)
+            elif k == "simulated":
+                updates[k] = int(bool(v))
+            else:
+                updates[k] = v
+
+    if not updates:
+        return jsonify({"ok": False, "error": "No valid fields to patch"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor()
+    sets = ", ".join([f"{k}=?" for k in updates.keys()])
+    vals = list(updates.values()) + [trade_id]
+    cur.execute(f"UPDATE trades SET {sets} WHERE id=?", vals)
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "updated": list(updates.keys())})
 
 @app.post("/ingest/prices")
 def ingest_prices():
