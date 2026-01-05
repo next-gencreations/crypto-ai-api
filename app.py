@@ -15,10 +15,10 @@ app = Flask(__name__)
 # If you want to tighten later, set:
 #   CORS_ORIGINS=https://your-vercel-domain.vercel.app
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
-if CORS_ORIGINS.strip() == "*":
+if (CORS_ORIGINS or "").strip() == "*":
     CORS(app, resources={r"/*": {"origins": "*"}})
 else:
-    allowed = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+    allowed = [o.strip() for o in (CORS_ORIGINS or "").split(",") if o.strip()]
     CORS(app, resources={r"/*": {"origins": allowed}})
 
 # ----------------------------
@@ -41,15 +41,16 @@ def get_conn():
     return conn
 
 def _safe_json_loads(s):
-    if not s:
+    if s is None:
         return None
+    if isinstance(s, (dict, list)):
+        return s
     try:
         return json.loads(s)
     except Exception:
         return None
 
 def _to_epoch(iso_utc: str) -> int:
-    # iso_utc should be ISO; tolerate Z
     try:
         s = (iso_utc or "").replace("Z", "+00:00")
         dt = datetime.fromisoformat(s)
@@ -266,6 +267,23 @@ def get_control():
         return {"id": 1, "state": "ACTIVE", "pause_reason":"", "pause_until_utc":"", "cryo_reason":"", "cryo_until_utc":"", "updated_time_utc": utc_now_iso()}
     return c
 
+def _set_control_state(state: str, reason: str = ""):
+    state = (state or "ACTIVE").upper()
+    conn = get_conn()
+    cur = conn.cursor()
+
+    if state == "ACTIVE":
+        cur.execute(
+            "UPDATE control SET state='ACTIVE', pause_reason='', pause_until_utc='', cryo_reason='', cryo_until_utc='', updated_time_utc=? WHERE id=1",
+            (utc_now_iso(),)
+        )
+        conn.commit()
+        conn.close()
+        add_event("info", "State -> ACTIVE", {"reason": reason})
+        return
+
+    conn.close()
+
 def is_paused_or_cryo():
     c = get_control()
     now = datetime.now(timezone.utc)
@@ -291,7 +309,7 @@ def is_paused_or_cryo():
         except Exception:
             cryo = True
 
-    # Auto-thaw: if timers elapsed, return ACTIVE
+    # Auto-thaw
     if state in ("PAUSED","CRYO") and not paused and not cryo:
         _set_control_state("ACTIVE", reason="timer complete")
         c = get_control()
@@ -299,37 +317,10 @@ def is_paused_or_cryo():
 
     return state, c
 
-def _set_control_state(state: str, reason: str = ""):
-    state = (state or "ACTIVE").upper()
-
-    conn = get_conn()
-    cur = conn.cursor()
-
-    if state == "ACTIVE":
-        cur.execute(
-            "UPDATE control SET state='ACTIVE', pause_reason='', pause_until_utc='', cryo_reason='', cryo_until_utc='', updated_time_utc=? WHERE id=1",
-            (utc_now_iso(),)
-        )
-        conn.commit()
-        conn.close()
-        add_event("info", "State -> ACTIVE", {"reason": reason})
-        return
-
-    # PAUSED/CRYO are handled by their endpoints which set until/reason fields
-    conn.close()
-
 # ----------------------------
 # OHLC aggregation (candles from tick prices)
 # ----------------------------
 def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
-    """
-    Builds OHLC from tick stream stored in `prices`.
-    interval_sec: candle size in seconds (e.g. 60, 300, 900)
-    Returns candles with:
-      t = bucket start epoch seconds
-      time_utc = bucket start ISO string (NEW + helpful for UI)
-      o/h/l/c = floats
-    """
     market = (market or "").strip()
     interval_sec = max(10, int(interval_sec))
     limit = max(10, min(1000, int(limit)))
@@ -350,7 +341,6 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     if not rows:
         return []
 
-    # We pulled DESC; process ASC
     ticks = [{"t": int(r["time_epoch"]), "p": float(r["price"])} for r in rows][::-1]
 
     buckets = {}
@@ -359,7 +349,7 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
         if b not in buckets:
             buckets[b] = {
                 "t": b,
-                "time_utc": _epoch_to_iso(b),  # ✅ added
+                "time_utc": _epoch_to_iso(b),
                 "o": tick["p"],
                 "h": tick["p"],
                 "l": tick["p"],
@@ -377,6 +367,10 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
 # ----------------------------
 # Routes
 # ----------------------------
+@app.get("/health")
+def health():
+    return jsonify({"ok": True, "time_utc": utc_now_iso()})
+
 @app.get("/")
 def home():
     parent = os.path.dirname(DB_PATH)
@@ -387,7 +381,7 @@ def home():
         "db_parent_exists": os.path.exists(parent),
         "db_path": DB_PATH,
         "endpoints": {
-            "GET": ["/", "/data", "/heartbeat", "/pet", "/events", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control"],
+            "GET": ["/", "/health", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control"],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive"
@@ -488,6 +482,25 @@ def get_events():
     for e in ev:
         e["details"] = _safe_json_loads(e.get("details"))
     return jsonify(ev)
+
+# ✅ NEW: logs endpoint for the dashboard
+# Returns newest-first lines like:
+# 2026-01-05T09:22:12+00:00 [INFO] message...
+@app.get("/logs")
+def get_logs():
+    limit = int(request.args.get("limit", "120"))
+    limit = max(10, min(500, limit))
+
+    ev = fetch_many("events", limit=limit, order_by="id DESC")
+    lines = []
+    for e in ev:
+        t = (e.get("time_utc") or "").replace("T", " ").replace("+00:00", "Z")
+        typ = (e.get("type") or "info").upper()
+        msg = e.get("message") or ""
+        lines.append(f"{t} [{typ}] {msg}")
+
+    # return as array for easy UI usage
+    return jsonify(lines)
 
 @app.get("/equity")
 def get_equity():
