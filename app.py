@@ -13,7 +13,7 @@ app = Flask(__name__)
 # ----------------------------
 # Default: allow all (easy for dev)
 # If you want to tighten later, set:
-#   CORS_ORIGINS=https://your-vercel-domain.vercel.app,https://another.vercel.app
+#   CORS_ORIGINS=https://your-vercel-domain.vercel.app
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 if (CORS_ORIGINS or "").strip() == "*":
     CORS(app, resources={r"/*": {"origins": "*"}})
@@ -22,16 +22,54 @@ else:
     CORS(app, resources={r"/*": {"origins": allowed}})
 
 # ----------------------------
+# Settings (bankroll)
+# ----------------------------
+# Put this on Render as: /var/data/settings.json so it persists across deploys/restarts
+SETTINGS_PATH = os.getenv("SETTINGS_PATH", "/var/data/settings.json")
+GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))  # simple fixed rate
+
+def _ensure_parent_dir(path: str):
+    parent = os.path.dirname(path)
+    if parent and not os.path.exists(parent):
+        os.makedirs(parent, exist_ok=True)
+
+def load_settings():
+    try:
+        if not os.path.exists(SETTINGS_PATH):
+            return {"bankroll_gbp": 100.0}
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {"bankroll_gbp": 100.0}
+        if "bankroll_gbp" not in data:
+            data["bankroll_gbp"] = 100.0
+        return data
+    except Exception:
+        return {"bankroll_gbp": 100.0}
+
+def save_settings(data: dict):
+    _ensure_parent_dir(SETTINGS_PATH)
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+def get_bankroll_gbp() -> float:
+    s = load_settings()
+    try:
+        return float(s.get("bankroll_gbp", 100.0))
+    except Exception:
+        return 100.0
+
+def set_bankroll_gbp(v: float) -> float:
+    v = max(0.0, float(v))
+    s = load_settings()
+    s["bankroll_gbp"] = v
+    save_settings(s)
+    return v
+
+# ----------------------------
 # Database config
 # ----------------------------
 DB_PATH = os.getenv("DB_PATH", "/var/data/data.db")
-
-# ----------------------------
-# Bankroll / FX config (NEW)
-# ----------------------------
-# Fixed simple rate (you can later replace this with a live rate if desired)
-GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))
-DEFAULT_BANKROLL_GBP = float(os.getenv("DEFAULT_BANKROLL_GBP", "100.0"))
 
 def utc_now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -192,14 +230,6 @@ SCHEMA = [
       reason TEXT DEFAULT '',
       details TEXT DEFAULT ''            -- JSON
     )
-    """,
-    # ✅ NEW: settings table
-    """
-    CREATE TABLE IF NOT EXISTS settings (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      bankroll_gbp REAL DEFAULT 100.0,
-      updated_time_utc TEXT DEFAULT ''
-    )
     """
 ]
 
@@ -218,14 +248,6 @@ def init_db():
             (utc_now_iso(),)
         )
 
-    # ✅ Ensure settings row exists (id=1)
-    cur.execute("SELECT id FROM settings WHERE id=1")
-    if cur.fetchone() is None:
-        cur.execute(
-            "INSERT INTO settings (id, bankroll_gbp, updated_time_utc) VALUES (1, ?, ?)",
-            (float(DEFAULT_BANKROLL_GBP), utc_now_iso())
-        )
-
     conn.commit()
     conn.close()
 
@@ -234,7 +256,7 @@ init_db()
 # ----------------------------
 # Helpers: fetch
 # ----------------------------
-ALLOWED_TABLES = {"control","heartbeat","pet","prices","equity","trades","events","deaths","settings"}
+ALLOWED_TABLES = {"control","heartbeat","pet","prices","equity","trades","events","deaths"}
 
 def fetch_one(table: str, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
@@ -340,31 +362,6 @@ def is_paused_or_cryo():
 
     return state, c
 
-# ✅ NEW: Settings helpers
-def get_settings():
-    s = fetch_one("settings", order_by="id ASC") or {}
-    bankroll_gbp = float(s.get("bankroll_gbp", DEFAULT_BANKROLL_GBP))
-    bankroll_gbp = max(0.0, bankroll_gbp)
-    bankroll_usd = bankroll_gbp * float(GBPUSD_RATE)
-    return {
-        "bankroll_gbp": bankroll_gbp,
-        "gbpusd_rate": float(GBPUSD_RATE),
-        "bankroll_usd": bankroll_usd,
-    }
-
-def set_bankroll_gbp(value: float):
-    bankroll_gbp = max(0.0, float(value))
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE settings SET bankroll_gbp=?, updated_time_utc=? WHERE id=1",
-        (bankroll_gbp, utc_now_iso())
-    )
-    conn.commit()
-    conn.close()
-    add_event("info", "Settings updated", {"bankroll_gbp": bankroll_gbp})
-    return bankroll_gbp
-
 # ----------------------------
 # OHLC aggregation (candles from tick prices)
 # ----------------------------
@@ -413,6 +410,44 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     return out[-limit:]
 
 # ----------------------------
+# Settings routes (NEW)
+# ----------------------------
+@app.get("/settings")
+def get_settings_route():
+    bankroll_gbp = get_bankroll_gbp()
+    bankroll_usd = bankroll_gbp * GBPUSD_RATE
+    return jsonify({
+        "bankroll_gbp": bankroll_gbp,
+        "gbpusd_rate": GBPUSD_RATE,
+        "bankroll_usd": bankroll_usd,
+    })
+
+@app.post("/settings")
+def set_settings_route():
+    body = request.get_json(force=True, silent=True) or {}
+
+    # support either bankroll_gbp OR bankroll_usd input
+    if "bankroll_gbp" in body:
+        bankroll_gbp = float(body.get("bankroll_gbp", 0))
+    elif "bankroll_usd" in body:
+        bankroll_usd = float(body.get("bankroll_usd", 0))
+        bankroll_gbp = bankroll_usd / GBPUSD_RATE if GBPUSD_RATE else 0.0
+    else:
+        return jsonify({"ok": False, "error": "Provide bankroll_gbp (preferred) or bankroll_usd"}), 400
+
+    bankroll_gbp = set_bankroll_gbp(bankroll_gbp)
+    bankroll_usd = bankroll_gbp * GBPUSD_RATE
+
+    add_event("info", "Settings updated", {"bankroll_gbp": bankroll_gbp, "bankroll_usd": bankroll_usd})
+
+    return jsonify({
+        "ok": True,
+        "bankroll_gbp": bankroll_gbp,
+        "gbpusd_rate": GBPUSD_RATE,
+        "bankroll_usd": bankroll_usd,
+    })
+
+# ----------------------------
 # Routes
 # ----------------------------
 @app.get("/health")
@@ -432,7 +467,8 @@ def home():
             "GET": ["/", "/health", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
-                "/control/pause", "/control/cryo", "/control/revive", "/settings"
+                "/control/pause", "/control/cryo", "/control/revive",
+                "/settings"
             ],
             "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/deaths"]
         }
@@ -441,20 +477,6 @@ def home():
 @app.get("/control")
 def control_get():
     return jsonify(get_control())
-
-# ✅ NEW: settings endpoints
-@app.get("/settings")
-def settings_get():
-    return jsonify(get_settings())
-
-@app.post("/settings")
-def settings_post():
-    body = request.get_json(force=True, silent=True) or {}
-    if "bankroll_gbp" not in body:
-        return jsonify({"ok": False, "error": "Missing bankroll_gbp"}), 400
-    bankroll = set_bankroll_gbp(body.get("bankroll_gbp", DEFAULT_BANKROLL_GBP))
-    s = get_settings()
-    return jsonify({"ok": True, **s})
 
 @app.get("/data")
 def data():
@@ -486,13 +508,13 @@ def data():
 
     total_trades = len(recent_trades)
 
-    # ✅ include settings in /data so dashboard can show/edit it
-    settings = get_settings()
+    # include bankroll settings so dashboard can show them without extra calls
+    bankroll_gbp = get_bankroll_gbp()
+    bankroll_usd = bankroll_gbp * GBPUSD_RATE
 
     return jsonify({
         "control": ctrl,
         "state": state,
-        "settings": settings,
         "heartbeat": hb or {},
         "pet": pet or {},
         "equity": [{"equity_usd": float(p["equity_usd"]), "time_utc": p["time_utc"]} for p in equity_points],
@@ -511,6 +533,11 @@ def data():
         "prices": latest_prices,
         "events": events,
         "deaths": deaths,
+        "settings": {
+            "bankroll_gbp": bankroll_gbp,
+            "gbpusd_rate": GBPUSD_RATE,
+            "bankroll_usd": bankroll_usd,
+        },
         "stats": {
             "paused": state in ("PAUSED","CRYO"),
             "state": state,
@@ -549,7 +576,6 @@ def get_events():
         e["details"] = _safe_json_loads(e.get("details"))
     return jsonify(ev)
 
-# ✅ logs endpoint for the dashboard
 @app.get("/logs")
 def get_logs():
     limit = int(request.args.get("limit", "120"))
