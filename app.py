@@ -11,9 +11,6 @@ app = Flask(__name__)
 # ----------------------------
 # CORS
 # ----------------------------
-# Default: allow all (easy for dev)
-# If you want to tighten later, set:
-#   CORS_ORIGINS=https://your-vercel-domain.vercel.app
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 if (CORS_ORIGINS or "").strip() == "*":
     CORS(app, resources={r"/*": {"origins": "*"}})
@@ -24,14 +21,15 @@ else:
 # ----------------------------
 # Settings (bankroll)
 # ----------------------------
-# Put this on Render as: /var/data/settings.json so it persists across deploys/restarts
 SETTINGS_PATH = os.getenv("SETTINGS_PATH", "/var/data/settings.json")
 GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))  # simple fixed rate
+
 
 def _ensure_parent_dir(path: str):
     parent = os.path.dirname(path)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
+
 
 def load_settings():
     try:
@@ -47,10 +45,12 @@ def load_settings():
     except Exception:
         return {"bankroll_gbp": 100.0}
 
+
 def save_settings(data: dict):
     _ensure_parent_dir(SETTINGS_PATH)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f)
+
 
 def get_bankroll_gbp() -> float:
     s = load_settings()
@@ -59,6 +59,7 @@ def get_bankroll_gbp() -> float:
     except Exception:
         return 100.0
 
+
 def set_bankroll_gbp(v: float) -> float:
     v = max(0.0, float(v))
     s = load_settings()
@@ -66,24 +67,41 @@ def set_bankroll_gbp(v: float) -> float:
     save_settings(s)
     return v
 
+
 # ----------------------------
 # Database config
 # ----------------------------
 DB_PATH = os.getenv("DB_PATH", "/var/data/data.db")
 
+
 def utc_now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
 
 def ensure_db_dir():
     parent = os.path.dirname(DB_PATH)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
 
+
 def get_conn():
+    """
+    Connection settings tuned for Render + SQLite persistence.
+    WAL mode reduces locking issues for concurrent reads/writes.
+    busy_timeout avoids immediate failures under load.
+    """
     ensure_db_dir()
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA temp_store=MEMORY;")
+        conn.execute("PRAGMA busy_timeout=5000;")  # 5s
+    except Exception:
+        pass
     return conn
+
 
 def _safe_json_loads(s):
     if s is None:
@@ -95,6 +113,7 @@ def _safe_json_loads(s):
     except Exception:
         return None
 
+
 def _to_epoch(iso_utc: str) -> int:
     try:
         s = (iso_utc or "").replace("Z", "+00:00")
@@ -105,11 +124,13 @@ def _to_epoch(iso_utc: str) -> int:
     except Exception:
         return int(datetime.now(timezone.utc).timestamp())
 
+
 def _epoch_to_iso(epoch_s: int) -> str:
     try:
         return datetime.fromtimestamp(int(epoch_s), tz=timezone.utc).replace(microsecond=0).isoformat()
     except Exception:
         return utc_now_iso()
+
 
 def _safe_markets_list(m):
     """
@@ -134,10 +155,20 @@ def _safe_markets_list(m):
         return [s]
     return []
 
+
 # ----------------------------
 # Schema
 # ----------------------------
+SCHEMA_VERSION = int(os.getenv("SCHEMA_VERSION", "2"))
+
 SCHEMA = [
+    """
+    CREATE TABLE IF NOT EXISTS meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      schema_version INTEGER DEFAULT 1,
+      updated_time_utc TEXT DEFAULT ''
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS control (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -236,9 +267,11 @@ SCHEMA = [
 # ----------------------------
 # Auto-migration (LOCKS / UPGRADES SCHEMA)
 # ----------------------------
-# This upgrades existing tables created with older versions.
-# It only ADDS missing columns (safe), never deletes data.
 EXPECTED_COLUMNS = {
+    "meta": {
+        "schema_version": "INTEGER DEFAULT 1",
+        "updated_time_utc": "TEXT DEFAULT ''",
+    },
     "control": {
         "state": "TEXT DEFAULT 'ACTIVE'",
         "pause_reason": "TEXT DEFAULT ''",
@@ -310,12 +343,14 @@ EXPECTED_COLUMNS = {
     },
 }
 
+
 def _table_exists(conn, name: str) -> bool:
     r = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
         (name,)
     ).fetchone()
     return r is not None
+
 
 def _existing_columns(conn, table: str) -> set:
     try:
@@ -324,16 +359,18 @@ def _existing_columns(conn, table: str) -> set:
     except Exception:
         return set()
 
+
 def migrate_schema():
     conn = get_conn()
     try:
-        # Make sure tables exist first
         cur = conn.cursor()
+
+        # Ensure tables exist
         for stmt in SCHEMA:
             cur.execute(stmt)
         conn.commit()
 
-        # Add missing columns safely
+        # Add missing columns
         for table, cols in EXPECTED_COLUMNS.items():
             if not _table_exists(conn, table):
                 continue
@@ -345,16 +382,30 @@ def migrate_schema():
     finally:
         conn.close()
 
+
 # ----------------------------
 # Init DB + migrate
 # ----------------------------
 def init_db():
-    # Ensure schema exists and is upgraded before handling requests
     migrate_schema()
 
-    # Ensure control row exists (id=1)
     conn = get_conn()
     cur = conn.cursor()
+
+    # meta row
+    cur.execute("SELECT id FROM meta WHERE id=1")
+    if cur.fetchone() is None:
+        cur.execute(
+            "INSERT INTO meta (id, schema_version, updated_time_utc) VALUES (1, ?, ?)",
+            (SCHEMA_VERSION, utc_now_iso())
+        )
+    else:
+        cur.execute(
+            "UPDATE meta SET schema_version=?, updated_time_utc=? WHERE id=1",
+            (SCHEMA_VERSION, utc_now_iso())
+        )
+
+    # control row
     cur.execute("SELECT id FROM control WHERE id=1")
     if cur.fetchone() is None:
         cur.execute(
@@ -362,15 +413,18 @@ def init_db():
             "VALUES (1, 'ACTIVE', '', '', '', '', ?)",
             (utc_now_iso(),)
         )
+
     conn.commit()
     conn.close()
+
 
 init_db()
 
 # ----------------------------
 # Helpers: fetch
 # ----------------------------
-ALLOWED_TABLES = {"control","heartbeat","pet","prices","equity","trades","events","deaths"}
+ALLOWED_TABLES = {"meta", "control", "heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"}
+
 
 def fetch_one(table: str, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
@@ -382,6 +436,7 @@ def fetch_one(table: str, order_by="id DESC"):
     conn.close()
     return dict(row) if row else None
 
+
 def fetch_many(table: str, limit=50, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
         raise ValueError("Invalid table")
@@ -391,6 +446,7 @@ def fetch_many(table: str, limit=50, order_by="id DESC"):
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
 
 def insert_row(table: str, data: dict):
     if table not in ALLOWED_TABLES:
@@ -409,6 +465,7 @@ def insert_row(table: str, data: dict):
     conn.close()
     return new_id
 
+
 def add_event(ev_type: str, message: str, details=None):
     details = details or {}
     t = utc_now_iso()
@@ -420,28 +477,69 @@ def add_event(ev_type: str, message: str, details=None):
         "details": json.dumps(details)
     })
 
+
 def get_control():
     c = fetch_one("control", order_by="id ASC")
     if not c:
-        return {"id": 1, "state": "ACTIVE", "pause_reason":"", "pause_until_utc":"", "cryo_reason":"", "cryo_until_utc":"", "updated_time_utc": utc_now_iso()}
+        return {
+            "id": 1,
+            "state": "ACTIVE",
+            "pause_reason": "",
+            "pause_until_utc": "",
+            "cryo_reason": "",
+            "cryo_until_utc": "",
+            "updated_time_utc": utc_now_iso()
+        }
     return c
 
-def _set_control_state(state: str, reason: str = ""):
+
+def _set_control_state(state: str, reason: str = "", seconds: int = 0):
+    """
+    Unified control state setter:
+      - ACTIVE: clears timers/reasons
+      - PAUSED: sets pause_until_utc
+      - CRYO: sets cryo_until_utc
+    """
     state = (state or "ACTIVE").upper()
+    now_iso = utc_now_iso()
+
     conn = get_conn()
     cur = conn.cursor()
 
     if state == "ACTIVE":
         cur.execute(
             "UPDATE control SET state='ACTIVE', pause_reason='', pause_until_utc='', cryo_reason='', cryo_until_utc='', updated_time_utc=? WHERE id=1",
-            (utc_now_iso(),)
+            (now_iso,)
         )
         conn.commit()
         conn.close()
         add_event("info", "State -> ACTIVE", {"reason": reason})
         return
 
+    if state == "PAUSED":
+        until = (datetime.now(timezone.utc) + timedelta(seconds=int(seconds or 0))).replace(microsecond=0).isoformat()
+        cur.execute(
+            "UPDATE control SET state='PAUSED', pause_reason=?, pause_until_utc=?, updated_time_utc=? WHERE id=1",
+            (reason or "manual pause", until, now_iso)
+        )
+        conn.commit()
+        conn.close()
+        add_event("warning", "State -> PAUSED", {"pause_until_utc": until, "reason": reason})
+        return
+
+    if state == "CRYO":
+        until = (datetime.now(timezone.utc) + timedelta(seconds=int(seconds or 0))).replace(microsecond=0).isoformat()
+        cur.execute(
+            "UPDATE control SET state='CRYO', cryo_reason=?, cryo_until_utc=?, updated_time_utc=? WHERE id=1",
+            (reason or "cryo safety", until, now_iso)
+        )
+        conn.commit()
+        conn.close()
+        add_event("warning", "State -> CRYO", {"cryo_until_utc": until, "reason": reason})
+        return
+
     conn.close()
+
 
 def is_paused_or_cryo():
     c = get_control()
@@ -469,12 +567,13 @@ def is_paused_or_cryo():
             cryo = True
 
     # Auto-thaw
-    if state in ("PAUSED","CRYO") and not paused and not cryo:
+    if state in ("PAUSED", "CRYO") and not paused and not cryo:
         _set_control_state("ACTIVE", reason="timer complete")
         c = get_control()
         state = "ACTIVE"
 
     return state, c
+
 
 # ----------------------------
 # OHLC aggregation (candles from tick prices)
@@ -523,6 +622,7 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     out = [buckets[k] for k in sorted(buckets.keys())]
     return out[-limit:]
 
+
 # ----------------------------
 # Settings routes
 # ----------------------------
@@ -536,11 +636,11 @@ def get_settings_route():
         "bankroll_usd": bankroll_usd,
     })
 
+
 @app.post("/settings")
 def set_settings_route():
     body = request.get_json(force=True, silent=True) or {}
 
-    # support either bankroll_gbp OR bankroll_usd input
     if "bankroll_gbp" in body:
         bankroll_gbp = float(body.get("bankroll_gbp", 0))
     elif "bankroll_usd" in body:
@@ -561,12 +661,14 @@ def set_settings_route():
         "bankroll_usd": bankroll_usd,
     })
 
+
 # ----------------------------
 # Routes
 # ----------------------------
 @app.get("/health")
 def health():
     return jsonify({"ok": True, "time_utc": utc_now_iso()})
+
 
 @app.get("/")
 def home():
@@ -577,20 +679,42 @@ def home():
         "time_utc": utc_now_iso(),
         "db_parent_exists": os.path.exists(parent),
         "db_path": DB_PATH,
+        "schema_version": fetch_one("meta", order_by="id ASC") or {},
         "endpoints": {
-            "GET": ["/", "/health", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
+            "GET": ["/", "/health", "/schema", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive",
                 "/settings"
             ],
-            "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/deaths"]
+            "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/prices", "/reset/deaths"]
         }
     })
+
+
+@app.get("/schema")
+def schema():
+    """
+    Debug endpoint: shows current DB schema in prod.
+    Useful to confirm migrations worked.
+    """
+    conn = get_conn()
+    out = {}
+    try:
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
+        for t in tables:
+            name = t["name"]
+            cols = conn.execute(f"PRAGMA table_info({name})").fetchall()
+            out[name] = [{"name": c[1], "type": c[2]} for c in cols]
+    finally:
+        conn.close()
+    return jsonify(out)
+
 
 @app.get("/control")
 def control_get():
     return jsonify(get_control())
+
 
 @app.get("/data")
 def data():
@@ -604,7 +728,7 @@ def data():
 
     recent_trades = fetch_many("trades", limit=80, order_by="id DESC")
 
-    latest_prices = fetch_many("prices", limit=800, order_by="id DESC")
+    latest_prices = fetch_many("prices", limit=1200, order_by="id DESC")
 
     events = fetch_many("events", limit=250, order_by="id DESC")
     events.reverse()
@@ -620,7 +744,12 @@ def data():
         hb["markets"] = _safe_markets_list(_safe_json_loads(hb.get("markets")) or hb.get("markets"))
         hb["prices_ok"] = int(hb.get("prices_ok") or 0)
 
-    total_trades = len(recent_trades)
+    # Create a "latest price per market" map for UI convenience
+    latest_by_market = {}
+    for p in latest_prices:
+        m = p.get("market")
+        if m and m not in latest_by_market:
+            latest_by_market[m] = p
 
     bankroll_gbp = get_bankroll_gbp()
     bankroll_usd = bankroll_gbp * GBPUSD_RATE
@@ -644,6 +773,7 @@ def data():
             } for t in recent_trades
         ],
         "prices": latest_prices,
+        "latest_prices": latest_by_market,
         "events": events,
         "deaths": deaths,
         "settings": {
@@ -652,15 +782,16 @@ def data():
             "bankroll_usd": bankroll_usd,
         },
         "stats": {
-            "paused": state in ("PAUSED","CRYO"),
+            "paused": state in ("PAUSED", "CRYO"),
             "state": state,
-            "pause_until_utc": ctrl.get("pause_until_utc",""),
-            "pause_reason": ctrl.get("pause_reason",""),
-            "cryo_until_utc": ctrl.get("cryo_until_utc",""),
-            "cryo_reason": ctrl.get("cryo_reason",""),
-            "total_trades_loaded": total_trades,
+            "pause_until_utc": ctrl.get("pause_until_utc", ""),
+            "pause_reason": ctrl.get("pause_reason", ""),
+            "cryo_until_utc": ctrl.get("cryo_until_utc", ""),
+            "cryo_reason": ctrl.get("cryo_reason", ""),
+            "total_trades_loaded": len(recent_trades),
         }
     })
+
 
 @app.get("/ohlc")
 def ohlc():
@@ -674,13 +805,16 @@ def ohlc():
         "candles": candles
     })
 
+
 @app.get("/heartbeat")
 def get_heartbeat():
     return jsonify(fetch_one("heartbeat") or {})
 
+
 @app.get("/pet")
 def get_pet():
     return jsonify(fetch_one("pet") or {})
+
 
 @app.get("/events")
 def get_events():
@@ -688,6 +822,7 @@ def get_events():
     for e in ev:
         e["details"] = _safe_json_loads(e.get("details"))
     return jsonify(ev)
+
 
 @app.get("/logs")
 def get_logs():
@@ -704,19 +839,23 @@ def get_logs():
 
     return jsonify(lines)
 
+
 @app.get("/equity")
 def get_equity():
     points = fetch_many("equity", limit=400, order_by="id DESC")
     points.reverse()
     return jsonify(points)
 
+
 @app.get("/trades")
 def get_trades():
     return jsonify(fetch_many("trades", limit=300))
 
+
 @app.get("/prices")
 def get_prices():
-    return jsonify(fetch_many("prices", limit=1000))
+    return jsonify(fetch_many("prices", limit=1500))
+
 
 @app.get("/deaths")
 def get_deaths():
@@ -724,6 +863,7 @@ def get_deaths():
     for x in d:
         x["details"] = _safe_json_loads(x.get("details"))
     return jsonify(d)
+
 
 # ----------------------------
 # Ingest endpoints
@@ -735,6 +875,7 @@ def ingest_equity():
     time_utc = body.get("time_utc") or utc_now_iso()
     insert_row("equity", {"time_utc": time_utc, "time_epoch": _to_epoch(time_utc), "equity_usd": equity_usd})
     return jsonify({"ok": True})
+
 
 @app.post("/ingest/heartbeat")
 def ingest_heartbeat():
@@ -757,6 +898,7 @@ def ingest_heartbeat():
     insert_row("heartbeat", row)
     return jsonify({"ok": True})
 
+
 @app.post("/ingest/pet")
 def ingest_pet():
     body = request.get_json(force=True, silent=True) or {}
@@ -774,6 +916,7 @@ def ingest_pet():
     }
     insert_row("pet", row)
     return jsonify({"ok": True})
+
 
 @app.post("/ingest/trade")
 def ingest_trade():
@@ -793,6 +936,7 @@ def ingest_trade():
     insert_row("trades", row)
     return jsonify({"ok": True})
 
+
 @app.post("/ingest/prices")
 def ingest_prices():
     body = request.get_json(force=True, silent=True) or {}
@@ -809,12 +953,16 @@ def ingest_prices():
     count = 0
     for market, price in prices.items():
         try:
-            insert_row("prices", {"time_utc": time_utc, "time_epoch": time_epoch, "market": str(market), "price": float(price)})
+            insert_row(
+                "prices",
+                {"time_utc": time_utc, "time_epoch": time_epoch, "market": str(market), "price": float(price)}
+            )
             count += 1
         except Exception:
             pass
 
     return jsonify({"ok": True, "count": count})
+
 
 @app.post("/ingest/event")
 def ingest_event():
@@ -829,6 +977,7 @@ def ingest_event():
     })
     return jsonify({"ok": True})
 
+
 @app.post("/ingest/death")
 def ingest_death():
     body = request.get_json(force=True, silent=True) or {}
@@ -840,8 +989,9 @@ def ingest_death():
         "reason": body.get("reason", "") or "",
         "details": json.dumps(body.get("details", {}))
     })
-    add_event("warning", "Death/Cryo record added", {"reason": body.get("reason",""), "source": body.get("source","bot")})
+    add_event("warning", "Death/Cryo record added", {"reason": body.get("reason", ""), "source": body.get("source", "bot")})
     return jsonify({"ok": True})
+
 
 # ----------------------------
 # Control endpoints
@@ -851,49 +1001,29 @@ def control_pause():
     body = request.get_json(force=True, silent=True) or {}
     seconds = int(body.get("seconds", 600))
     reason = body.get("reason", "manual pause")
+    _set_control_state("PAUSED", reason=reason, seconds=seconds)
+    c = get_control()
+    return jsonify({"ok": True, "state": "PAUSED", "pause_until_utc": c.get("pause_until_utc", ""), "reason": reason})
 
-    until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).replace(microsecond=0).isoformat()
-
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE control SET state='PAUSED', pause_reason=?, pause_until_utc=?, updated_time_utc=? WHERE id=1",
-        (reason, until, utc_now_iso())
-    )
-    conn.commit()
-    conn.close()
-
-    add_event("warning", "State -> PAUSED", {"pause_until_utc": until, "reason": reason})
-    return jsonify({"ok": True, "state": "PAUSED", "pause_until_utc": until, "reason": reason})
 
 @app.post("/control/cryo")
 def control_cryo():
     body = request.get_json(force=True, silent=True) or {}
     seconds = int(body.get("seconds", 600))
     reason = body.get("reason", "cryo safety")
+    _set_control_state("CRYO", reason=reason, seconds=seconds)
+    c = get_control()
+    return jsonify({"ok": True, "state": "CRYO", "cryo_until_utc": c.get("cryo_until_utc", ""), "reason": reason})
 
-    until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).replace(microsecond=0).isoformat()
-
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE control SET state='CRYO', cryo_reason=?, cryo_until_utc=?, updated_time_utc=? WHERE id=1",
-        (reason, until, utc_now_iso())
-    )
-    conn.commit()
-    conn.close()
-
-    add_event("warning", "State -> CRYO", {"cryo_until_utc": until, "reason": reason})
-    return jsonify({"ok": True, "state": "CRYO", "cryo_until_utc": until, "reason": reason})
 
 @app.post("/control/revive")
 def control_revive():
     body = request.get_json(force=True, silent=True) or {}
     reason = body.get("reason", "revive")
-
     _set_control_state("ACTIVE", reason=reason)
     add_event("info", "Revive executed", {"reason": reason})
     return jsonify({"ok": True, "state": "ACTIVE"})
+
 
 # ----------------------------
 # Reset endpoints
@@ -907,32 +1037,44 @@ def wipe_table(name):
     conn.commit()
     conn.close()
 
+
 @app.delete("/reset/all")
 def reset_all():
-    for t in ["heartbeat","pet","prices","equity","trades","events","deaths"]:
+    for t in ["heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"]:
         wipe_table(t)
     _set_control_state("ACTIVE", reason="reset/all")
     return jsonify({"ok": True})
+
 
 @app.delete("/reset/events")
 def reset_events():
     wipe_table("events")
     return jsonify({"ok": True})
 
+
 @app.delete("/reset/trades")
 def reset_trades():
     wipe_table("trades")
     return jsonify({"ok": True})
+
 
 @app.delete("/reset/equity")
 def reset_equity():
     wipe_table("equity")
     return jsonify({"ok": True})
 
+
+@app.delete("/reset/prices")
+def reset_prices():
+    wipe_table("prices")
+    return jsonify({"ok": True})
+
+
 @app.delete("/reset/deaths")
 def reset_deaths():
     wipe_table("deaths")
     return jsonify({"ok": True})
+
 
 # ----------------------------
 # Main
