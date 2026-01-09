@@ -1,7 +1,6 @@
 import os
 import json
 import sqlite3
-import hashlib
 from datetime import datetime, timezone, timedelta
 
 from flask import Flask, request, jsonify
@@ -235,65 +234,127 @@ SCHEMA = [
 ]
 
 # ----------------------------
-# Schema lock (NEW)
+# Auto-migration (LOCKS / UPGRADES SCHEMA)
 # ----------------------------
-SCHEMA_VERSION = int(os.getenv("SCHEMA_VERSION", "1"))
+# This upgrades existing tables created with older versions.
+# It only ADDS missing columns (safe), never deletes data.
+EXPECTED_COLUMNS = {
+    "control": {
+        "state": "TEXT DEFAULT 'ACTIVE'",
+        "pause_reason": "TEXT DEFAULT ''",
+        "pause_until_utc": "TEXT DEFAULT ''",
+        "cryo_reason": "TEXT DEFAULT ''",
+        "cryo_until_utc": "TEXT DEFAULT ''",
+        "updated_time_utc": "TEXT DEFAULT ''",
+    },
+    "heartbeat": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "equity_usd": "REAL DEFAULT 0",
+        "wins": "INTEGER DEFAULT 0",
+        "losses": "INTEGER DEFAULT 0",
+        "total_trades": "INTEGER DEFAULT 0",
+        "total_pnl_usd": "REAL DEFAULT 0",
+        "markets": "TEXT DEFAULT '[]'",
+        "open_positions": "INTEGER DEFAULT 0",
+        "prices_ok": "INTEGER DEFAULT 0",
+        "status": "TEXT DEFAULT 'stopped'",
+        "survival_mode": "TEXT DEFAULT 'NORMAL'",
+    },
+    "pet": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "fainted_until_utc": "TEXT DEFAULT ''",
+        "growth": "REAL DEFAULT 0",
+        "health": "REAL DEFAULT 100",
+        "hunger": "REAL DEFAULT 0",
+        "mood": "TEXT DEFAULT 'neutral'",
+        "stage": "TEXT DEFAULT 'egg'",
+        "sex": "TEXT DEFAULT 'boy'",
+    },
+    "prices": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "market": "TEXT DEFAULT ''",
+        "price": "REAL DEFAULT 0",
+    },
+    "equity": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "equity_usd": "REAL DEFAULT 0",
+    },
+    "trades": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "market": "TEXT DEFAULT ''",
+        "side": "TEXT DEFAULT 'buy'",
+        "size_usd": "REAL DEFAULT 0",
+        "price": "REAL DEFAULT 0",
+        "pnl_usd": "REAL DEFAULT 0",
+        "confidence": "REAL DEFAULT 0",
+        "reason": "TEXT DEFAULT ''",
+    },
+    "events": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "type": "TEXT DEFAULT 'info'",
+        "message": "TEXT DEFAULT ''",
+        "details": "TEXT DEFAULT ''",
+    },
+    "deaths": {
+        "time_utc": "TEXT DEFAULT ''",
+        "time_epoch": "INTEGER DEFAULT 0",
+        "source": "TEXT DEFAULT 'bot'",
+        "reason": "TEXT DEFAULT ''",
+        "details": "TEXT DEFAULT ''",
+    },
+}
 
-def _schema_hash() -> str:
-    # Normalise to reduce accidental whitespace-only changes
-    joined = "\n".join([s.strip() for s in SCHEMA]).encode("utf-8")
-    return hashlib.sha256(joined).hexdigest()
+def _table_exists(conn, name: str) -> bool:
+    r = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (name,)
+    ).fetchone()
+    return r is not None
 
+def _existing_columns(conn, table: str) -> set:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return {r[1] for r in rows}  # r[1] is column name
+    except Exception:
+        return set()
+
+def migrate_schema():
+    conn = get_conn()
+    try:
+        # Make sure tables exist first
+        cur = conn.cursor()
+        for stmt in SCHEMA:
+            cur.execute(stmt)
+        conn.commit()
+
+        # Add missing columns safely
+        for table, cols in EXPECTED_COLUMNS.items():
+            if not _table_exists(conn, table):
+                continue
+            existing = _existing_columns(conn, table)
+            for col_name, col_def in cols.items():
+                if col_name not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+        conn.commit()
+    finally:
+        conn.close()
+
+# ----------------------------
+# Init DB + migrate
+# ----------------------------
 def init_db():
-    """
-    Creates tables if missing AND locks the schema.
-    If the schema changes in code but the DB already exists, it will refuse to boot.
-    """
-    current_hash = _schema_hash()
+    # Ensure schema exists and is upgraded before handling requests
+    migrate_schema()
 
+    # Ensure control row exists (id=1)
     conn = get_conn()
     cur = conn.cursor()
-
-    # 1) Create schema_meta (always)
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS schema_meta (
-          id INTEGER PRIMARY KEY CHECK (id = 1),
-          schema_version INTEGER NOT NULL,
-          schema_hash TEXT NOT NULL,
-          locked_at_utc TEXT NOT NULL
-        )
-        """
-    )
-
-    # 2) Check existing lock
-    cur.execute("SELECT schema_version, schema_hash FROM schema_meta WHERE id=1")
-    row = cur.fetchone()
-
-    if row is None:
-        # First run: lock schema to whatever is in code right now
-        cur.execute(
-            "INSERT INTO schema_meta (id, schema_version, schema_hash, locked_at_utc) VALUES (1, ?, ?, ?)",
-            (SCHEMA_VERSION, current_hash, utc_now_iso())
-        )
-    else:
-        db_version = int(row["schema_version"])
-        db_hash = str(row["schema_hash"])
-
-        if db_version != SCHEMA_VERSION or db_hash != current_hash:
-            conn.close()
-            raise RuntimeError(
-                "SCHEMA LOCKED: database schema does not match code.\n"
-                f"DB version/hash: {db_version}/{db_hash}\n"
-                f"CODE version/hash: {SCHEMA_VERSION}/{current_hash}\n"
-                "If you intended to change schema, do a proper migration (don’t hot-change tables)."
-            )
-
-    # 3) Create application tables
-    for stmt in SCHEMA:
-        cur.execute(stmt)
-
-    # 4) Ensure control row exists (id=1)
     cur.execute("SELECT id FROM control WHERE id=1")
     if cur.fetchone() is None:
         cur.execute(
@@ -301,7 +362,6 @@ def init_db():
             "VALUES (1, 'ACTIVE', '', '', '', '', ?)",
             (utc_now_iso(),)
         )
-
     conn.commit()
     conn.close()
 
@@ -502,18 +562,6 @@ def set_settings_route():
     })
 
 # ----------------------------
-# Version route (NEW)
-# ----------------------------
-@app.get("/version")
-def version():
-    return jsonify({
-        "ok": True,
-        "schema_version": SCHEMA_VERSION,
-        "schema_hash": _schema_hash(),
-        "time_utc": utc_now_iso()
-    })
-
-# ----------------------------
 # Routes
 # ----------------------------
 @app.get("/health")
@@ -530,7 +578,7 @@ def home():
         "db_parent_exists": os.path.exists(parent),
         "db_path": DB_PATH,
         "endpoints": {
-            "GET": ["/", "/health", "/version", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
+            "GET": ["/", "/health", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive",
@@ -585,9 +633,9 @@ def data():
         "equity": [{"equity_usd": float(p["equity_usd"]), "time_utc": p["time_utc"]} for p in equity_points],
         "trades": [
             {
-                "time_utc": t["time_utc"],
-                "market": t["market"],
-                "side": t["side"],
+                "time_utc": t.get("time_utc", ""),
+                "market": t.get("market", ""),
+                "side": t.get("side", ""),
                 "size_usd": float(t.get("size_usd") or 0),
                 "price": float(t.get("price") or 0),
                 "pnl_usd": float(t.get("pnl_usd") or 0),
