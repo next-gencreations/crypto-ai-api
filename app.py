@@ -1,6 +1,7 @@
 import os
 import json
 import sqlite3
+import math
 from datetime import datetime, timezone, timedelta
 
 from flask import Flask, request, jsonify
@@ -624,6 +625,127 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
 
 
 # ----------------------------
+# ✅ SIGNAL (AI BRAIN v1)  EMA + RSI
+# ----------------------------
+def _ema(values, period: int):
+    if not values:
+        return None
+    period = max(1, int(period))
+    k = 2 / (period + 1)
+    ema = float(values[0])
+    for v in values[1:]:
+        ema = float(v) * k + ema * (1 - k)
+    return ema
+
+
+def _rsi(closes, period: int = 14):
+    period = max(2, int(period))
+    if len(closes) < period + 1:
+        return None
+
+    gains = 0.0
+    losses = 0.0
+    for i in range(-period, 0):
+        diff = float(closes[i]) - float(closes[i - 1])
+        if diff >= 0:
+            gains += diff
+        else:
+            losses += abs(diff)
+
+    if losses == 0:
+        return 100.0
+    rs = gains / max(1e-9, losses)
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _sigmoid(x: float) -> float:
+    try:
+        return 1.0 / (1.0 + math.exp(-float(x)))
+    except Exception:
+        return 0.5
+
+
+def build_signal(market: str = "BTCUSDT"):
+    market = (market or "BTCUSDT").strip().upper()
+
+    # Use tick->OHLC from your existing prices table
+    candles = compute_ohlc(market=market, interval_sec=60, limit=220)
+    closes = [float(c.get("c")) for c in candles if c.get("c") is not None]
+
+    if len(closes) < 60:
+        return {
+            "market": market,
+            "side": "hold",
+            "confidence": 0.50,
+            "reason": "not_enough_data",
+            "features": {"closes": len(closes)}
+        }
+
+    ema_fast = _ema(closes[-120:], 12)
+    ema_slow = _ema(closes[-220:], 26) if len(closes) >= 80 else _ema(closes, 26)
+    rsi14 = _rsi(closes, 14)
+
+    if ema_fast is None or ema_slow is None or rsi14 is None:
+        return {
+            "market": market,
+            "side": "hold",
+            "confidence": 0.50,
+            "reason": "indicator_nan",
+            "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14}
+        }
+
+    trend = (ema_fast - ema_slow) / max(1e-9, ema_slow)  # normalized
+    # RSI bias: oversold => buy bias, overbought => sell bias
+    rsi_bias = 0.0
+    if rsi14 < 35:
+        rsi_bias = +0.6
+    elif rsi14 > 65:
+        rsi_bias = -0.6
+
+    # score: trend scaled + rsi bias
+    score = (trend * 40.0) + rsi_bias
+
+    # confidence: 0.50..~0.97 based on strength of score
+    conf_strength = abs(_sigmoid(score) - 0.5) * 2.0  # 0..1
+    confidence = 0.50 + (conf_strength * 0.47)
+
+    # decision thresholds
+    if score > 0.20:
+        side = "buy"
+        reason = "trend_up_or_oversold"
+    elif score < -0.20:
+        side = "sell"
+        reason = "trend_down_or_overbought"
+    else:
+        side = "hold"
+        reason = "no_edge"
+
+    return {
+        "market": market,
+        "side": side,
+        "confidence": float(max(0.0, min(1.0, confidence))),
+        "reason": reason,
+        "features": {
+            "ema_fast": float(ema_fast),
+            "ema_slow": float(ema_slow),
+            "trend": float(trend),
+            "rsi14": float(rsi14),
+            "score": float(score),
+            "closes": len(closes),
+        }
+    }
+
+
+@app.get("/signal")
+def signal():
+    market = request.args.get("market", "BTCUSDT")
+    interval = int(request.args.get("interval", "60"))  # reserved for future; currently uses 60s candles
+    _ = interval
+    out = build_signal(market=market)
+    return jsonify(out)
+
+
+# ----------------------------
 # Settings routes
 # ----------------------------
 @app.get("/settings")
@@ -681,7 +803,7 @@ def home():
         "db_path": DB_PATH,
         "schema_version": fetch_one("meta", order_by="id ASC") or {},
         "endpoints": {
-            "GET": ["/", "/health", "/schema", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
+            "GET": ["/", "/health", "/schema", "/signal", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive",
@@ -1082,3 +1204,4 @@ def reset_deaths():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
     app.run(host="0.0.0.0", port=port)
+```0
