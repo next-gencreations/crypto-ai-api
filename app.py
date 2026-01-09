@@ -356,7 +356,7 @@ def _table_exists(conn, name: str) -> bool:
 def _existing_columns(conn, table: str) -> set:
     try:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-        return {r[1] for r in rows}  # r[1] is column name
+        return {r[1] for r in rows}
     except Exception:
         return set()
 
@@ -366,12 +366,10 @@ def migrate_schema():
     try:
         cur = conn.cursor()
 
-        # Ensure tables exist
         for stmt in SCHEMA:
             cur.execute(stmt)
         conn.commit()
 
-        # Add missing columns
         for table, cols in EXPECTED_COLUMNS.items():
             if not _table_exists(conn, table):
                 continue
@@ -384,16 +382,12 @@ def migrate_schema():
         conn.close()
 
 
-# ----------------------------
-# Init DB + migrate
-# ----------------------------
 def init_db():
     migrate_schema()
 
     conn = get_conn()
     cur = conn.cursor()
 
-    # meta row
     cur.execute("SELECT id FROM meta WHERE id=1")
     if cur.fetchone() is None:
         cur.execute(
@@ -406,7 +400,6 @@ def init_db():
             (SCHEMA_VERSION, utc_now_iso())
         )
 
-    # control row
     cur.execute("SELECT id FROM control WHERE id=1")
     if cur.fetchone() is None:
         cur.execute(
@@ -495,12 +488,6 @@ def get_control():
 
 
 def _set_control_state(state: str, reason: str = "", seconds: int = 0):
-    """
-    Unified control state setter:
-      - ACTIVE: clears timers/reasons
-      - PAUSED: sets pause_until_utc
-      - CRYO: sets cryo_until_utc
-    """
     state = (state or "ACTIVE").upper()
     now_iso = utc_now_iso()
 
@@ -567,7 +554,6 @@ def is_paused_or_cryo():
         except Exception:
             cryo = True
 
-    # Auto-thaw
     if state in ("PAUSED", "CRYO") and not paused and not cryo:
         _set_control_state("ACTIVE", reason="timer complete")
         c = get_control()
@@ -624,9 +610,24 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     return out[-limit:]
 
 
-# ----------------------------
-# ✅ SIGNAL (AI BRAIN v1)  EMA + RSI
-# ----------------------------
+# ==========================================================
+# ✅ SIGNAL (AI BRAIN v1) - EMA(12/26) + RSI(14) + cooldown
+# ==========================================================
+
+# optional: stop flipping every tick (default 30s)
+SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", "30"))
+
+# in-memory cache (fine for single Render instance)
+_LAST_SIGNAL = {
+    "time_epoch": 0,
+    "market": "",
+    "side": "hold",
+    "confidence": 0.5,
+    "reason": "init",
+    "features": {}
+}
+
+
 def _ema(values, period: int):
     if not values:
         return None
@@ -665,83 +666,112 @@ def _sigmoid(x: float) -> float:
         return 0.5
 
 
-def build_signal(market: str = "BTCUSDT"):
+def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
+    interval_sec = max(10, int(interval_sec))
 
-    # Use tick->OHLC from your existing prices table
-    candles = compute_ohlc(market=market, interval_sec=60, limit=220)
+    # Cooldown: return last signal if called too soon for same market
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    if (
+        _LAST_SIGNAL.get("market") == market
+        and (now_epoch - int(_LAST_SIGNAL.get("time_epoch") or 0)) < SIGNAL_COOLDOWN_SEC
+    ):
+        return dict(_LAST_SIGNAL)
+
+    # candles from ticks
+    candles = compute_ohlc(market=market, interval_sec=interval_sec, limit=260)
     closes = [float(c.get("c")) for c in candles if c.get("c") is not None]
 
-    if len(closes) < 60:
-        return {
+    if len(closes) < 80:
+        out = {
             "market": market,
             "side": "hold",
             "confidence": 0.50,
             "reason": "not_enough_data",
-            "features": {"closes": len(closes)}
+            "features": {"closes": len(closes), "interval_sec": interval_sec},
         }
+        _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
+        return out
 
-    ema_fast = _ema(closes[-120:], 12)
-    ema_slow = _ema(closes[-220:], 26) if len(closes) >= 80 else _ema(closes, 26)
+    # compute EMA on the SAME series end (don’t slice two different windows)
+    ema_fast = _ema(closes, 12)
+    ema_slow = _ema(closes, 26)
     rsi14 = _rsi(closes, 14)
 
     if ema_fast is None or ema_slow is None or rsi14 is None:
-        return {
+        out = {
             "market": market,
             "side": "hold",
             "confidence": 0.50,
             "reason": "indicator_nan",
-            "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14}
+            "features": {
+                "ema_fast": ema_fast,
+                "ema_slow": ema_slow,
+                "rsi14": rsi14,
+                "closes": len(closes),
+                "interval_sec": interval_sec,
+            },
         }
+        _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
+        return out
 
-    trend = (ema_fast - ema_slow) / max(1e-9, ema_slow)  # normalized
-    # RSI bias: oversold => buy bias, overbought => sell bias
+    # normalized trend
+    trend = (ema_fast - ema_slow) / max(1e-9, ema_slow)
+
+    # RSI bias (gentle)
     rsi_bias = 0.0
-    if rsi14 < 35:
-        rsi_bias = +0.6
-    elif rsi14 > 65:
-        rsi_bias = -0.6
+    if rsi14 < 33:
+        rsi_bias = +0.45
+    elif rsi14 > 67:
+        rsi_bias = -0.45
 
     # score: trend scaled + rsi bias
-    score = (trend * 40.0) + rsi_bias
+    score = (trend * 35.0) + rsi_bias
 
-    # confidence: 0.50..~0.97 based on strength of score
+    # confidence mapping
     conf_strength = abs(_sigmoid(score) - 0.5) * 2.0  # 0..1
-    confidence = 0.50 + (conf_strength * 0.47)
+    confidence = 0.50 + (conf_strength * 0.45)        # 0.50..0.95ish
 
     # decision thresholds
-    if score > 0.20:
+    if score > 0.22:
         side = "buy"
-        reason = "trend_up_or_oversold"
-    elif score < -0.20:
+        reason = "ema_up_or_oversold"
+    elif score < -0.22:
         side = "sell"
-        reason = "trend_down_or_overbought"
+        reason = "ema_down_or_overbought"
     else:
         side = "hold"
         reason = "no_edge"
 
-    return {
+    out = {
         "market": market,
         "side": side,
         "confidence": float(max(0.0, min(1.0, confidence))),
         "reason": reason,
         "features": {
+            "interval_sec": interval_sec,
             "ema_fast": float(ema_fast),
             "ema_slow": float(ema_slow),
             "trend": float(trend),
             "rsi14": float(rsi14),
             "score": float(score),
             "closes": len(closes),
-        }
+        },
     }
+
+    # helpful debug log when we have an actual trade suggestion
+    if side != "hold" and out["confidence"] >= 0.60:
+        add_event("signal", f"{market} {side.upper()} ({out['confidence']:.2f})", {"reason": reason, **out["features"]})
+
+    _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
+    return out
 
 
 @app.get("/signal")
 def signal():
     market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))  # reserved for future; currently uses 60s candles
-    _ = interval
-    out = build_signal(market=market)
+    interval = int(request.args.get("interval", "60"))
+    out = build_signal(market=market, interval_sec=interval)
     return jsonify(out)
 
 
@@ -816,10 +846,6 @@ def home():
 
 @app.get("/schema")
 def schema():
-    """
-    Debug endpoint: shows current DB schema in prod.
-    Useful to confirm migrations worked.
-    """
     conn = get_conn()
     out = {}
     try:
@@ -866,7 +892,6 @@ def data():
         hb["markets"] = _safe_markets_list(_safe_json_loads(hb.get("markets")) or hb.get("markets"))
         hb["prices_ok"] = int(hb.get("prices_ok") or 0)
 
-    # Create a "latest price per market" map for UI convenience
     latest_by_market = {}
     for p in latest_prices:
         m = p.get("market")
@@ -921,11 +946,7 @@ def ohlc():
     interval = int(request.args.get("interval", "60"))
     limit = int(request.args.get("limit", "200"))
     candles = compute_ohlc(market=market, interval_sec=interval, limit=limit)
-    return jsonify({
-        "market": market,
-        "interval_sec": interval,
-        "candles": candles
-    })
+    return jsonify({"market": market, "interval_sec": interval, "candles": candles})
 
 
 @app.get("/heartbeat")
@@ -1075,10 +1096,7 @@ def ingest_prices():
     count = 0
     for market, price in prices.items():
         try:
-            insert_row(
-                "prices",
-                {"time_utc": time_utc, "time_epoch": time_epoch, "market": str(market), "price": float(price)}
-            )
+            insert_row("prices", {"time_utc": time_utc, "time_epoch": time_epoch, "market": str(market), "price": float(price)})
             count += 1
         except Exception:
             pass
@@ -1204,4 +1222,3 @@ def reset_deaths():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
     app.run(host="0.0.0.0", port=port)
-```0
