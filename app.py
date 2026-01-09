@@ -1,6 +1,7 @@
 import os
 import json
 import sqlite3
+import hashlib
 from datetime import datetime, timezone, timedelta
 
 from flask import Flask, request, jsonify
@@ -233,13 +234,66 @@ SCHEMA = [
     """
 ]
 
+# ----------------------------
+# Schema lock (NEW)
+# ----------------------------
+SCHEMA_VERSION = int(os.getenv("SCHEMA_VERSION", "1"))
+
+def _schema_hash() -> str:
+    # Normalise to reduce accidental whitespace-only changes
+    joined = "\n".join([s.strip() for s in SCHEMA]).encode("utf-8")
+    return hashlib.sha256(joined).hexdigest()
+
 def init_db():
+    """
+    Creates tables if missing AND locks the schema.
+    If the schema changes in code but the DB already exists, it will refuse to boot.
+    """
+    current_hash = _schema_hash()
+
     conn = get_conn()
     cur = conn.cursor()
+
+    # 1) Create schema_meta (always)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_meta (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          schema_version INTEGER NOT NULL,
+          schema_hash TEXT NOT NULL,
+          locked_at_utc TEXT NOT NULL
+        )
+        """
+    )
+
+    # 2) Check existing lock
+    cur.execute("SELECT schema_version, schema_hash FROM schema_meta WHERE id=1")
+    row = cur.fetchone()
+
+    if row is None:
+        # First run: lock schema to whatever is in code right now
+        cur.execute(
+            "INSERT INTO schema_meta (id, schema_version, schema_hash, locked_at_utc) VALUES (1, ?, ?, ?)",
+            (SCHEMA_VERSION, current_hash, utc_now_iso())
+        )
+    else:
+        db_version = int(row["schema_version"])
+        db_hash = str(row["schema_hash"])
+
+        if db_version != SCHEMA_VERSION or db_hash != current_hash:
+            conn.close()
+            raise RuntimeError(
+                "SCHEMA LOCKED: database schema does not match code.\n"
+                f"DB version/hash: {db_version}/{db_hash}\n"
+                f"CODE version/hash: {SCHEMA_VERSION}/{current_hash}\n"
+                "If you intended to change schema, do a proper migration (don’t hot-change tables)."
+            )
+
+    # 3) Create application tables
     for stmt in SCHEMA:
         cur.execute(stmt)
 
-    # Ensure control row exists (id=1)
+    # 4) Ensure control row exists (id=1)
     cur.execute("SELECT id FROM control WHERE id=1")
     if cur.fetchone() is None:
         cur.execute(
@@ -410,7 +464,7 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     return out[-limit:]
 
 # ----------------------------
-# Settings routes (NEW)
+# Settings routes
 # ----------------------------
 @app.get("/settings")
 def get_settings_route():
@@ -448,6 +502,18 @@ def set_settings_route():
     })
 
 # ----------------------------
+# Version route (NEW)
+# ----------------------------
+@app.get("/version")
+def version():
+    return jsonify({
+        "ok": True,
+        "schema_version": SCHEMA_VERSION,
+        "schema_hash": _schema_hash(),
+        "time_utc": utc_now_iso()
+    })
+
+# ----------------------------
 # Routes
 # ----------------------------
 @app.get("/health")
@@ -464,7 +530,7 @@ def home():
         "db_parent_exists": os.path.exists(parent),
         "db_path": DB_PATH,
         "endpoints": {
-            "GET": ["/", "/health", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
+            "GET": ["/", "/health", "/version", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive",
@@ -508,7 +574,6 @@ def data():
 
     total_trades = len(recent_trades)
 
-    # include bankroll settings so dashboard can show them without extra calls
     bankroll_gbp = get_bankroll_gbp()
     bankroll_usd = bankroll_gbp * GBPUSD_RATE
 
