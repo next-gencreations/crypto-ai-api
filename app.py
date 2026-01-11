@@ -20,10 +20,23 @@ else:
     CORS(app, resources={r"/*": {"origins": allowed}})
 
 # ----------------------------
-# Settings (bankroll)
+# Settings (bankroll + brain controls)
 # ----------------------------
 SETTINGS_PATH = os.getenv("SETTINGS_PATH", "/var/data/settings.json")
 GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))  # simple fixed rate
+
+DEFAULT_SETTINGS = {
+    "bankroll_gbp": 100.0,
+
+    # Brain v1 risk controls
+    "risk_per_trade_pct": 0.5,     # % of bankroll risked per trade
+    "max_open_positions": 1,
+    "min_trade_interval_sec": 60,  # decision cooldown
+    "atr_period": 14,
+    "atr_stop_mult": 1.8,
+    "min_notional_usd": 25.0,
+    "max_notional_usd": 500.0,
+}
 
 
 def _ensure_parent_dir(path: str):
@@ -35,16 +48,18 @@ def _ensure_parent_dir(path: str):
 def load_settings():
     try:
         if not os.path.exists(SETTINGS_PATH):
-            return {"bankroll_gbp": 100.0}
+            return dict(DEFAULT_SETTINGS)
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            return {"bankroll_gbp": 100.0}
-        if "bankroll_gbp" not in data:
-            data["bankroll_gbp"] = 100.0
-        return data
+            return dict(DEFAULT_SETTINGS)
+        out = dict(DEFAULT_SETTINGS)
+        out.update(data or {})
+        if "bankroll_gbp" not in out:
+            out["bankroll_gbp"] = DEFAULT_SETTINGS["bankroll_gbp"]
+        return out
     except Exception:
-        return {"bankroll_gbp": 100.0}
+        return dict(DEFAULT_SETTINGS)
 
 
 def save_settings(data: dict):
@@ -56,9 +71,9 @@ def save_settings(data: dict):
 def get_bankroll_gbp() -> float:
     s = load_settings()
     try:
-        return float(s.get("bankroll_gbp", 100.0))
+        return float(s.get("bankroll_gbp", DEFAULT_SETTINGS["bankroll_gbp"]))
     except Exception:
-        return 100.0
+        return float(DEFAULT_SETTINGS["bankroll_gbp"])
 
 
 def set_bankroll_gbp(v: float) -> float:
@@ -67,6 +82,25 @@ def set_bankroll_gbp(v: float) -> float:
     s["bankroll_gbp"] = v
     save_settings(s)
     return v
+
+
+def get_settings_public():
+    s = load_settings()
+    bankroll_gbp = float(s.get("bankroll_gbp", DEFAULT_SETTINGS["bankroll_gbp"]))
+    bankroll_usd = bankroll_gbp * GBPUSD_RATE
+    return {
+        "bankroll_gbp": bankroll_gbp,
+        "gbpusd_rate": GBPUSD_RATE,
+        "bankroll_usd": bankroll_usd,
+
+        "risk_per_trade_pct": float(s.get("risk_per_trade_pct", DEFAULT_SETTINGS["risk_per_trade_pct"])),
+        "max_open_positions": int(s.get("max_open_positions", DEFAULT_SETTINGS["max_open_positions"])),
+        "min_trade_interval_sec": int(s.get("min_trade_interval_sec", DEFAULT_SETTINGS["min_trade_interval_sec"])),
+        "atr_period": int(s.get("atr_period", DEFAULT_SETTINGS["atr_period"])),
+        "atr_stop_mult": float(s.get("atr_stop_mult", DEFAULT_SETTINGS["atr_stop_mult"])),
+        "min_notional_usd": float(s.get("min_notional_usd", DEFAULT_SETTINGS["min_notional_usd"])),
+        "max_notional_usd": float(s.get("max_notional_usd", DEFAULT_SETTINGS["max_notional_usd"])),
+    }
 
 
 # ----------------------------
@@ -86,11 +120,6 @@ def ensure_db_dir():
 
 
 def get_conn():
-    """
-    Connection settings tuned for Render + SQLite persistence.
-    WAL mode reduces locking issues for concurrent reads/writes.
-    busy_timeout avoids immediate failures under load.
-    """
     ensure_db_dir()
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -98,7 +127,7 @@ def get_conn():
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA temp_store=MEMORY;")
-        conn.execute("PRAGMA busy_timeout=5000;")  # 5s
+        conn.execute("PRAGMA busy_timeout=5000;")
     except Exception:
         pass
     return conn
@@ -134,14 +163,6 @@ def _epoch_to_iso(epoch_s: int) -> str:
 
 
 def _safe_markets_list(m):
-    """
-    Accept markets in any of these shapes:
-      - list: ["BTCUSDT","ETHUSDT"]
-      - json string: '["BTCUSDT","ETHUSDT"]'
-      - single string: "BTCUSDT"
-      - None/empty
-    Always returns a list[str].
-    """
     if m is None:
         return []
     if isinstance(m, list):
@@ -173,7 +194,7 @@ SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS control (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      state TEXT DEFAULT 'ACTIVE',              -- ACTIVE | CRYO | PAUSED
+      state TEXT DEFAULT 'ACTIVE',
       pause_reason TEXT DEFAULT '',
       pause_until_utc TEXT DEFAULT '',
       cryo_reason TEXT DEFAULT '',
@@ -191,9 +212,9 @@ SCHEMA = [
       losses INTEGER DEFAULT 0,
       total_trades INTEGER DEFAULT 0,
       total_pnl_usd REAL DEFAULT 0,
-      markets TEXT DEFAULT '[]',          -- JSON list
+      markets TEXT DEFAULT '[]',
       open_positions INTEGER DEFAULT 0,
-      prices_ok INTEGER DEFAULT 0,        -- 0/1
+      prices_ok INTEGER DEFAULT 0,
       status TEXT DEFAULT 'stopped',
       survival_mode TEXT DEFAULT 'NORMAL'
     )
@@ -209,7 +230,7 @@ SCHEMA = [
       hunger REAL DEFAULT 0,
       mood TEXT DEFAULT 'neutral',
       stage TEXT DEFAULT 'egg',
-      sex TEXT DEFAULT 'boy'              -- cosmetic: boy/girl
+      sex TEXT DEFAULT 'boy'
     )
     """,
     """
@@ -235,7 +256,7 @@ SCHEMA = [
       time_utc TEXT NOT NULL,
       time_epoch INTEGER NOT NULL,
       market TEXT NOT NULL,
-      side TEXT NOT NULL,                -- buy/sell
+      side TEXT NOT NULL,
       size_usd REAL DEFAULT 0,
       price REAL DEFAULT 0,
       pnl_usd REAL DEFAULT 0,
@@ -250,7 +271,7 @@ SCHEMA = [
       time_epoch INTEGER NOT NULL,
       type TEXT DEFAULT 'info',
       message TEXT DEFAULT '',
-      details TEXT DEFAULT ''            -- JSON
+      details TEXT DEFAULT ''
     )
     """,
     """
@@ -260,14 +281,11 @@ SCHEMA = [
       time_epoch INTEGER NOT NULL,
       source TEXT DEFAULT 'bot',
       reason TEXT DEFAULT '',
-      details TEXT DEFAULT ''            -- JSON
+      details TEXT DEFAULT ''
     )
     """
 ]
 
-# ----------------------------
-# Auto-migration (LOCKS / UPGRADES SCHEMA)
-# ----------------------------
 EXPECTED_COLUMNS = {
     "meta": {
         "schema_version": "INTEGER DEFAULT 1",
@@ -365,7 +383,6 @@ def migrate_schema():
     conn = get_conn()
     try:
         cur = conn.cursor()
-
         for stmt in SCHEMA:
             cur.execute(stmt)
         conn.commit()
@@ -384,7 +401,6 @@ def migrate_schema():
 
 def init_db():
     migrate_schema()
-
     conn = get_conn()
     cur = conn.cursor()
 
@@ -415,7 +431,7 @@ def init_db():
 init_db()
 
 # ----------------------------
-# Helpers: fetch
+# Helpers: fetch/insert
 # ----------------------------
 ALLOWED_TABLES = {"meta", "control", "heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"}
 
@@ -472,6 +488,9 @@ def add_event(ev_type: str, message: str, details=None):
     })
 
 
+# ----------------------------
+# Control helpers
+# ----------------------------
 def get_control():
     c = fetch_one("control", order_by="id ASC")
     if not c:
@@ -563,7 +582,7 @@ def is_paused_or_cryo():
 
 
 # ----------------------------
-# OHLC aggregation (candles from tick prices)
+# OHLC aggregation
 # ----------------------------
 def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     market = (market or "").strip()
@@ -611,21 +630,11 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
 
 
 # ==========================================================
-# ✅ SIGNAL (AI BRAIN v1) - EMA(12/26) + RSI(14) + cooldown
+# Brain v1: EMA + RSI + ATR sizing
 # ==========================================================
-
-# optional: stop flipping every tick (default 30s)
 SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", "30"))
-
-# in-memory cache (fine for single Render instance)
-_LAST_SIGNAL = {
-    "time_epoch": 0,
-    "market": "",
-    "side": "hold",
-    "confidence": 0.5,
-    "reason": "init",
-    "features": {}
-}
+_LAST_SIGNAL = {"time_epoch": 0, "market": "", "side": "hold", "confidence": 0.5, "reason": "init", "features": {}}
+_LAST_DECISION_BY_MARKET = {}
 
 
 def _ema(values, period: int):
@@ -643,7 +652,6 @@ def _rsi(closes, period: int = 14):
     period = max(2, int(period))
     if len(closes) < period + 1:
         return None
-
     gains = 0.0
     losses = 0.0
     for i in range(-period, 0):
@@ -652,11 +660,30 @@ def _rsi(closes, period: int = 14):
             gains += diff
         else:
             losses += abs(diff)
-
     if losses == 0:
         return 100.0
     rs = gains / max(1e-9, losses)
     return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _atr(candles, period: int = 14):
+    period = max(2, int(period))
+    if not candles or len(candles) < period + 2:
+        return None
+
+    trs = []
+    for i in range(1, len(candles)):
+        h = float(candles[i]["h"])
+        l = float(candles[i]["l"])
+        prev_c = float(candles[i - 1]["c"])
+        tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+        trs.append(tr)
+
+    if len(trs) < period:
+        return None
+
+    window = trs[-period:]
+    return sum(window) / max(1, len(window))
 
 
 def _sigmoid(x: float) -> float:
@@ -670,7 +697,6 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
     interval_sec = max(10, int(interval_sec))
 
-    # Cooldown: return last signal if called too soon for same market
     now_epoch = int(datetime.now(timezone.utc).timestamp())
     if (
         _LAST_SIGNAL.get("market") == market
@@ -678,61 +704,39 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     ):
         return dict(_LAST_SIGNAL)
 
-    # candles from ticks
     candles = compute_ohlc(market=market, interval_sec=interval_sec, limit=260)
     closes = [float(c.get("c")) for c in candles if c.get("c") is not None]
 
     if len(closes) < 80:
-        out = {
-            "market": market,
-            "side": "hold",
-            "confidence": 0.50,
-            "reason": "not_enough_data",
-            "features": {"closes": len(closes), "interval_sec": interval_sec},
-        }
+        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "not_enough_data",
+               "features": {"closes": len(closes), "interval_sec": interval_sec}}
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
-    # compute EMA on the SAME series end (don’t slice two different windows)
     ema_fast = _ema(closes, 12)
     ema_slow = _ema(closes, 26)
     rsi14 = _rsi(closes, 14)
 
     if ema_fast is None or ema_slow is None or rsi14 is None:
-        out = {
-            "market": market,
-            "side": "hold",
-            "confidence": 0.50,
-            "reason": "indicator_nan",
-            "features": {
-                "ema_fast": ema_fast,
-                "ema_slow": ema_slow,
-                "rsi14": rsi14,
-                "closes": len(closes),
-                "interval_sec": interval_sec,
-            },
-        }
+        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "indicator_nan",
+               "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14,
+                            "closes": len(closes), "interval_sec": interval_sec}}
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
-    # normalized trend
     trend = (ema_fast - ema_slow) / max(1e-9, ema_slow)
 
-    # RSI bias (gentle)
     rsi_bias = 0.0
     if rsi14 < 33:
         rsi_bias = +0.45
     elif rsi14 > 67:
         rsi_bias = -0.45
 
-    # score: trend scaled + rsi bias
     score = (trend * 35.0) + rsi_bias
 
-    # confidence mapping
-    conf_strength = abs(_sigmoid(score) - 0.5) * 2.0  # 0..1
-    confidence = 0.50 + (conf_strength * 0.45)        # 0.50..0.95ish
+    conf_strength = abs(_sigmoid(score) - 0.5) * 2.0
+    confidence = 0.50 + (conf_strength * 0.45)
 
-    # decision thresholds
     if score > 0.22:
         side = "buy"
         reason = "ema_up_or_oversold"
@@ -759,63 +763,143 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
         },
     }
 
-    # helpful debug log when we have an actual trade suggestion
-    if side != "hold" and out["confidence"] >= 0.60:
-        add_event("signal", f"{market} {side.upper()} ({out['confidence']:.2f})", {"reason": reason, **out["features"]})
-
     _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
     return out
 
 
-@app.get("/signal")
-def signal():
-    market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
-    out = build_signal(market=market, interval_sec=interval)
-    return jsonify(out)
+def compute_position_size_usd(entry_price: float, stop_distance: float, settings_public: dict):
+    bankroll_usd = float(settings_public.get("bankroll_usd") or 0.0)
+    risk_pct = float(settings_public.get("risk_per_trade_pct") or DEFAULT_SETTINGS["risk_per_trade_pct"])
+    min_notional = float(settings_public.get("min_notional_usd") or DEFAULT_SETTINGS["min_notional_usd"])
+    max_notional = float(settings_public.get("max_notional_usd") or DEFAULT_SETTINGS["max_notional_usd"])
 
+    if bankroll_usd <= 0 or entry_price <= 0 or stop_distance <= 0:
+        return 0.0, {"why": "invalid_inputs"}
 
-# ----------------------------
-# Settings routes
-# ----------------------------
-@app.get("/settings")
-def get_settings_route():
-    bankroll_gbp = get_bankroll_gbp()
-    bankroll_usd = bankroll_gbp * GBPUSD_RATE
-    return jsonify({
-        "bankroll_gbp": bankroll_gbp,
-        "gbpusd_rate": GBPUSD_RATE,
+    risk_usd = bankroll_usd * (risk_pct / 100.0)
+
+    stop_distance = max(stop_distance, entry_price * 0.001)  # min 0.1% stop
+    notional = risk_usd * (entry_price / stop_distance)
+
+    notional = max(0.0, min(max_notional, notional))
+    if notional < min_notional:
+        return 0.0, {"why": "below_min_notional", "notional": notional, "min_notional": min_notional}
+
+    return float(notional), {
         "bankroll_usd": bankroll_usd,
-    })
+        "risk_pct": risk_pct,
+        "risk_usd": risk_usd,
+        "entry": entry_price,
+        "stop_distance": stop_distance,
+        "notional": notional,
+        "min_notional": min_notional,
+        "max_notional": max_notional,
+    }
 
 
-@app.post("/settings")
-def set_settings_route():
-    body = request.get_json(force=True, silent=True) or {}
+def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
+    market = (market or "BTCUSDT").strip().upper()
+    interval_sec = max(10, int(interval_sec))
 
-    if "bankroll_gbp" in body:
-        bankroll_gbp = float(body.get("bankroll_gbp", 0))
-    elif "bankroll_usd" in body:
-        bankroll_usd = float(body.get("bankroll_usd", 0))
-        bankroll_gbp = bankroll_usd / GBPUSD_RATE if GBPUSD_RATE else 0.0
-    else:
-        return jsonify({"ok": False, "error": "Provide bankroll_gbp (preferred) or bankroll_usd"}), 400
+    state, _ = is_paused_or_cryo()
+    if state in ("PAUSED", "CRYO"):
+        return {
+            "market": market,
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": f"state_{state.lower()}",
+            "size_usd": 0.0,
+            "stop_distance": 0.0,
+            "features": {"interval_sec": interval_sec, "state": state},
+        }
 
-    bankroll_gbp = set_bankroll_gbp(bankroll_gbp)
-    bankroll_usd = bankroll_gbp * GBPUSD_RATE
+    settings_public = get_settings_public()
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
 
-    add_event("info", "Settings updated", {"bankroll_gbp": bankroll_gbp, "bankroll_usd": bankroll_usd})
+    last = _LAST_DECISION_BY_MARKET.get(market) or {}
+    min_gap = int(settings_public.get("min_trade_interval_sec") or DEFAULT_SETTINGS["min_trade_interval_sec"])
+    if last.get("time_epoch") and (now_epoch - int(last.get("time_epoch"))) < min_gap:
+        return {
+            "market": market,
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "cooldown",
+            "size_usd": 0.0,
+            "stop_distance": 0.0,
+            "features": {"interval_sec": interval_sec,
+                         "cooldown_remaining_sec": max(0, min_gap - (now_epoch - int(last.get("time_epoch"))))},
+        }
 
-    return jsonify({
-        "ok": True,
-        "bankroll_gbp": bankroll_gbp,
-        "gbpusd_rate": GBPUSD_RATE,
-        "bankroll_usd": bankroll_usd,
-    })
+    sig = build_signal(market=market, interval_sec=interval_sec)
+
+    candles = compute_ohlc(market=market, interval_sec=interval_sec, limit=260)
+    if not candles or len(candles) < 25:
+        return {"market": market, "action": "HOLD", "confidence": 0.0, "reason": "no_candles",
+                "size_usd": 0.0, "stop_distance": 0.0, "features": {"interval_sec": interval_sec}}
+
+    entry = float(candles[-1]["c"])
+
+    atr_period = int(settings_public.get("atr_period") or DEFAULT_SETTINGS["atr_period"])
+    atr = _atr(candles, period=atr_period)
+    if atr is None or not (atr > 0):
+        return {"market": market, "action": "HOLD", "confidence": 0.0, "reason": "atr_nan",
+                "size_usd": 0.0, "stop_distance": 0.0, "features": {"interval_sec": interval_sec, "entry": entry}}
+
+    stop_mult = float(settings_public.get("atr_stop_mult") or DEFAULT_SETTINGS["atr_stop_mult"])
+    stop_distance = float(atr * stop_mult)
+
+    side = (sig.get("side") or "hold").lower()
+    conf = float(sig.get("confidence") or 0.0)
+    reason = str(sig.get("reason") or "no_reason")
+
+    if side == "hold" or conf < 0.62:
+        _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
+        return {
+            "market": market,
+            "action": "HOLD",
+            "confidence": conf,
+            "reason": "no_trade_edge",
+            "size_usd": 0.0,
+            "stop_distance": stop_distance,
+            "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig},
+        }
+
+    size_usd, sizing_meta = compute_position_size_usd(entry, stop_distance, settings_public)
+    if size_usd <= 0:
+        _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
+        return {
+            "market": market,
+            "action": "HOLD",
+            "confidence": conf,
+            "reason": f"sizing_blocked:{sizing_meta.get('why','unknown')}",
+            "size_usd": 0.0,
+            "stop_distance": stop_distance,
+            "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig, "sizing": sizing_meta},
+        }
+
+    action = "BUY" if side == "buy" else "SELL"
+    out = {
+        "market": market,
+        "action": action,
+        "confidence": conf,
+        "reason": reason,
+        "size_usd": float(size_usd),
+        "stop_distance": float(stop_distance),
+        "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig, "sizing": sizing_meta},
+    }
+
+    add_event(
+        "decision",
+        f"{market} {action} ${size_usd:.0f} ({conf:.2f})",
+        {"reason": reason, "entry": entry, "atr": float(atr), "stop_distance": stop_distance, "risk": sizing_meta},
+    )
+
+    _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": action}
+    return out
 
 
 # ----------------------------
-# Routes
+# Base routes
 # ----------------------------
 @app.get("/health")
 def health():
@@ -833,9 +917,11 @@ def home():
         "db_path": DB_PATH,
         "schema_version": fetch_one("meta", order_by="id ASC") or {},
         "endpoints": {
-            "GET": ["/", "/health", "/schema", "/signal", "/data", "/heartbeat", "/pet", "/events", "/logs", "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
+            "GET": ["/", "/health", "/schema", "/signal", "/decision", "/data", "/heartbeat", "/pet", "/events", "/logs",
+                    "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
             "POST": [
-                "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade", "/ingest/prices", "/ingest/death",
+                "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade",
+                "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive",
                 "/settings"
             ],
@@ -864,6 +950,23 @@ def control_get():
     return jsonify(get_control())
 
 
+@app.get("/signal")
+def signal():
+    market = request.args.get("market", "BTCUSDT")
+    interval = int(request.args.get("interval", "60"))
+    return jsonify(build_signal(market=market, interval_sec=interval))
+
+
+@app.get("/decision")
+def decision():
+    market = request.args.get("market", "BTCUSDT")
+    interval = int(request.args.get("interval", "60"))
+    return jsonify(build_decision(market=market, interval_sec=interval))
+
+
+# ----------------------------
+# Data routes (your existing dashboard feeds)
+# ----------------------------
 @app.get("/data")
 def data():
     state, ctrl = is_paused_or_cryo()
@@ -875,7 +978,6 @@ def data():
     equity_points.reverse()
 
     recent_trades = fetch_many("trades", limit=80, order_by="id DESC")
-
     latest_prices = fetch_many("prices", limit=1200, order_by="id DESC")
 
     events = fetch_many("events", limit=250, order_by="id DESC")
@@ -897,9 +999,6 @@ def data():
         m = p.get("market")
         if m and m not in latest_by_market:
             latest_by_market[m] = p
-
-    bankroll_gbp = get_bankroll_gbp()
-    bankroll_usd = bankroll_gbp * GBPUSD_RATE
 
     return jsonify({
         "control": ctrl,
@@ -923,11 +1022,7 @@ def data():
         "latest_prices": latest_by_market,
         "events": events,
         "deaths": deaths,
-        "settings": {
-            "bankroll_gbp": bankroll_gbp,
-            "gbpusd_rate": GBPUSD_RATE,
-            "bankroll_usd": bankroll_usd,
-        },
+        "settings": get_settings_public(),
         "stats": {
             "paused": state in ("PAUSED", "CRYO"),
             "state": state,
@@ -1006,6 +1101,46 @@ def get_deaths():
     for x in d:
         x["details"] = _safe_json_loads(x.get("details"))
     return jsonify(d)
+
+
+# ----------------------------
+# Settings routes
+# ----------------------------
+@app.get("/settings")
+def get_settings_route():
+    return jsonify(get_settings_public())
+
+
+@app.post("/settings")
+def set_settings_route():
+    body = request.get_json(force=True, silent=True) or {}
+    s = load_settings()
+
+    if "bankroll_gbp" in body:
+        s["bankroll_gbp"] = max(0.0, float(body.get("bankroll_gbp", 0)))
+    elif "bankroll_usd" in body:
+        bankroll_usd = float(body.get("bankroll_usd", 0))
+        s["bankroll_gbp"] = max(0.0, (bankroll_usd / GBPUSD_RATE) if GBPUSD_RATE else 0.0)
+    else:
+        # bankroll is optional now because we also allow updating brain knobs
+        pass
+
+    for k in [
+        "risk_per_trade_pct",
+        "max_open_positions",
+        "min_trade_interval_sec",
+        "atr_period",
+        "atr_stop_mult",
+        "min_notional_usd",
+        "max_notional_usd",
+    ]:
+        if k in body:
+            s[k] = body.get(k)
+
+    save_settings(s)
+    out = get_settings_public()
+    add_event("info", "Settings updated", out)
+    return jsonify({"ok": True, **out})
 
 
 # ----------------------------
