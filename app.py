@@ -31,15 +31,15 @@ DEFAULT_SETTINGS = {
     # Brain v1 risk controls
     "risk_per_trade_pct": 0.5,     # % of bankroll risked per trade
     "max_open_positions": 1,
-    "min_trade_interval_sec": 60,  # decision cooldown per market
+    "min_trade_interval_sec": 60,  # decision cooldown
     "atr_period": 14,
     "atr_stop_mult": 1.8,
     "min_notional_usd": 25.0,
     "max_notional_usd": 500.0,
 
-    # selection controls
-    "best_min_confidence": 0.62,
-    "best_max_markets": 8,
+    # /decision/best controls
+    "best_max_markets": 8,         # max markets to scan in /decision/best
+    "best_min_confidence": 0.62,   # minimum confidence to be considered "eligible"
 }
 
 
@@ -76,33 +76,21 @@ def get_settings_public():
     s = load_settings()
     bankroll_gbp = float(s.get("bankroll_gbp", DEFAULT_SETTINGS["bankroll_gbp"]))
     bankroll_usd = bankroll_gbp * GBPUSD_RATE
-
-    def _f(key, default):
-        try:
-            return float(s.get(key, default))
-        except Exception:
-            return float(default)
-
-    def _i(key, default):
-        try:
-            return int(s.get(key, default))
-        except Exception:
-            return int(default)
-
     return {
         "bankroll_gbp": bankroll_gbp,
         "gbpusd_rate": GBPUSD_RATE,
         "bankroll_usd": bankroll_usd,
 
-        "risk_per_trade_pct": _f("risk_per_trade_pct", DEFAULT_SETTINGS["risk_per_trade_pct"]),
-        "max_open_positions": _i("max_open_positions", DEFAULT_SETTINGS["max_open_positions"]),
-        "min_trade_interval_sec": _i("min_trade_interval_sec", DEFAULT_SETTINGS["min_trade_interval_sec"]),
-        "atr_period": _i("atr_period", DEFAULT_SETTINGS["atr_period"]),
-        "atr_stop_mult": _f("atr_stop_mult", DEFAULT_SETTINGS["atr_stop_mult"]),
-        "min_notional_usd": _f("min_notional_usd", DEFAULT_SETTINGS["min_notional_usd"]),
-        "max_notional_usd": _f("max_notional_usd", DEFAULT_SETTINGS["max_notional_usd"]),
-        "best_min_confidence": _f("best_min_confidence", DEFAULT_SETTINGS["best_min_confidence"]),
-        "best_max_markets": _i("best_max_markets", DEFAULT_SETTINGS["best_max_markets"]),
+        "risk_per_trade_pct": float(s.get("risk_per_trade_pct", DEFAULT_SETTINGS["risk_per_trade_pct"])),
+        "max_open_positions": int(s.get("max_open_positions", DEFAULT_SETTINGS["max_open_positions"])),
+        "min_trade_interval_sec": int(s.get("min_trade_interval_sec", DEFAULT_SETTINGS["min_trade_interval_sec"])),
+        "atr_period": int(s.get("atr_period", DEFAULT_SETTINGS["atr_period"])),
+        "atr_stop_mult": float(s.get("atr_stop_mult", DEFAULT_SETTINGS["atr_stop_mult"])),
+        "min_notional_usd": float(s.get("min_notional_usd", DEFAULT_SETTINGS["min_notional_usd"])),
+        "max_notional_usd": float(s.get("max_notional_usd", DEFAULT_SETTINGS["max_notional_usd"])),
+
+        "best_max_markets": int(s.get("best_max_markets", DEFAULT_SETTINGS["best_max_markets"])),
+        "best_min_confidence": float(s.get("best_min_confidence", DEFAULT_SETTINGS["best_min_confidence"])),
     }
 
 
@@ -123,11 +111,6 @@ def ensure_db_dir():
 
 
 def get_conn():
-    """
-    Connection settings tuned for Render + SQLite persistence.
-    WAL mode reduces locking issues for concurrent reads/writes.
-    busy_timeout avoids immediate failures under load.
-    """
     ensure_db_dir()
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -135,7 +118,7 @@ def get_conn():
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA temp_store=MEMORY;")
-        conn.execute("PRAGMA busy_timeout=5000;")  # 5s
+        conn.execute("PRAGMA busy_timeout=5000;")
     except Exception:
         pass
     return conn
@@ -171,26 +154,18 @@ def _epoch_to_iso(epoch_s: int) -> str:
 
 
 def _safe_markets_list(m):
-    """
-    Accept markets in any of these shapes:
-      - list: ["BTCUSDT","ETHUSDT"]
-      - json string: '["BTCUSDT","ETHUSDT"]'
-      - single string: "BTCUSDT"
-      - None/empty
-    Always returns a list[str].
-    """
     if m is None:
         return []
     if isinstance(m, list):
-        return [str(x) for x in m if str(x).strip()]
+        return [str(x).strip().upper() for x in m if str(x).strip()]
     if isinstance(m, str):
         s = m.strip()
         if not s:
             return []
         parsed = _safe_json_loads(s)
         if isinstance(parsed, list):
-            return [str(x) for x in parsed if str(x).strip()]
-        return [s]
+            return [str(x).strip().upper() for x in parsed if str(x).strip()]
+        return [s.upper()]
     return []
 
 
@@ -210,7 +185,7 @@ SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS control (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      state TEXT DEFAULT 'ACTIVE',              -- ACTIVE | CRYO | PAUSED
+      state TEXT DEFAULT 'ACTIVE',
       pause_reason TEXT DEFAULT '',
       pause_until_utc TEXT DEFAULT '',
       cryo_reason TEXT DEFAULT '',
@@ -228,9 +203,9 @@ SCHEMA = [
       losses INTEGER DEFAULT 0,
       total_trades INTEGER DEFAULT 0,
       total_pnl_usd REAL DEFAULT 0,
-      markets TEXT DEFAULT '[]',          -- JSON list
+      markets TEXT DEFAULT '[]',
       open_positions INTEGER DEFAULT 0,
-      prices_ok INTEGER DEFAULT 0,        -- 0/1
+      prices_ok INTEGER DEFAULT 0,
       status TEXT DEFAULT 'stopped',
       survival_mode TEXT DEFAULT 'NORMAL'
     )
@@ -246,7 +221,7 @@ SCHEMA = [
       hunger REAL DEFAULT 0,
       mood TEXT DEFAULT 'neutral',
       stage TEXT DEFAULT 'egg',
-      sex TEXT DEFAULT 'boy'              -- cosmetic: boy/girl
+      sex TEXT DEFAULT 'boy'
     )
     """,
     """
@@ -272,7 +247,7 @@ SCHEMA = [
       time_utc TEXT NOT NULL,
       time_epoch INTEGER NOT NULL,
       market TEXT NOT NULL,
-      side TEXT NOT NULL,                -- buy/sell
+      side TEXT NOT NULL,
       size_usd REAL DEFAULT 0,
       price REAL DEFAULT 0,
       pnl_usd REAL DEFAULT 0,
@@ -287,7 +262,7 @@ SCHEMA = [
       time_epoch INTEGER NOT NULL,
       type TEXT DEFAULT 'info',
       message TEXT DEFAULT '',
-      details TEXT DEFAULT ''            -- JSON
+      details TEXT DEFAULT ''
     )
     """,
     """
@@ -297,7 +272,7 @@ SCHEMA = [
       time_epoch INTEGER NOT NULL,
       source TEXT DEFAULT 'bot',
       reason TEXT DEFAULT '',
-      details TEXT DEFAULT ''            -- JSON
+      details TEXT DEFAULT ''
     )
     """
 ]
@@ -417,7 +392,6 @@ def migrate_schema():
 
 def init_db():
     migrate_schema()
-
     conn = get_conn()
     cur = conn.cursor()
 
@@ -599,7 +573,7 @@ def is_paused_or_cryo():
 
 
 # ----------------------------
-# OHLC aggregation (candles from tick prices)
+# OHLC aggregation
 # ----------------------------
 def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     market = (market or "").strip().upper()
@@ -647,7 +621,7 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
 
 
 # ==========================================================
-# Brain v1: EMA + RSI signal + ATR sizing + best market
+# Brain v1: EMA + RSI + ATR sizing
 # ==========================================================
 SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", "30"))
 _LAST_SIGNAL = {"time_epoch": 0, "market": "", "side": "hold", "confidence": 0.5, "reason": "init", "features": {}}
@@ -669,7 +643,6 @@ def _rsi(closes, period: int = 14):
     period = max(2, int(period))
     if len(closes) < period + 1:
         return None
-
     gains = 0.0
     losses = 0.0
     for i in range(-period, 0):
@@ -678,7 +651,6 @@ def _rsi(closes, period: int = 14):
             gains += diff
         else:
             losses += abs(diff)
-
     if losses == 0:
         return 100.0
     rs = gains / max(1e-9, losses)
@@ -727,13 +699,8 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     closes = [float(c.get("c")) for c in candles if c.get("c") is not None]
 
     if len(closes) < 80:
-        out = {
-            "market": market,
-            "side": "hold",
-            "confidence": 0.50,
-            "reason": "not_enough_data",
-            "features": {"closes": len(closes), "interval_sec": interval_sec},
-        }
+        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "not_enough_data",
+               "features": {"closes": len(closes), "interval_sec": interval_sec}}
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
@@ -742,19 +709,9 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     rsi14 = _rsi(closes, 14)
 
     if ema_fast is None or ema_slow is None or rsi14 is None:
-        out = {
-            "market": market,
-            "side": "hold",
-            "confidence": 0.50,
-            "reason": "indicator_nan",
-            "features": {
-                "ema_fast": ema_fast,
-                "ema_slow": ema_slow,
-                "rsi14": rsi14,
-                "closes": len(closes),
-                "interval_sec": interval_sec,
-            },
-        }
+        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "indicator_nan",
+               "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14,
+                            "closes": len(closes), "interval_sec": interval_sec}}
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
@@ -768,8 +725,8 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
 
     score = (trend * 35.0) + rsi_bias
 
-    conf_strength = abs(_sigmoid(score) - 0.5) * 2.0  # 0..1
-    confidence = 0.50 + (conf_strength * 0.45)        # 0.50..0.95ish
+    conf_strength = abs(_sigmoid(score) - 0.5) * 2.0
+    confidence = 0.50 + (conf_strength * 0.45)
 
     if score > 0.22:
         side = "buy"
@@ -886,9 +843,7 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     conf = float(sig.get("confidence") or 0.0)
     reason = str(sig.get("reason") or "no_reason")
 
-    min_conf = float(settings_public.get("best_min_confidence") or DEFAULT_SETTINGS["best_min_confidence"])
-
-    if side == "hold" or conf < min_conf:
+    if side == "hold" or conf < 0.62:
         _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
         return {
             "market": market,
@@ -934,90 +889,107 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     return out
 
 
-def _discover_markets(limit: int = 12):
+def _list_candidate_markets(max_markets: int = 8):
     """
-    Find a reasonable list of markets to evaluate.
     Priority:
-      1) heartbeat.markets (what your bot says it's watching)
-      2) recent prices markets
+      1) latest heartbeat.markets (if present)
+      2) distinct markets from latest prices (recent)
     """
+    max_markets = max(1, min(50, int(max_markets)))
+
     hb = fetch_one("heartbeat")
-    markets = []
     if hb:
-        markets = _safe_markets_list(_safe_json_loads(hb.get("markets")) or hb.get("markets"))
+        mk = _safe_markets_list(_safe_json_loads(hb.get("markets")) or hb.get("markets"))
+        mk = [m for m in mk if m]
+        if mk:
+            return mk[:max_markets]
 
-    if not markets:
-        conn = get_conn()
-        try:
-            rows = conn.execute(
-                "SELECT DISTINCT market FROM prices ORDER BY id DESC LIMIT ?",
-                (int(limit),)
-            ).fetchall()
-            markets = [str(r["market"]) for r in rows if r and r["market"]]
-        finally:
-            conn.close()
+    # fallback: last N price rows, unique markets in order
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT market FROM prices ORDER BY time_epoch DESC LIMIT 2000"
+        ).fetchall()
+    finally:
+        conn.close()
 
-    out = []
     seen = set()
-    for m in markets:
-        m = (m or "").strip().upper()
-        if m and m not in seen:
-            seen.add(m)
-            out.append(m)
+    out = []
+    for r in rows:
+        m = (r["market"] or "").strip().upper()
+        if not m or m in seen:
+            continue
+        seen.add(m)
+        out.append(m)
+        if len(out) >= max_markets:
+            break
+    return out
 
-    return out[:max(1, int(limit))]
+
+def _best_score(decision_obj: dict) -> float:
+    """
+    Simple ranking:
+      - prioritize non-HOLD
+      - confidence dominates
+      - larger notional is a mild tiebreaker
+    """
+    if not isinstance(decision_obj, dict):
+        return 0.0
+    action = (decision_obj.get("action") or "HOLD").upper()
+    conf = float(decision_obj.get("confidence") or 0.0)
+    size = float(decision_obj.get("size_usd") or 0.0)
+    if action == "HOLD":
+        return 0.0
+    return (conf * 100.0) + min(25.0, size / 50.0)
 
 
-def build_best_decision(interval_sec: int = 60, max_markets: int = 8):
-    interval_sec = max(10, int(interval_sec))
-    settings_public = get_settings_public()
-    min_conf = float(settings_public.get("best_min_confidence") or DEFAULT_SETTINGS["best_min_confidence"])
+def build_best_decision(interval_sec: int = 60):
+    settings = get_settings_public()
+    max_mk = int(settings.get("best_max_markets") or DEFAULT_SETTINGS["best_max_markets"])
+    min_conf = float(settings.get("best_min_confidence") or DEFAULT_SETTINGS["best_min_confidence"])
 
-    markets = _discover_markets(limit=max_markets)
-    if not markets:
-        return {
-            "ok": False,
-            "error": "no_markets_found",
-            "interval_sec": interval_sec,
-            "markets_checked": [],
-            "best": None,
-            "candidates": [],
-        }
-
+    markets = _list_candidate_markets(max_markets=max_mk)
     candidates = []
+
     for m in markets:
         d = build_decision(market=m, interval_sec=interval_sec)
-
         action = (d.get("action") or "HOLD").upper()
         conf = float(d.get("confidence") or 0.0)
+        eligible = (action != "HOLD") and (conf >= min_conf)
 
-        # only consider real trade actions above minimum confidence
-        eligible = action in ("BUY", "SELL") and conf >= min_conf
-
-        score = conf if eligible else (conf * 0.05)  # HOLD/weak gets tiny score
-
-        candidates.append({
+        item = {
             "market": m,
             "action": action,
             "confidence": conf,
-            "reason": d.get("reason", ""),
+            "reason": d.get("reason") or "",
             "size_usd": float(d.get("size_usd") or 0.0),
             "stop_distance": float(d.get("stop_distance") or 0.0),
             "eligible": bool(eligible),
-            "score": float(score),
-        })
+            "score": float(_best_score(d)) if eligible else 0.0,
+        }
+        candidates.append(item)
 
-    candidates.sort(key=lambda x: x["score"], reverse=True)
-    best = candidates[0] if candidates else None
-
-    if best and best["eligible"]:
-        add_event("decision", f"BEST {best['market']} {best['action']} ({best['confidence']:.2f})", best)
+    best = None
+    for c in candidates:
+        if not c.get("eligible"):
+            continue
+        if best is None or float(c.get("score") or 0.0) > float(best.get("score") or 0.0):
+            best = c
 
     return {
         "ok": True,
-        "interval_sec": interval_sec,
+        "interval_sec": int(interval_sec),
         "markets_checked": markets,
-        "best": best,
+        "best": best or {
+            "market": markets[0] if markets else "BTCUSDT",
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "no_eligible_candidates",
+            "size_usd": 0.0,
+            "stop_distance": 0.0,
+            "eligible": False,
+            "score": 0.0,
+        },
         "candidates": candidates,
     }
 
@@ -1045,8 +1017,7 @@ def home():
                 "/", "/health", "/schema",
                 "/signal", "/decision", "/decision/best",
                 "/data", "/heartbeat", "/pet", "/events", "/logs",
-                "/equity", "/trades", "/prices", "/ohlc", "/deaths",
-                "/control", "/settings"
+                "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"
             ],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade",
@@ -1096,12 +1067,11 @@ def decision():
 @app.get("/decision/best")
 def decision_best():
     interval = int(request.args.get("interval", "60"))
-    max_markets = int(request.args.get("max", str(get_settings_public().get("best_max_markets", 8))))
-    return jsonify(build_best_decision(interval_sec=interval, max_markets=max_markets))
+    return jsonify(build_best_decision(interval_sec=interval))
 
 
 # ----------------------------
-# Data routes (dashboard feeds)
+# Data routes (your existing dashboard feeds)
 # ----------------------------
 @app.get("/data")
 def data():
@@ -1132,8 +1102,9 @@ def data():
 
     latest_by_market = {}
     for p in latest_prices:
-        m = p.get("market")
+        m = (p.get("market") or "").strip().upper()
         if m and m not in latest_by_market:
+            p["market"] = m
             latest_by_market[m] = p
 
     return jsonify({
@@ -1145,7 +1116,7 @@ def data():
         "trades": [
             {
                 "time_utc": t.get("time_utc", ""),
-                "market": t.get("market", ""),
+                "market": (t.get("market", "") or "").upper(),
                 "side": t.get("side", ""),
                 "size_usd": float(t.get("size_usd") or 0),
                 "price": float(t.get("price") or 0),
@@ -1258,7 +1229,6 @@ def set_settings_route():
         bankroll_usd = float(body.get("bankroll_usd", 0))
         s["bankroll_gbp"] = max(0.0, (bankroll_usd / GBPUSD_RATE) if GBPUSD_RATE else 0.0)
 
-    # update knobs if provided
     for k in [
         "risk_per_trade_pct",
         "max_open_positions",
@@ -1267,8 +1237,8 @@ def set_settings_route():
         "atr_stop_mult",
         "min_notional_usd",
         "max_notional_usd",
-        "best_min_confidence",
         "best_max_markets",
+        "best_min_confidence",
     ]:
         if k in body:
             s[k] = body.get(k)
@@ -1339,7 +1309,7 @@ def ingest_trade():
     row = {
         "time_utc": time_utc,
         "time_epoch": _to_epoch(time_utc),
-        "market": body.get("market", "BTCUSDT"),
+        "market": (body.get("market", "BTCUSDT") or "BTCUSDT").upper(),
         "side": body.get("side", "buy"),
         "size_usd": float(body.get("size_usd", 0)),
         "price": float(body.get("price", 0)),
@@ -1367,7 +1337,10 @@ def ingest_prices():
     count = 0
     for market, price in prices.items():
         try:
-            insert_row("prices", {"time_utc": time_utc, "time_epoch": time_epoch, "market": str(market).upper(), "price": float(price)})
+            m = (str(market) or "").strip().upper()
+            if not m:
+                continue
+            insert_row("prices", {"time_utc": time_utc, "time_epoch": time_epoch, "market": m, "price": float(price)})
             count += 1
         except Exception:
             pass
