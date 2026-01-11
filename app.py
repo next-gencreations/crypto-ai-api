@@ -585,7 +585,7 @@ def is_paused_or_cryo():
 # OHLC aggregation
 # ----------------------------
 def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
-    market = (market or "").strip()
+    market = (market or "").strip().upper()
     interval_sec = max(10, int(interval_sec))
     limit = max(10, min(1000, int(limit)))
 
@@ -708,8 +708,13 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     closes = [float(c.get("c")) for c in candles if c.get("c") is not None]
 
     if len(closes) < 80:
-        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "not_enough_data",
-               "features": {"closes": len(closes), "interval_sec": interval_sec}}
+        out = {
+            "market": market,
+            "side": "hold",
+            "confidence": 0.50,
+            "reason": "not_enough_data",
+            "features": {"closes": len(closes), "interval_sec": interval_sec},
+        }
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
@@ -718,9 +723,19 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     rsi14 = _rsi(closes, 14)
 
     if ema_fast is None or ema_slow is None or rsi14 is None:
-        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "indicator_nan",
-               "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14,
-                            "closes": len(closes), "interval_sec": interval_sec}}
+        out = {
+            "market": market,
+            "side": "hold",
+            "confidence": 0.50,
+            "reason": "indicator_nan",
+            "features": {
+                "ema_fast": ema_fast,
+                "ema_slow": ema_slow,
+                "rsi14": rsi14,
+                "closes": len(closes),
+                "interval_sec": interval_sec,
+            },
+        }
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
@@ -763,6 +778,10 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
         },
     }
 
+    # Helpful event log when signal is actionable
+    if side != "hold" and out["confidence"] >= 0.60:
+        add_event("signal", f"{market} {side.upper()} ({out['confidence']:.2f})", {"reason": reason, **out["features"]})
+
     _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
     return out
 
@@ -776,16 +795,28 @@ def compute_position_size_usd(entry_price: float, stop_distance: float, settings
     if bankroll_usd <= 0 or entry_price <= 0 or stop_distance <= 0:
         return 0.0, {"why": "invalid_inputs"}
 
+    # risk money
     risk_usd = bankroll_usd * (risk_pct / 100.0)
 
-    stop_distance = max(stop_distance, entry_price * 0.001)  # min 0.1% stop
+    # enforce minimum stop distance: 0.1% of price
+    stop_distance = max(stop_distance, entry_price * 0.001)
+
+    # Position notional so that stop loss equals risk_usd
     notional = risk_usd * (entry_price / stop_distance)
 
+    # clamp
     notional = max(0.0, min(max_notional, notional))
+
     if notional < min_notional:
-        return 0.0, {"why": "below_min_notional", "notional": notional, "min_notional": min_notional}
+        return 0.0, {
+            "why": "below_min_notional",
+            "notional": notional,
+            "min_notional": min_notional,
+            "max_notional": max_notional,
+        }
 
     return float(notional), {
+        "why": "ok",
         "bankroll_usd": bankroll_usd,
         "risk_pct": risk_pct,
         "risk_usd": risk_usd,
@@ -801,6 +832,7 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
     interval_sec = max(10, int(interval_sec))
 
+    # Safety gate
     state, _ = is_paused_or_cryo()
     if state in ("PAUSED", "CRYO"):
         return {
@@ -816,6 +848,7 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     settings_public = get_settings_public()
     now_epoch = int(datetime.now(timezone.utc).timestamp())
 
+    # Cooldown gate (per market)
     last = _LAST_DECISION_BY_MARKET.get(market) or {}
     min_gap = int(settings_public.get("min_trade_interval_sec") or DEFAULT_SETTINGS["min_trade_interval_sec"])
     if last.get("time_epoch") and (now_epoch - int(last.get("time_epoch"))) < min_gap:
@@ -826,32 +859,49 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
             "reason": "cooldown",
             "size_usd": 0.0,
             "stop_distance": 0.0,
-            "features": {"interval_sec": interval_sec,
-                         "cooldown_remaining_sec": max(0, min_gap - (now_epoch - int(last.get("time_epoch"))))},
+            "features": {
+                "interval_sec": interval_sec,
+                "cooldown_remaining_sec": max(0, min_gap - (now_epoch - int(last.get("time_epoch")))),
+            },
         }
 
     sig = build_signal(market=market, interval_sec=interval_sec)
 
     candles = compute_ohlc(market=market, interval_sec=interval_sec, limit=260)
     if not candles or len(candles) < 25:
-        return {"market": market, "action": "HOLD", "confidence": 0.0, "reason": "no_candles",
-                "size_usd": 0.0, "stop_distance": 0.0, "features": {"interval_sec": interval_sec}}
+        return {
+            "market": market,
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "no_candles",
+            "size_usd": 0.0,
+            "stop_distance": 0.0,
+            "features": {"interval_sec": interval_sec},
+        }
 
     entry = float(candles[-1]["c"])
 
     atr_period = int(settings_public.get("atr_period") or DEFAULT_SETTINGS["atr_period"])
     atr = _atr(candles, period=atr_period)
     if atr is None or not (atr > 0):
-        return {"market": market, "action": "HOLD", "confidence": 0.0, "reason": "atr_nan",
-                "size_usd": 0.0, "stop_distance": 0.0, "features": {"interval_sec": interval_sec, "entry": entry}}
+        return {
+            "market": market,
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "atr_nan",
+            "size_usd": 0.0,
+            "stop_distance": 0.0,
+            "features": {"interval_sec": interval_sec, "entry": entry},
+        }
 
     stop_mult = float(settings_public.get("atr_stop_mult") or DEFAULT_SETTINGS["atr_stop_mult"])
     stop_distance = float(atr * stop_mult)
 
     side = (sig.get("side") or "hold").lower()
     conf = float(sig.get("confidence") or 0.0)
-    reason = str(sig.get("reason") or "no_reason")
+    sig_reason = str(sig.get("reason") or "no_reason")
 
+    # Minimum confidence threshold
     if side == "hold" or conf < 0.62:
         _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
         return {
@@ -871,10 +921,16 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
             "market": market,
             "action": "HOLD",
             "confidence": conf,
-            "reason": f"sizing_blocked:{sizing_meta.get('why','unknown')}",
+            "reason": f"sizing_blocked:{sizing_meta.get('why', 'unknown')}",
             "size_usd": 0.0,
             "stop_distance": stop_distance,
-            "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig, "sizing": sizing_meta},
+            "features": {
+                "interval_sec": interval_sec,
+                "entry": entry,
+                "atr": float(atr),
+                "sig": sig,
+                "sizing": sizing_meta,
+            },
         }
 
     action = "BUY" if side == "buy" else "SELL"
@@ -882,16 +938,22 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
         "market": market,
         "action": action,
         "confidence": conf,
-        "reason": reason,
+        "reason": sig_reason,
         "size_usd": float(size_usd),
         "stop_distance": float(stop_distance),
-        "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig, "sizing": sizing_meta},
+        "features": {
+            "interval_sec": interval_sec,
+            "entry": entry,
+            "atr": float(atr),
+            "sig": sig,
+            "sizing": sizing_meta,
+        },
     }
 
     add_event(
         "decision",
         f"{market} {action} ${size_usd:.0f} ({conf:.2f})",
-        {"reason": reason, "entry": entry, "atr": float(atr), "stop_distance": stop_distance, "risk": sizing_meta},
+        {"reason": sig_reason, "entry": entry, "atr": float(atr), "stop_distance": stop_distance, "risk": sizing_meta},
     )
 
     _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": action}
@@ -917,8 +979,11 @@ def home():
         "db_path": DB_PATH,
         "schema_version": fetch_one("meta", order_by="id ASC") or {},
         "endpoints": {
-            "GET": ["/", "/health", "/schema", "/signal", "/decision", "/data", "/heartbeat", "/pet", "/events", "/logs",
-                    "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"],
+            "GET": [
+                "/", "/health", "/schema", "/signal", "/decision", "/data",
+                "/heartbeat", "/pet", "/events", "/logs",
+                "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"
+            ],
             "POST": [
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade",
                 "/ingest/prices", "/ingest/death",
@@ -965,7 +1030,7 @@ def decision():
 
 
 # ----------------------------
-# Data routes (your existing dashboard feeds)
+# Data routes (dashboard feeds)
 # ----------------------------
 @app.get("/data")
 def data():
@@ -1116,15 +1181,14 @@ def set_settings_route():
     body = request.get_json(force=True, silent=True) or {}
     s = load_settings()
 
+    # bankroll optional
     if "bankroll_gbp" in body:
         s["bankroll_gbp"] = max(0.0, float(body.get("bankroll_gbp", 0)))
     elif "bankroll_usd" in body:
         bankroll_usd = float(body.get("bankroll_usd", 0))
         s["bankroll_gbp"] = max(0.0, (bankroll_usd / GBPUSD_RATE) if GBPUSD_RATE else 0.0)
-    else:
-        # bankroll is optional now because we also allow updating brain knobs
-        pass
 
+    # update brain knobs if present
     for k in [
         "risk_per_trade_pct",
         "max_open_positions",
@@ -1231,7 +1295,12 @@ def ingest_prices():
     count = 0
     for market, price in prices.items():
         try:
-            insert_row("prices", {"time_utc": time_utc, "time_epoch": time_epoch, "market": str(market), "price": float(price)})
+            insert_row("prices", {
+                "time_utc": time_utc,
+                "time_epoch": time_epoch,
+                "market": str(market).upper(),
+                "price": float(price)
+            })
             count += 1
         except Exception:
             pass
@@ -1264,7 +1333,10 @@ def ingest_death():
         "reason": body.get("reason", "") or "",
         "details": json.dumps(body.get("details", {}))
     })
-    add_event("warning", "Death/Cryo record added", {"reason": body.get("reason", ""), "source": body.get("source", "bot")})
+    add_event("warning", "Death/Cryo record added", {
+        "reason": body.get("reason", ""),
+        "source": body.get("source", "bot")
+    })
     return jsonify({"ok": True})
 
 
