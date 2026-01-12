@@ -843,7 +843,8 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     conf = float(sig.get("confidence") or 0.0)
     reason = str(sig.get("reason") or "no_reason")
 
-    if side == "hold" or conf < 0.62:
+    min_conf = float(settings_public.get("best_min_confidence", 0.62))
+i   if side == "hold" or conf < min_conf:
         _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
         return {
             "market": market,
