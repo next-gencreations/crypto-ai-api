@@ -39,7 +39,7 @@ DEFAULT_SETTINGS = {
 
     # /decision/best controls (scan more + allow a trade more often)
     "best_max_markets": 20,          # was 8
-    "best_min_confidence": 0.58,     # was 0.62
+    "best_min_confidence": 0.45,     # was 0.62
 }
 
 
