@@ -33,7 +33,7 @@ DEFAULT_SETTINGS = {
     "max_open_positions": 1,         # keep 1 for safety
     "min_trade_interval_sec": 20,    # was 60 (faster decisions)
     "atr_period": 14,
-    "atr_stop_mult": 1.6,            # was 1.8 (slightly tighter stop)
+    "atr_stop_mult": 1.35,      # was 1.8 (slightly tighter stop)
     "min_notional_usd": 20.0,        # was 25 (easier to place trades on small bankroll)
     "max_notional_usd": 900.0,       # was 500 (allows bigger sizing if bankroll grows)
 
