@@ -28,18 +28,18 @@ GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))  # simple fixed rate
 DEFAULT_SETTINGS = {
     "bankroll_gbp": 100.0,
 
-    # Brain v1 risk controls
-    "risk_per_trade_pct": 0.5,     # % of bankroll risked per trade
-    "max_open_positions": 1,
-    "min_trade_interval_sec": 60,  # decision cooldown
+    # Brain v1 risk controls (more active but still sane)
+    "risk_per_trade_pct": 1.0,       # was 0.5
+    "max_open_positions": 1,         # keep 1 for safety
+    "min_trade_interval_sec": 20,    # was 60 (faster decisions)
     "atr_period": 14,
-    "atr_stop_mult": 1.8,
-    "min_notional_usd": 25.0,
-    "max_notional_usd": 500.0,
+    "atr_stop_mult": 1.6,            # was 1.8 (slightly tighter stop)
+    "min_notional_usd": 20.0,        # was 25 (easier to place trades on small bankroll)
+    "max_notional_usd": 900.0,       # was 500 (allows bigger sizing if bankroll grows)
 
-    # /decision/best controls
-    "best_max_markets": 8,         # max markets to scan in /decision/best
-    "best_min_confidence": 0.62,   # minimum confidence to be considered "eligible"
+    # /decision/best controls (scan more + allow a trade more often)
+    "best_max_markets": 20,          # was 8
+    "best_min_confidence": 0.58,     # was 0.62
 }
 
 
