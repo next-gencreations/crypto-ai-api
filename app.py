@@ -3,7 +3,9 @@ import json
 import sqlite3
 import math
 from datetime import datetime, timezone, timedelta
-
+from dataclasses import dataclass, asdict
+from typing import Optional, Dict, Any, List
+import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -18,9 +20,7 @@ if (CORS_ORIGINS or "").strip() == "*":
 else:
     allowed = [o.strip() for o in (CORS_ORIGINS or "").split(",") if o.strip()]
     CORS(app, resources={r"/*": {"origins": allowed}})
-from dataclasses import dataclass, asdict
-from typing import Optional, Dict, Any, List
-import time
+
 
 # --- Paper trading state (in-memory) ---
 @dataclass
