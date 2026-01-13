@@ -56,8 +56,6 @@ PAPER_CFG = PaperConfig()
 
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
-PAPER = PaperState()
-PAPER_TRADES: List[Dict[str, Any]] = []
 
 # paste helpers here (start line 60)
 def _bps(x: float) -> float:
