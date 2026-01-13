@@ -40,6 +40,22 @@ class PaperState:
     drawdown_pct: float = 0.0
     position: Optional[PaperPosition] = None
 
+
+# --- Paper trading config ---
+@dataclass
+class PaperConfig:
+    enabled: bool = True
+    fee_bps: float = 4.0           # 0.04% each side
+    slippage_bps: float = 3.0      # 0.03% adverse
+    max_drawdown_pct: float = 12.0 # kill-switch
+    rr_takeprofit: float = 1.5     # 1.5R take profit (0 disables)
+    allow_shorts: bool = True
+    one_position_only: bool = True
+
+PAPER_CFG = PaperConfig()
+
+PAPER = PaperState()
+PAPER_TRADES: List[Dict[str, Any]] = []
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
 
