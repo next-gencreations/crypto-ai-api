@@ -1331,7 +1331,69 @@ def get_logs():
         lines.append(f"{t} [{typ}] {msg}")
 
     return jsonify(lines)
+@app.get("/paper/state")
+def paper_state():
+    _paper_update_equity()
+    return {
+        "cash_usd": PAPER.cash_usd,
+        "equity_usd": PAPER.equity_usd,
+        "peak_equity_usd": PAPER.peak_equity_usd,
+        "drawdown_pct": PAPER.drawdown_pct,
+        "position": asdict(PAPER.position) if PAPER.position else None,
+        "trades": len(PAPER_TRADES),
+    }
 
+@app.get("/paper/trades")
+def paper_trades():
+    return {"trades": PAPER_TRADES[-200:]}  # last 200
+
+@app.post("/paper/reset")
+def paper_reset():
+    body = request.get_json(silent=True) or {}
+    start = float(body.get("start_cash_usd") or 1000.0)
+
+    PAPER.cash_usd = start
+    PAPER.equity_usd = start
+    PAPER.peak_equity_usd = start
+    PAPER.drawdown_pct = 0.0
+    PAPER.position = None
+
+    PAPER_TRADES.clear()
+    return {"ok": True, "start_cash_usd": start}
+
+@app.post("/paper/tick")
+def paper_tick():
+    """
+    1) update stop
+    2) get best decision (your existing logic)
+    3) if BUY/SELL eligible and no position -> open paper position
+    """
+    stop_result = _paper_check_stop()
+
+    # Call your existing logic. If you already have a /decision/best function, reuse it.
+    # Otherwise call the same function used by that endpoint.
+    decision = build_best_decision(interval_sec=60) if "build_best_decision" in globals() else None
+    if decision is None:
+        # fallback: just do one market
+        decision = build_decision(market="BTCUSDT", interval_sec=60)
+
+    opened = None
+    if decision.get("action") in ("BUY", "SELL") and bool(decision.get("eligible", True)):
+        opened = _paper_open_from_decision(decision)
+
+    _paper_update_equity()
+    return {
+        "ok": True,
+        "stop": stop_result,
+        "decision": decision,
+        "open": opened,
+        "state": {
+            "cash_usd": PAPER.cash_usd,
+            "equity_usd": PAPER.equity_usd,
+            "drawdown_pct": PAPER.drawdown_pct,
+            "position": asdict(PAPER.position) if PAPER.position else None,
+        }
+}
 
 @app.get("/equity")
 def get_equity():
