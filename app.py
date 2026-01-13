@@ -2,10 +2,11 @@ import os
 import json
 import sqlite3
 import math
+import time
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
-import time
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -21,8 +22,10 @@ else:
     allowed = [o.strip() for o in (CORS_ORIGINS or "").split(",") if o.strip()]
     CORS(app, resources={r"/*": {"origins": allowed}})
 
+# ==========================================================
+# Paper Trading (in-memory)
+# ==========================================================
 
-# --- Paper trading state (in-memory) ---
 @dataclass
 class PaperPosition:
     market: str
@@ -31,6 +34,7 @@ class PaperPosition:
     entry: float
     stop: float
     opened_ts: int
+
 
 @dataclass
 class PaperState:
@@ -41,124 +45,127 @@ class PaperState:
     position: Optional[PaperPosition] = None
 
 
-# --- Paper trading config ---
 @dataclass
 class PaperConfig:
     enabled: bool = True
-    fee_bps: float = 4.0           # 0.04% each side
-    slippage_bps: float = 3.0      # 0.03% adverse
-    max_drawdown_pct: float = 12.0 # kill-switch
-    rr_takeprofit: float = 1.5     # 1.5R take profit (0 disables)
+    fee_bps: float = 4.0            # 0.04% each side
+    slippage_bps: float = 3.0       # 0.03% adverse
+    max_drawdown_pct: float = 12.0  # kill-switch
+    rr_takeprofit: float = 1.5      # 1.5R take profit (0 disables)
     allow_shorts: bool = True
     one_position_only: bool = True
 
-PAPER_CFG = PaperConfig()
 
+PAPER_CFG = PaperConfig()
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
 
-# paste helpers here (start line 60)
+
+# ----------------------------
+# Paper helpers
+# ----------------------------
 def _bps(x: float) -> float:
     return float(x) / 10000.0
 
+
 def _paper_fee(notional: float) -> float:
     return abs(float(notional)) * _bps(PAPER_CFG.fee_bps)
+
 
 def _paper_apply_slippage(price: float, side: str, is_entry: bool) -> float:
     slip = _bps(PAPER_CFG.slippage_bps)
     side = (side or "").upper()
     if side == "LONG":
+        # adverse: entry worse (higher), exit worse (lower)
         return price * (1.0 + slip) if is_entry else price * (1.0 - slip)
     else:
+        # adverse for SHORT: entry worse (lower), exit worse (higher)
         return price * (1.0 - slip) if is_entry else price * (1.0 + slip)
 
-def _paper_block_new_entries() -> Optional[str]:
-    _paper_update_equity()
-    if PAPER_CFG.max_drawdown_pct and PAPER.drawdown_pct >= PAPER_CFG.max_drawdown_pct:
-        return "max_drawdown"
-    return None
+
 def _paper_mark_price(market: str) -> float:
-    # Use your existing candles function to get the latest close as "mark"
     candles = compute_ohlc(market=market, interval_sec=60, limit=2)
     return float(candles[-1]["c"]) if candles else 0.0
+
 
 def _paper_update_equity():
     PAPER.equity_usd = PAPER.cash_usd
     if PAPER.position:
         mark = _paper_mark_price(PAPER.position.market)
         if mark > 0:
-            pnl = 0.0
             if PAPER.position.side == "LONG":
                 pnl = (mark - PAPER.position.entry) * PAPER.position.qty
             else:
                 pnl = (PAPER.position.entry - mark) * PAPER.position.qty
-            PAPER.equity_usd += pnl
+            PAPER.equity_usd += float(pnl)
 
     PAPER.peak_equity_usd = max(PAPER.peak_equity_usd, PAPER.equity_usd)
     if PAPER.peak_equity_usd > 0:
-        PAPER.drawdown_pct = max(0.0, (PAPER.peak_equity_usd - PAPER.equity_usd) / PAPER.peak_equity_usd * 100.0)
+        PAPER.drawdown_pct = max(
+            0.0,
+            (PAPER.peak_equity_usd - PAPER.equity_usd) / PAPER.peak_equity_usd * 100.0
+        )
 
-def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    decision is your existing build_decision/best output.
-    Expects: market, action BUY/SELL, size_usd, stop_distance, features.entry
-    """
-    market = decision["market"]
-    action = decision["action"]
-    size_usd = float(decision.get("size_usd") or 0.0)
-    stop_distance = float(decision.get("stop_distance") or 0.0)
-    entry = float((decision.get("features") or {}).get("entry") or 0.0)
 
-    if entry <= 0 or size_usd <= 0 or stop_distance <= 0:
-        return {"ok": False, "why": "bad_decision_inputs"}
+def _paper_block_new_entries() -> Optional[str]:
+    _paper_update_equity()
+    if PAPER_CFG.max_drawdown_pct and PAPER.drawdown_pct >= PAPER_CFG.max_drawdown_pct:
+        return "max_drawdown"
+    return None
 
-    # Paper rule: only one open position
-    if PAPER.position is not None:
-        return {"ok": False, "why": "position_already_open"}
 
-    side = "LONG" if action == "BUY" else "SHORT"
+def _paper_tp_price(pos: PaperPosition) -> Optional[float]:
+    rr = float(PAPER_CFG.rr_takeprofit or 0.0)
+    if rr <= 0:
+        return None
+    r = abs(float(pos.entry) - float(pos.stop))
+    if r <= 0:
+        return None
+    if pos.side == "LONG":
+        return float(pos.entry + rr * r)
+    return float(pos.entry - rr * r)
 
-    entry = _paper_apply_slippage(entry, side, is_entry=True)
-    qty = size_usd / entry
 
-    # Simple stop placement
-    if side == "LONG":
-        stop = entry - stop_distance
+def _paper_close_position(exit_price: float, reason: str) -> Dict[str, Any]:
+    pos = PAPER.position
+    if not pos:
+        return {"ok": False, "why": "no_position"}
+
+    exit_exec = _paper_apply_slippage(float(exit_price), pos.side, is_entry=False)
+
+    if pos.side == "LONG":
+        pnl = (exit_exec - pos.entry) * pos.qty
     else:
-        stop = entry + stop_distance
+        pnl = (pos.entry - exit_exec) * pos.qty
 
-    PAPER.position = PaperPosition(
-        market=market,
-        side=side,
-        qty=float(qty),
-        entry=float(entry),
-        stop=float(stop),
-        opened_ts=int(time.time()),
-    )
+    notional_entry = pos.entry * pos.qty
+    PAPER.cash_usd += notional_entry + pnl
+
+    notional_exit = exit_exec * pos.qty
+    exit_fee = _paper_fee(notional_exit)
+    PAPER.cash_usd -= exit_fee
 
     PAPER_TRADES.append({
-        "ts": PAPER.position.opened_ts,
-        "type": "OPEN",
-        "market": market,
-        "side": side,
-        "qty": float(qty),
-        "entry": float(entry),
-        "stop": float(stop),
-        "meta": {
-            "confidence": decision.get("confidence"),
-            "reason": decision.get("reason"),
-            "stop_distance": stop_distance,
-            "size_usd": size_usd,
-        }
+        "ts": int(time.time()),
+        "type": "CLOSE",
+        "market": pos.market,
+        "side": pos.side,
+        "qty": float(pos.qty),
+        "entry": float(pos.entry),
+        "exit": float(exit_exec),
+        "pnl": float(pnl),
+        "reason": reason,
+        "stop": float(pos.stop),
+        "tp": _paper_tp_price(pos),
+        "fee": float(exit_fee),
     })
 
-    # Assume no margin; just reduce cash by notional (spot-style paper)
-    fee = _paper_fee(size_usd)
-    PAPER.cash_usd -= (size_usd + fee)
+    PAPER.position = None
     _paper_update_equity()
-    return {"ok": True, "opened": asdict(PAPER.position)}
+    return {"ok": True, "closed_at": float(exit_exec), "pnl": float(pnl), "reason": reason}
 
-def _paper_check_stop() -> Optional[Dict[str, Any]]:
+
+def _paper_check_exit() -> Optional[Dict[str, Any]]:
     if not PAPER.position:
         return None
 
@@ -167,63 +174,107 @@ def _paper_check_stop() -> Optional[Dict[str, Any]]:
         return None
 
     pos = PAPER.position
-    hit = False
+
+    # stop
     if pos.side == "LONG" and mark <= pos.stop:
-        hit = True
+        return _paper_close_position(mark, "STOP_HIT")
     if pos.side == "SHORT" and mark >= pos.stop:
-        hit = True
+        return _paper_close_position(mark, "STOP_HIT")
 
-    if not hit:
-        return None
+    # take profit
+    tp = _paper_tp_price(pos)
+    if tp is not None:
+        if pos.side == "LONG" and mark >= tp:
+            return _paper_close_position(mark, "TAKE_PROFIT")
+        if pos.side == "SHORT" and mark <= tp:
+            return _paper_close_position(mark, "TAKE_PROFIT")
 
-    # Close at mark
-    pnl = 0.0
-    if pos.side == "LONG":
-        pnl = (mark - pos.entry) * pos.qty
-    else:
-        pnl = (pos.entry - mark) * pos.qty
+    return None
 
-    # Return cash (notional) + pnl
-    notional = pos.entry * pos.qty
-    PAPER.cash_usd += notional + pnl
+
+def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
+    if not PAPER_CFG.enabled:
+        return {"ok": False, "why": "paper_disabled"}
+
+    market = (decision.get("market") or "").strip().upper()
+    action = (decision.get("action") or "HOLD").upper()
+    size_usd = float(decision.get("size_usd") or 0.0)
+    stop_distance = float(decision.get("stop_distance") or 0.0)
+
+    entry = float((decision.get("features") or {}).get("entry") or 0.0)
+    if entry <= 0:
+        entry = _paper_mark_price(market)
+
+    if not market or action not in ("BUY", "SELL") or entry <= 0 or size_usd <= 0 or stop_distance <= 0:
+        return {"ok": False, "why": "bad_decision_inputs"}
+
+    if action == "SELL" and not PAPER_CFG.allow_shorts:
+        return {"ok": False, "why": "shorts_disabled"}
+
+    if PAPER_CFG.one_position_only and PAPER.position is not None:
+        return {"ok": False, "why": "position_already_open"}
+
+    block = _paper_block_new_entries()
+    if block:
+        return {"ok": False, "why": block}
+
+    side = "LONG" if action == "BUY" else "SHORT"
+
+    entry_exec = _paper_apply_slippage(entry, side, is_entry=True)
+    qty = size_usd / entry_exec
+
+    stop = (entry_exec - stop_distance) if side == "LONG" else (entry_exec + stop_distance)
+
+    PAPER.position = PaperPosition(
+        market=market,
+        side=side,
+        qty=float(qty),
+        entry=float(entry_exec),
+        stop=float(stop),
+        opened_ts=int(time.time()),
+    )
+
+    entry_fee = _paper_fee(size_usd)
+    PAPER.cash_usd -= (size_usd + entry_fee)
 
     PAPER_TRADES.append({
-        "ts": int(time.time()),
-        "type": "CLOSE",
-        "market": pos.market,
-        "side": pos.side,
-        "qty": pos.qty,
-        "exit": float(mark),
-        "pnl": float(pnl),
-        "reason": "STOP_HIT",
-        "stop": pos.stop,
-        "entry": pos.entry,
+        "ts": PAPER.position.opened_ts,
+        "type": "OPEN",
+        "market": market,
+        "side": side,
+        "qty": float(qty),
+        "entry": float(entry_exec),
+        "stop": float(stop),
+        "fee": float(entry_fee),
+        "meta": {
+            "confidence": decision.get("confidence"),
+            "reason": decision.get("reason"),
+            "stop_distance": stop_distance,
+            "size_usd": size_usd,
+        }
     })
 
-    PAPER.position = None
     _paper_update_equity()
-    return {"ok": True, "closed_at": float(mark), "pnl": float(pnl)}
-# ----------------------------
+    return {"ok": True, "opened": asdict(PAPER.position)}
+
+
+# ==========================================================
 # Settings (bankroll + brain controls)
-# ----------------------------
+# ==========================================================
 SETTINGS_PATH = os.getenv("SETTINGS_PATH", "/var/data/settings.json")
-GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))  # simple fixed rate
+GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))
 
 DEFAULT_SETTINGS = {
     "bankroll_gbp": 100.0,
-
-    # Brain v1 risk controls (more active but still sane)
-    "risk_per_trade_pct": 1.0,       # was 0.5
-    "max_open_positions": 1,         # keep 1 for safety
-    "min_trade_interval_sec": 20,    # was 60 (faster decisions)
+    "risk_per_trade_pct": 1.0,
+    "max_open_positions": 1,
+    "min_trade_interval_sec": 20,
     "atr_period": 14,
-    "atr_stop_mult": 1.35,      # was 1.8 (slightly tighter stop)
-    "min_notional_usd": 20.0,        # was 25 (easier to place trades on small bankroll)
-    "max_notional_usd": 900.0,       # was 500 (allows bigger sizing if bankroll grows)
-
-    # /decision/best controls (scan more + allow a trade more often)
-    "best_max_markets": 20,          # was 8
-    "best_min_confidence": 0.45,     # was 0.62
+    "atr_stop_mult": 1.35,
+    "min_notional_usd": 20.0,
+    "max_notional_usd": 900.0,
+    "best_max_markets": 20,
+    "best_min_confidence": 0.45,
 }
 
 
@@ -278,9 +329,9 @@ def get_settings_public():
     }
 
 
-# ----------------------------
+# ==========================================================
 # Database config
-# ----------------------------
+# ==========================================================
 DB_PATH = os.getenv("DB_PATH", "/var/data/data.db")
 
 
@@ -883,8 +934,10 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     closes = [float(c.get("c")) for c in candles if c.get("c") is not None]
 
     if len(closes) < 80:
-        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "not_enough_data",
-               "features": {"closes": len(closes), "interval_sec": interval_sec}}
+        out = {
+            "market": market, "side": "hold", "confidence": 0.50, "reason": "not_enough_data",
+            "features": {"closes": len(closes), "interval_sec": interval_sec}
+        }
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
@@ -893,9 +946,11 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     rsi14 = _rsi(closes, 14)
 
     if ema_fast is None or ema_slow is None or rsi14 is None:
-        out = {"market": market, "side": "hold", "confidence": 0.50, "reason": "indicator_nan",
-               "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14,
-                            "closes": len(closes), "interval_sec": interval_sec}}
+        out = {
+            "market": market, "side": "hold", "confidence": 0.50, "reason": "indicator_nan",
+            "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14,
+                         "closes": len(closes), "interval_sec": interval_sec}
+        }
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
 
@@ -948,768 +1003,4 @@ def compute_position_size_usd(entry_price: float, stop_distance: float, settings
     min_notional = float(settings_public.get("min_notional_usd") or DEFAULT_SETTINGS["min_notional_usd"])
     max_notional = float(settings_public.get("max_notional_usd") or DEFAULT_SETTINGS["max_notional_usd"])
 
-    if bankroll_usd <= 0 or entry_price <= 0 or stop_distance <= 0:
-        return 0.0, {"why": "invalid_inputs"}
-
-    risk_usd = bankroll_usd * (risk_pct / 100.0)
-
-    stop_distance = max(stop_distance, entry_price * 0.001)  # min 0.1% stop
-    notional = risk_usd * (entry_price / stop_distance)
-
-    notional = max(0.0, min(max_notional, notional))
-    if notional < min_notional:
-        return 0.0, {"why": "below_min_notional", "notional": notional, "min_notional": min_notional}
-
-    return float(notional), {
-        "bankroll_usd": bankroll_usd,
-        "risk_pct": risk_pct,
-        "risk_usd": risk_usd,
-        "entry": entry_price,
-        "stop_distance": stop_distance,
-        "notional": notional,
-        "min_notional": min_notional,
-        "max_notional": max_notional,
-    }
-
-
-def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
-    market = (market or "BTCUSDT").strip().upper()
-    interval_sec = max(10, int(interval_sec))
-
-    state, _ = is_paused_or_cryo()
-    if state in ("PAUSED", "CRYO"):
-        return {
-            "market": market,
-            "action": "HOLD",
-            "confidence": 0.0,
-            "reason": f"state_{state.lower()}",
-            "size_usd": 0.0,
-            "stop_distance": 0.0,
-            "features": {"interval_sec": interval_sec, "state": state},
-        }
-
-    settings_public = get_settings_public()
-    now_epoch = int(datetime.now(timezone.utc).timestamp())
-
-    last = _LAST_DECISION_BY_MARKET.get(market) or {}
-    min_gap = int(settings_public.get("min_trade_interval_sec") or DEFAULT_SETTINGS["min_trade_interval_sec"])
-    if last.get("time_epoch") and (now_epoch - int(last.get("time_epoch"))) < min_gap:
-        return {
-            "market": market,
-            "action": "HOLD",
-            "confidence": 0.0,
-            "reason": "cooldown",
-            "size_usd": 0.0,
-            "stop_distance": 0.0,
-            "features": {"interval_sec": interval_sec,
-                         "cooldown_remaining_sec": max(0, min_gap - (now_epoch - int(last.get("time_epoch"))))},
-        }
-
-    sig = build_signal(market=market, interval_sec=interval_sec)
-
-    candles = compute_ohlc(market=market, interval_sec=interval_sec, limit=260)
-    if not candles or len(candles) < 25:
-        return {"market": market, "action": "HOLD", "confidence": 0.0, "reason": "no_candles",
-                "size_usd": 0.0, "stop_distance": 0.0, "features": {"interval_sec": interval_sec}}
-
-    entry = float(candles[-1]["c"])
-
-    atr_period = int(settings_public.get("atr_period") or DEFAULT_SETTINGS["atr_period"])
-    atr = _atr(candles, period=atr_period)
-    if atr is None or not (atr > 0):
-        return {"market": market, "action": "HOLD", "confidence": 0.0, "reason": "atr_nan",
-                "size_usd": 0.0, "stop_distance": 0.0, "features": {"interval_sec": interval_sec, "entry": entry}}
-
-    stop_mult = float(settings_public.get("atr_stop_mult") or DEFAULT_SETTINGS["atr_stop_mult"])
-    stop_distance = float(atr * stop_mult)
-
-    side = (sig.get("side") or "hold").lower()
-    conf = float(sig.get("confidence") or 0.0)
-    reason = str(sig.get("reason") or "no_reason")
-
-    min_conf = float(settings_public.get("best_min_confidence", 0.62))
-    if side == "hold" and conf < min_conf:
-        _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
-        return {
-            "market": market,
-            "action": "HOLD",
-            "confidence": conf,
-            "reason": "no_trade_edge",
-            "size_usd": 0.0,
-            "stop_distance": stop_distance,
-            "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig},
-        }
-
-    size_usd, sizing_meta = compute_position_size_usd(entry, stop_distance, settings_public)
-    if size_usd <= 0:
-        _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
-        return {
-            "market": market,
-            "action": "HOLD",
-            "confidence": conf,
-            "reason": f"sizing_blocked:{sizing_meta.get('why','unknown')}",
-            "size_usd": 0.0,
-            "stop_distance": stop_distance,
-            "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig, "sizing": sizing_meta},
-        }
-
-    action = "BUY" if side == "buy" else "SELL"
-    out = {
-        "market": market,
-        "action": action,
-        "confidence": conf,
-        "reason": reason,
-        "size_usd": float(size_usd),
-        "stop_distance": float(stop_distance),
-        "features": {"interval_sec": interval_sec, "entry": entry, "atr": float(atr), "sig": sig, "sizing": sizing_meta},
-    }
-
-    add_event(
-        "decision",
-        f"{market} {action} ${size_usd:.0f} ({conf:.2f})",
-        {"reason": reason, "entry": entry, "atr": float(atr), "stop_distance": stop_distance, "risk": sizing_meta},
-    )
-
-    _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": action}
-    return out
-
-
-def _list_candidate_markets(max_markets: int = 8):
-    """
-    Priority:
-      1) latest heartbeat.markets (if present)
-      2) distinct markets from latest prices (recent)
-    """
-    max_markets = max(1, min(50, int(max_markets)))
-
-    hb = fetch_one("heartbeat")
-    if hb:
-        mk = _safe_markets_list(_safe_json_loads(hb.get("markets")) or hb.get("markets"))
-        mk = [m for m in mk if m]
-        if mk:
-            return mk[:max_markets]
-
-    # fallback: last N price rows, unique markets in order
-    conn = get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT market FROM prices ORDER BY time_epoch DESC LIMIT 2000"
-        ).fetchall()
-    finally:
-        conn.close()
-
-    seen = set()
-    out = []
-    for r in rows:
-        m = (r["market"] or "").strip().upper()
-        if not m or m in seen:
-            continue
-        seen.add(m)
-        out.append(m)
-        if len(out) >= max_markets:
-            break
-    return out
-
-
-def _best_score(decision_obj: dict) -> float:
-    """
-    Simple ranking:
-      - prioritize non-HOLD
-      - confidence dominates
-      - larger notional is a mild tiebreaker
-    """
-    if not isinstance(decision_obj, dict):
-        return 0.0
-    action = (decision_obj.get("action") or "HOLD").upper()
-    conf = float(decision_obj.get("confidence") or 0.0)
-    size = float(decision_obj.get("size_usd") or 0.0)
-    if action == "HOLD":
-        return 0.0
-    return (conf * 100.0) + min(25.0, size / 50.0)
-
-
-def build_best_decision(interval_sec: int = 60):
-    settings = get_settings_public()
-    max_mk = int(settings.get("best_max_markets") or DEFAULT_SETTINGS["best_max_markets"])
-    min_conf = float(settings.get("best_min_confidence") or DEFAULT_SETTINGS["best_min_confidence"])
-
-    markets = _list_candidate_markets(max_markets=max_mk)
-    candidates = []
-
-    for m in markets:
-        d = build_decision(market=m, interval_sec=interval_sec)
-        action = (d.get("action") or "HOLD").upper()
-        conf = float(d.get("confidence") or 0.0)
-        eligible = (action != "HOLD") and (conf >= min_conf)
-
-        item = {
-            "market": m,
-            "action": action,
-            "confidence": conf,
-            "reason": d.get("reason") or "",
-            "size_usd": float(d.get("size_usd") or 0.0),
-            "stop_distance": float(d.get("stop_distance") or 0.0),
-            "eligible": bool(eligible),
-            "score": float(_best_score(d)) if eligible else 0.0,
-        }
-        candidates.append(item)
-
-    best = None
-    for c in candidates:
-        if not c.get("eligible"):
-            continue
-        if best is None or float(c.get("score") or 0.0) > float(best.get("score") or 0.0):
-            best = c
-
-    return {
-        "ok": True,
-        "interval_sec": int(interval_sec),
-        "markets_checked": markets,
-        "best": best or {
-            "market": markets[0] if markets else "BTCUSDT",
-            "action": "HOLD",
-            "confidence": 0.0,
-            "reason": "no_eligible_candidates",
-            "size_usd": 0.0,
-            "stop_distance": 0.0,
-            "eligible": False,
-            "score": 0.0,
-        },
-        "candidates": candidates,
-    }
-
-
-# ----------------------------
-# Base routes
-# ----------------------------
-@app.get("/health")
-def health():
-    return jsonify({"ok": True, "time_utc": utc_now_iso()})
-
-
-@app.get("/")
-def home():
-    parent = os.path.dirname(DB_PATH)
-    return jsonify({
-        "ok": True,
-        "service": "crypto-ai-api",
-        "time_utc": utc_now_iso(),
-        "db_parent_exists": os.path.exists(parent),
-        "db_path": DB_PATH,
-        "schema_version": fetch_one("meta", order_by="id ASC") or {},
-        "endpoints": {
-            "GET": [
-                "/", "/health", "/schema",
-                "/signal", "/decision", "/decision/best",
-                "/data", "/heartbeat", "/pet", "/events", "/logs",
-                "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"
-            ],
-            "POST": [
-                "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade",
-                "/ingest/prices", "/ingest/death",
-                "/control/pause", "/control/cryo", "/control/revive",
-                "/settings"
-            ],
-            "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/prices", "/reset/deaths"]
-        }
-    })
-
-
-@app.get("/schema")
-def schema():
-    conn = get_conn()
-    out = {}
-    try:
-        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
-        for t in tables:
-            name = t["name"]
-            cols = conn.execute(f"PRAGMA table_info({name})").fetchall()
-            out[name] = [{"name": c[1], "type": c[2]} for c in cols]
-    finally:
-        conn.close()
-    return jsonify(out)
-
-
-@app.get("/control")
-def control_get():
-    return jsonify(get_control())
-
-
-@app.get("/signal")
-def signal():
-    market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
-    return jsonify(build_signal(market=market, interval_sec=interval))
-
-
-@app.get("/decision")
-def decision():
-    market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
-    return jsonify(build_decision(market=market, interval_sec=interval))
-
-
-@app.get("/decision/best")
-def decision_best():
-    interval = int(request.args.get("interval", "60"))
-    return jsonify(build_best_decision(interval_sec=interval))
-
-
-# ----------------------------
-# Data routes (your existing dashboard feeds)
-# ----------------------------
-@app.get("/data")
-def data():
-    state, ctrl = is_paused_or_cryo()
-
-    hb = fetch_one("heartbeat")
-    pet = fetch_one("pet")
-
-    equity_points = fetch_many("equity", limit=200, order_by="id DESC")
-    equity_points.reverse()
-
-    recent_trades = fetch_many("trades", limit=80, order_by="id DESC")
-    latest_prices = fetch_many("prices", limit=1200, order_by="id DESC")
-
-    events = fetch_many("events", limit=250, order_by="id DESC")
-    events.reverse()
-    for e in events:
-        e["details"] = _safe_json_loads(e.get("details"))
-
-    deaths = fetch_many("deaths", limit=200, order_by="id DESC")
-    deaths.reverse()
-    for d in deaths:
-        d["details"] = _safe_json_loads(d.get("details"))
-
-    if hb:
-        hb["markets"] = _safe_markets_list(_safe_json_loads(hb.get("markets")) or hb.get("markets"))
-        hb["prices_ok"] = int(hb.get("prices_ok") or 0)
-
-    latest_by_market = {}
-    for p in latest_prices:
-        m = (p.get("market") or "").strip().upper()
-        if m and m not in latest_by_market:
-            p["market"] = m
-            latest_by_market[m] = p
-
-    return jsonify({
-        "control": ctrl,
-        "state": state,
-        "heartbeat": hb or {},
-        "pet": pet or {},
-        "equity": [{"equity_usd": float(p["equity_usd"]), "time_utc": p["time_utc"]} for p in equity_points],
-        "trades": [
-            {
-                "time_utc": t.get("time_utc", ""),
-                "market": (t.get("market", "") or "").upper(),
-                "side": t.get("side", ""),
-                "size_usd": float(t.get("size_usd") or 0),
-                "price": float(t.get("price") or 0),
-                "pnl_usd": float(t.get("pnl_usd") or 0),
-                "confidence": float(t.get("confidence") or 0),
-                "reason": t.get("reason") or ""
-            } for t in recent_trades
-        ],
-        "prices": latest_prices,
-        "latest_prices": latest_by_market,
-        "events": events,
-        "deaths": deaths,
-        "settings": get_settings_public(),
-        "stats": {
-            "paused": state in ("PAUSED", "CRYO"),
-            "state": state,
-            "pause_until_utc": ctrl.get("pause_until_utc", ""),
-            "pause_reason": ctrl.get("pause_reason", ""),
-            "cryo_until_utc": ctrl.get("cryo_until_utc", ""),
-            "cryo_reason": ctrl.get("cryo_reason", ""),
-            "total_trades_loaded": len(recent_trades),
-        }
-    })
-
-
-@app.get("/ohlc")
-def ohlc():
-    market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
-    limit = int(request.args.get("limit", "200"))
-    candles = compute_ohlc(market=market, interval_sec=interval, limit=limit)
-    return jsonify({"market": market, "interval_sec": interval, "candles": candles})
-
-
-@app.get("/heartbeat")
-def get_heartbeat():
-    return jsonify(fetch_one("heartbeat") or {})
-
-
-@app.get("/pet")
-def get_pet():
-    return jsonify(fetch_one("pet") or {})
-
-
-@app.get("/events")
-def get_events():
-    ev = fetch_many("events", limit=250)
-    for e in ev:
-        e["details"] = _safe_json_loads(e.get("details"))
-    return jsonify(ev)
-
-
-@app.get("/logs")
-def get_logs():
-    limit = int(request.args.get("limit", "120"))
-    limit = max(10, min(500, limit))
-
-    ev = fetch_many("events", limit=limit, order_by="id DESC")
-    lines = []
-    for e in ev:
-        t = (e.get("time_utc") or "").replace("T", " ").replace("+00:00", "Z")
-        typ = (e.get("type") or "info").upper()
-        msg = e.get("message") or ""
-        lines.append(f"{t} [{typ}] {msg}")
-
-    return jsonify(lines)
-@app.get("/paper/state")
-def paper_state():
-    _paper_update_equity()
-    return {
-        "cash_usd": PAPER.cash_usd,
-        "equity_usd": PAPER.equity_usd,
-        "peak_equity_usd": PAPER.peak_equity_usd,
-        "drawdown_pct": PAPER.drawdown_pct,
-        "position": asdict(PAPER.position) if PAPER.position else None,
-        "trades": len(PAPER_TRADES),
-    }
-
-@app.get("/paper/trades")
-def paper_trades():
-    return {"trades": PAPER_TRADES[-200:]}  # last 200
-
-@app.post("/paper/reset")
-def paper_reset():
-    body = request.get_json(silent=True) or {}
-    start = float(body.get("start_cash_usd") or 1000.0)
-
-    PAPER.cash_usd = start
-    PAPER.equity_usd = start
-    PAPER.peak_equity_usd = start
-    PAPER.drawdown_pct = 0.0
-    PAPER.position = None
-
-    PAPER_TRADES.clear()
-    return {"ok": True, "start_cash_usd": start}
-
-@app.post("/paper/tick")
-def paper_tick():
-    """
-    1) update stop
-    2) get best decision (your existing logic)
-    3) if BUY/SELL eligible and no position -> open paper position
-    """
-    stop_result = _paper_check_stop()
-
-    # Call your existing logic. If you already have a /decision/best function, reuse it.
-    # Otherwise call the same function used by that endpoint.
-    decision = build_best_decision(interval_sec=60) if "build_best_decision" in globals() else None
-    if decision is None:
-        # fallback: just do one market
-        decision = build_decision(market="BTCUSDT", interval_sec=60)
-
-    opened = None
-    if decision.get("action") in ("BUY", "SELL") and bool(decision.get("eligible", True)):
-        opened = _paper_open_from_decision(decision)
-
-    _paper_update_equity()
-    return {
-        "ok": True,
-        "stop": stop_result,
-        "decision": decision,
-        "open": opened,
-        "state": {
-            "cash_usd": PAPER.cash_usd,
-            "equity_usd": PAPER.equity_usd,
-            "drawdown_pct": PAPER.drawdown_pct,
-            "position": asdict(PAPER.position) if PAPER.position else None,
-        }
-}
-
-@app.get("/equity")
-def get_equity():
-    points = fetch_many("equity", limit=400, order_by="id DESC")
-    points.reverse()
-    return jsonify(points)
-
-
-@app.get("/trades")
-def get_trades():
-    return jsonify(fetch_many("trades", limit=300))
-
-
-@app.get("/prices")
-def get_prices():
-    return jsonify(fetch_many("prices", limit=1500))
-
-
-@app.get("/deaths")
-def get_deaths():
-    d = fetch_many("deaths", limit=300)
-    for x in d:
-        x["details"] = _safe_json_loads(x.get("details"))
-    return jsonify(d)
-
-
-# ----------------------------
-# Settings routes
-# ----------------------------
-@app.get("/settings")
-def get_settings_route():
-    return jsonify(get_settings_public())
-
-
-@app.post("/settings")
-def set_settings_route():
-    body = request.get_json(force=True, silent=True) or {}
-    s = load_settings()
-
-    if "bankroll_gbp" in body:
-        s["bankroll_gbp"] = max(0.0, float(body.get("bankroll_gbp", 0)))
-    elif "bankroll_usd" in body:
-        bankroll_usd = float(body.get("bankroll_usd", 0))
-        s["bankroll_gbp"] = max(0.0, (bankroll_usd / GBPUSD_RATE) if GBPUSD_RATE else 0.0)
-
-    for k in [
-        "risk_per_trade_pct",
-        "max_open_positions",
-        "min_trade_interval_sec",
-        "atr_period",
-        "atr_stop_mult",
-        "min_notional_usd",
-        "max_notional_usd",
-        "best_max_markets",
-        "best_min_confidence",
-    ]:
-        if k in body:
-            s[k] = body.get(k)
-
-    save_settings(s)
-    out = get_settings_public()
-    add_event("info", "Settings updated", out)
-    return jsonify({"ok": True, **out})
-
-
-# ----------------------------
-# Ingest endpoints
-# ----------------------------
-@app.post("/ingest/equity")
-def ingest_equity():
-    body = request.get_json(force=True, silent=True) or {}
-    equity_usd = float(body.get("equity_usd", 0))
-    time_utc = body.get("time_utc") or utc_now_iso()
-    insert_row("equity", {"time_utc": time_utc, "time_epoch": _to_epoch(time_utc), "equity_usd": equity_usd})
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/heartbeat")
-def ingest_heartbeat():
-    body = request.get_json(force=True, silent=True) or {}
-    time_utc = body.get("time_utc") or utc_now_iso()
-    row = {
-        "time_utc": time_utc,
-        "time_epoch": _to_epoch(time_utc),
-        "equity_usd": float(body.get("equity_usd", 0)),
-        "wins": int(body.get("wins", 0)),
-        "losses": int(body.get("losses", 0)),
-        "total_trades": int(body.get("total_trades", 0)),
-        "total_pnl_usd": float(body.get("total_pnl_usd", 0)),
-        "markets": json.dumps(body.get("markets", [])),
-        "open_positions": int(body.get("open_positions", 0)),
-        "prices_ok": int(bool(body.get("prices_ok", False))),
-        "status": body.get("status", "running"),
-        "survival_mode": body.get("survival_mode", "NORMAL"),
-    }
-    insert_row("heartbeat", row)
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/pet")
-def ingest_pet():
-    body = request.get_json(force=True, silent=True) or {}
-    time_utc = body.get("time_utc") or utc_now_iso()
-    row = {
-        "time_utc": time_utc,
-        "time_epoch": _to_epoch(time_utc),
-        "fainted_until_utc": body.get("fainted_until_utc", "") or "",
-        "growth": float(body.get("growth", 0)),
-        "health": float(body.get("health", 100)),
-        "hunger": float(body.get("hunger", 0)),
-        "mood": body.get("mood", "neutral"),
-        "stage": body.get("stage", "egg"),
-        "sex": body.get("sex", "boy"),
-    }
-    insert_row("pet", row)
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/trade")
-def ingest_trade():
-    body = request.get_json(force=True, silent=True) or {}
-    time_utc = body.get("time_utc") or utc_now_iso()
-    row = {
-        "time_utc": time_utc,
-        "time_epoch": _to_epoch(time_utc),
-        "market": (body.get("market", "BTCUSDT") or "BTCUSDT").upper(),
-        "side": body.get("side", "buy"),
-        "size_usd": float(body.get("size_usd", 0)),
-        "price": float(body.get("price", 0)),
-        "pnl_usd": float(body.get("pnl_usd", 0)),
-        "confidence": float(body.get("confidence", 0)),
-        "reason": body.get("reason", "") or "",
-    }
-    insert_row("trades", row)
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/prices")
-def ingest_prices():
-    body = request.get_json(force=True, silent=True) or {}
-    time_utc = body.get("time_utc") or utc_now_iso()
-    time_epoch = _to_epoch(time_utc)
-
-    prices = body.get("prices", None)
-    if prices is None:
-        prices = body
-
-    if not isinstance(prices, dict):
-        return jsonify({"ok": False, "error": "prices must be a dict"}), 400
-
-    count = 0
-    for market, price in prices.items():
-        try:
-            m = (str(market) or "").strip().upper()
-            if not m:
-                continue
-            insert_row("prices", {"time_utc": time_utc, "time_epoch": time_epoch, "market": m, "price": float(price)})
-            count += 1
-        except Exception:
-            pass
-
-    return jsonify({"ok": True, "count": count})
-
-
-@app.post("/ingest/event")
-def ingest_event():
-    body = request.get_json(force=True, silent=True) or {}
-    t = body.get("time_utc") or utc_now_iso()
-    insert_row("events", {
-        "time_utc": t,
-        "time_epoch": _to_epoch(t),
-        "type": body.get("type", "info"),
-        "message": body.get("message", "") or "",
-        "details": json.dumps(body.get("details", {}))
-    })
-    return jsonify({"ok": True})
-
-
-@app.post("/ingest/death")
-def ingest_death():
-    body = request.get_json(force=True, silent=True) or {}
-    t = body.get("time_utc") or utc_now_iso()
-    insert_row("deaths", {
-        "time_utc": t,
-        "time_epoch": _to_epoch(t),
-        "source": body.get("source", "bot"),
-        "reason": body.get("reason", "") or "",
-        "details": json.dumps(body.get("details", {}))
-    })
-    add_event("warning", "Death/Cryo record added", {"reason": body.get("reason", ""), "source": body.get("source", "bot")})
-    return jsonify({"ok": True})
-
-
-# ----------------------------
-# Control endpoints
-# ----------------------------
-@app.post("/control/pause")
-def control_pause():
-    body = request.get_json(force=True, silent=True) or {}
-    seconds = int(body.get("seconds", 600))
-    reason = body.get("reason", "manual pause")
-    _set_control_state("PAUSED", reason=reason, seconds=seconds)
-    c = get_control()
-    return jsonify({"ok": True, "state": "PAUSED", "pause_until_utc": c.get("pause_until_utc", ""), "reason": reason})
-
-
-@app.post("/control/cryo")
-def control_cryo():
-    body = request.get_json(force=True, silent=True) or {}
-    seconds = int(body.get("seconds", 600))
-    reason = body.get("reason", "cryo safety")
-    _set_control_state("CRYO", reason=reason, seconds=seconds)
-    c = get_control()
-    return jsonify({"ok": True, "state": "CRYO", "cryo_until_utc": c.get("cryo_until_utc", ""), "reason": reason})
-
-
-@app.post("/control/revive")
-def control_revive():
-    body = request.get_json(force=True, silent=True) or {}
-    reason = body.get("reason", "revive")
-    _set_control_state("ACTIVE", reason=reason)
-    add_event("info", "Revive executed", {"reason": reason})
-    return jsonify({"ok": True, "state": "ACTIVE"})
-
-
-# ----------------------------
-# Reset endpoints
-# ----------------------------
-def wipe_table(name):
-    if name not in ALLOWED_TABLES:
-        raise ValueError("Invalid table")
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(f"DELETE FROM {name}")
-    conn.commit()
-    conn.close()
-
-
-@app.delete("/reset/all")
-def reset_all():
-    for t in ["heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"]:
-        wipe_table(t)
-    _set_control_state("ACTIVE", reason="reset/all")
-    return jsonify({"ok": True})
-
-
-@app.delete("/reset/events")
-def reset_events():
-    wipe_table("events")
-    return jsonify({"ok": True})
-
-
-@app.delete("/reset/trades")
-def reset_trades():
-    wipe_table("trades")
-    return jsonify({"ok": True})
-
-
-@app.delete("/reset/equity")
-def reset_equity():
-    wipe_table("equity")
-    return jsonify({"ok": True})
-
-
-@app.delete("/reset/prices")
-def reset_prices():
-    wipe_table("prices")
-    return jsonify({"ok": True})
-
-
-@app.delete("/reset/deaths")
-def reset_deaths():
-    wipe_table("deaths")
-    return jsonify({"ok": True})
-
-
-# ----------------------------
-# Main
-# ----------------------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "10000"))
-    app.run(host="0.0.0.0", port=port)
+    if bankroll_usd <= 0 or entry_price <= 0 or stop
