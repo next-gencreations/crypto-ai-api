@@ -133,7 +133,8 @@ def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
     })
 
     # Assume no margin; just reduce cash by notional (spot-style paper)
-    PAPER.cash_usd -= size_usd
+    fee = _paper_fee(size_usd)
+    PAPER.cash_usd -= (size_usd + fee)
     _paper_update_equity()
     return {"ok": True, "opened": asdict(PAPER.position)}
 
