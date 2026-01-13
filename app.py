@@ -18,7 +18,154 @@ if (CORS_ORIGINS or "").strip() == "*":
 else:
     allowed = [o.strip() for o in (CORS_ORIGINS or "").split(",") if o.strip()]
     CORS(app, resources={r"/*": {"origins": allowed}})
+from dataclasses import dataclass, asdict
+from typing import Optional, Dict, Any, List
+import time
 
+# --- Paper trading state (in-memory) ---
+@dataclass
+class PaperPosition:
+    market: str
+    side: str            # "LONG" or "SHORT"
+    qty: float
+    entry: float
+    stop: float
+    opened_ts: int
+
+@dataclass
+class PaperState:
+    cash_usd: float = 1000.0
+    equity_usd: float = 1000.0
+    peak_equity_usd: float = 1000.0
+    drawdown_pct: float = 0.0
+    position: Optional[PaperPosition] = None
+
+PAPER = PaperState()
+PAPER_TRADES: List[Dict[str, Any]] = []
+
+def _paper_mark_price(market: str) -> float:
+    # Use your existing candles function to get the latest close as "mark"
+    candles = compute_ohlc(market=market, interval_sec=60, limit=2)
+    return float(candles[-1]["c"]) if candles else 0.0
+
+def _paper_update_equity():
+    PAPER.equity_usd = PAPER.cash_usd
+    if PAPER.position:
+        mark = _paper_mark_price(PAPER.position.market)
+        if mark > 0:
+            pnl = 0.0
+            if PAPER.position.side == "LONG":
+                pnl = (mark - PAPER.position.entry) * PAPER.position.qty
+            else:
+                pnl = (PAPER.position.entry - mark) * PAPER.position.qty
+            PAPER.equity_usd += pnl
+
+    PAPER.peak_equity_usd = max(PAPER.peak_equity_usd, PAPER.equity_usd)
+    if PAPER.peak_equity_usd > 0:
+        PAPER.drawdown_pct = max(0.0, (PAPER.peak_equity_usd - PAPER.equity_usd) / PAPER.peak_equity_usd * 100.0)
+
+def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    decision is your existing build_decision/best output.
+    Expects: market, action BUY/SELL, size_usd, stop_distance, features.entry
+    """
+    market = decision["market"]
+    action = decision["action"]
+    size_usd = float(decision.get("size_usd") or 0.0)
+    stop_distance = float(decision.get("stop_distance") or 0.0)
+    entry = float((decision.get("features") or {}).get("entry") or 0.0)
+
+    if entry <= 0 or size_usd <= 0 or stop_distance <= 0:
+        return {"ok": False, "why": "bad_decision_inputs"}
+
+    # Paper rule: only one open position
+    if PAPER.position is not None:
+        return {"ok": False, "why": "position_already_open"}
+
+    side = "LONG" if action == "BUY" else "SHORT"
+    qty = size_usd / entry
+
+    # Simple stop placement
+    if side == "LONG":
+        stop = entry - stop_distance
+    else:
+        stop = entry + stop_distance
+
+    PAPER.position = PaperPosition(
+        market=market,
+        side=side,
+        qty=float(qty),
+        entry=float(entry),
+        stop=float(stop),
+        opened_ts=int(time.time()),
+    )
+
+    PAPER_TRADES.append({
+        "ts": PAPER.position.opened_ts,
+        "type": "OPEN",
+        "market": market,
+        "side": side,
+        "qty": float(qty),
+        "entry": float(entry),
+        "stop": float(stop),
+        "meta": {
+            "confidence": decision.get("confidence"),
+            "reason": decision.get("reason"),
+            "stop_distance": stop_distance,
+            "size_usd": size_usd,
+        }
+    })
+
+    # Assume no margin; just reduce cash by notional (spot-style paper)
+    PAPER.cash_usd -= size_usd
+    _paper_update_equity()
+    return {"ok": True, "opened": asdict(PAPER.position)}
+
+def _paper_check_stop() -> Optional[Dict[str, Any]]:
+    if not PAPER.position:
+        return None
+
+    mark = _paper_mark_price(PAPER.position.market)
+    if mark <= 0:
+        return None
+
+    pos = PAPER.position
+    hit = False
+    if pos.side == "LONG" and mark <= pos.stop:
+        hit = True
+    if pos.side == "SHORT" and mark >= pos.stop:
+        hit = True
+
+    if not hit:
+        return None
+
+    # Close at mark
+    pnl = 0.0
+    if pos.side == "LONG":
+        pnl = (mark - pos.entry) * pos.qty
+    else:
+        pnl = (pos.entry - mark) * pos.qty
+
+    # Return cash (notional) + pnl
+    notional = pos.entry * pos.qty
+    PAPER.cash_usd += notional + pnl
+
+    PAPER_TRADES.append({
+        "ts": int(time.time()),
+        "type": "CLOSE",
+        "market": pos.market,
+        "side": pos.side,
+        "qty": pos.qty,
+        "exit": float(mark),
+        "pnl": float(pnl),
+        "reason": "STOP_HIT",
+        "stop": pos.stop,
+        "entry": pos.entry,
+    })
+
+    PAPER.position = None
+    _paper_update_equity()
+    return {"ok": True, "closed_at": float(mark), "pnl": float(pnl)}
 # ----------------------------
 # Settings (bankroll + brain controls)
 # ----------------------------
