@@ -56,7 +56,29 @@ PAPER_CFG = PaperConfig()
 
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
+PAPER = PaperState()
+PAPER_TRADES: List[Dict[str, Any]] = []
 
+# paste helpers here (start line 60)
+def _bps(x: float) -> float:
+    return float(x) / 10000.0
+
+def _paper_fee(notional: float) -> float:
+    return abs(float(notional)) * _bps(PAPER_CFG.fee_bps)
+
+def _paper_apply_slippage(price: float, side: str, is_entry: bool) -> float:
+    slip = _bps(PAPER_CFG.slippage_bps)
+    side = (side or "").upper()
+    if side == "LONG":
+        return price * (1.0 + slip) if is_entry else price * (1.0 - slip)
+    else:
+        return price * (1.0 - slip) if is_entry else price * (1.0 + slip)
+
+def _paper_block_new_entries() -> Optional[str]:
+    _paper_update_equity()
+    if PAPER_CFG.max_drawdown_pct and PAPER.drawdown_pct >= PAPER_CFG.max_drawdown_pct:
+        return "max_drawdown"
+    return None
 def _paper_mark_price(market: str) -> float:
     # Use your existing candles function to get the latest close as "mark"
     candles = compute_ohlc(market=market, interval_sec=60, limit=2)
