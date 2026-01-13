@@ -56,8 +56,6 @@ PAPER_CFG = PaperConfig()
 
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
-PAPER = PaperState()
-PAPER_TRADES: List[Dict[str, Any]] = []
 
 def _paper_mark_price(market: str) -> float:
     # Use your existing candles function to get the latest close as "mark"
