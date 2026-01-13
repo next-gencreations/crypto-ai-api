@@ -117,6 +117,8 @@ def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "why": "position_already_open"}
 
     side = "LONG" if action == "BUY" else "SHORT"
+
+    entry = _paper_apply_slippage(entry, side, is_entry=True)
     qty = size_usd / entry
 
     # Simple stop placement
