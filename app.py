@@ -3,12 +3,32 @@ import json
 import sqlite3
 import math
 import time
+import base64
+import secrets
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# ---- Vault crypto / auth deps ----
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+# WebAuthn (Passkeys)
+from webauthn import (
+    generate_registration_options,
+    generate_authentication_options,
+    verify_registration_response,
+    verify_authentication_response,
+)
+from webauthn.helpers.structs import (
+    RegistrationCredential,
+    AuthenticationCredential,
+    UserVerificationRequirement,
+)
 
 app = Flask(__name__)
 
@@ -60,7 +80,6 @@ PAPER_CFG = PaperConfig()
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
 
-
 # ----------------------------
 # Paper helpers
 # ----------------------------
@@ -76,10 +95,8 @@ def _paper_apply_slippage(price: float, side: str, is_entry: bool) -> float:
     slip = _bps(PAPER_CFG.slippage_bps)
     side = (side or "").upper()
     if side == "LONG":
-        # adverse: entry worse (higher), exit worse (lower)
         return price * (1.0 + slip) if is_entry else price * (1.0 - slip)
     else:
-        # adverse for SHORT: entry worse (lower), exit worse (higher)
         return price * (1.0 - slip) if is_entry else price * (1.0 + slip)
 
 
@@ -175,13 +192,11 @@ def _paper_check_exit() -> Optional[Dict[str, Any]]:
 
     pos = PAPER.position
 
-    # stop
     if pos.side == "LONG" and mark <= pos.stop:
         return _paper_close_position(mark, "STOP_HIT")
     if pos.side == "SHORT" and mark >= pos.stop:
         return _paper_close_position(mark, "STOP_HIT")
 
-    # take profit
     tp = _paper_tp_price(pos)
     if tp is not None:
         if pos.side == "LONG" and mark >= tp:
@@ -257,7 +272,6 @@ def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
     _paper_update_equity()
     return {"ok": True, "opened": asdict(PAPER.position)}
 
-
 # ==========================================================
 # Settings (bankroll + brain controls)
 # ==========================================================
@@ -275,14 +289,15 @@ DEFAULT_SETTINGS = {
     "max_notional_usd": 900.0,
     "best_max_markets": 20,
     "best_min_confidence": 0.45,
-}
 
+    # Hard safety: trading mode (PAPER only for now)
+    "trade_mode": "PAPER",  # PAPER | TESTNET | LIVE (LIVE remains locked)
+}
 
 def _ensure_parent_dir(path: str):
     parent = os.path.dirname(path)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
-
 
 def load_settings():
     try:
@@ -296,16 +311,16 @@ def load_settings():
         out.update(data or {})
         if "bankroll_gbp" not in out:
             out["bankroll_gbp"] = DEFAULT_SETTINGS["bankroll_gbp"]
+        if "trade_mode" not in out:
+            out["trade_mode"] = "PAPER"
         return out
     except Exception:
         return dict(DEFAULT_SETTINGS)
-
 
 def save_settings(data: dict):
     _ensure_parent_dir(SETTINGS_PATH)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f)
-
 
 def get_settings_public():
     s = load_settings()
@@ -315,6 +330,7 @@ def get_settings_public():
         "bankroll_gbp": bankroll_gbp,
         "gbpusd_rate": GBPUSD_RATE,
         "bankroll_usd": bankroll_usd,
+        "trade_mode": (s.get("trade_mode") or "PAPER").upper(),
 
         "risk_per_trade_pct": float(s.get("risk_per_trade_pct", DEFAULT_SETTINGS["risk_per_trade_pct"])),
         "max_open_positions": int(s.get("max_open_positions", DEFAULT_SETTINGS["max_open_positions"])),
@@ -328,22 +344,18 @@ def get_settings_public():
         "best_min_confidence": float(s.get("best_min_confidence", DEFAULT_SETTINGS["best_min_confidence"])),
     }
 
-
 # ==========================================================
 # Database config
 # ==========================================================
 DB_PATH = os.getenv("DB_PATH", "/var/data/data.db")
 
-
 def utc_now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
 
 def ensure_db_dir():
     parent = os.path.dirname(DB_PATH)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
-
 
 def get_conn():
     ensure_db_dir()
@@ -358,7 +370,6 @@ def get_conn():
         pass
     return conn
 
-
 def _safe_json_loads(s):
     if s is None:
         return None
@@ -368,7 +379,6 @@ def _safe_json_loads(s):
         return json.loads(s)
     except Exception:
         return None
-
 
 def _to_epoch(iso_utc: str) -> int:
     try:
@@ -380,13 +390,11 @@ def _to_epoch(iso_utc: str) -> int:
     except Exception:
         return int(datetime.now(timezone.utc).timestamp())
 
-
 def _epoch_to_iso(epoch_s: int) -> str:
     try:
         return datetime.fromtimestamp(int(epoch_s), tz=timezone.utc).replace(microsecond=0).isoformat()
     except Exception:
         return utc_now_iso()
-
 
 def _safe_markets_list(m):
     if m is None:
@@ -403,11 +411,10 @@ def _safe_markets_list(m):
         return [s.upper()]
     return []
 
-
 # ----------------------------
-# Schema
+# Schema (includes Vault tables)
 # ----------------------------
-SCHEMA_VERSION = int(os.getenv("SCHEMA_VERSION", "2"))
+SCHEMA_VERSION = int(os.getenv("SCHEMA_VERSION", "3"))
 
 SCHEMA = [
     """
@@ -509,7 +516,52 @@ SCHEMA = [
       reason TEXT DEFAULT '',
       details TEXT DEFAULT ''
     )
+    """,
+    # ---------------- Vault tables ----------------
     """
+    CREATE TABLE IF NOT EXISTS vault_webauthn (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_time_utc TEXT NOT NULL,
+      credential_id_b64 TEXT NOT NULL,
+      public_key_b64 TEXT NOT NULL,
+      sign_count INTEGER DEFAULT 0,
+      transports TEXT DEFAULT '[]'
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_time_utc TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      challenge_b64 TEXT NOT NULL,
+      expires_epoch INTEGER NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_pin (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      created_time_utc TEXT NOT NULL,
+      pin_hash TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_time_utc TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_epoch INTEGER NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_time_utc TEXT NOT NULL,
+      exchange TEXT NOT NULL,
+      label TEXT DEFAULT '',
+      key_hint TEXT NOT NULL,
+      cipher_b64 TEXT NOT NULL
+    )
+    """,
 ]
 
 EXPECTED_COLUMNS = {
@@ -586,8 +638,8 @@ EXPECTED_COLUMNS = {
         "reason": "TEXT DEFAULT ''",
         "details": "TEXT DEFAULT ''",
     },
+    # vault tables are created fresh; sqlite ALTER isn’t required unless you change them later
 }
-
 
 def _table_exists(conn, name: str) -> bool:
     r = conn.execute(
@@ -596,14 +648,12 @@ def _table_exists(conn, name: str) -> bool:
     ).fetchone()
     return r is not None
 
-
 def _existing_columns(conn, table: str) -> set:
     try:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
         return {r[1] for r in rows}
     except Exception:
         return set()
-
 
 def migrate_schema():
     conn = get_conn()
@@ -623,7 +673,6 @@ def migrate_schema():
         conn.commit()
     finally:
         conn.close()
-
 
 def init_db():
     migrate_schema()
@@ -653,14 +702,12 @@ def init_db():
     conn.commit()
     conn.close()
 
-
 init_db()
 
 # ----------------------------
 # Helpers: fetch/insert
 # ----------------------------
 ALLOWED_TABLES = {"meta", "control", "heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"}
-
 
 def fetch_one(table: str, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
@@ -672,7 +719,6 @@ def fetch_one(table: str, order_by="id DESC"):
     conn.close()
     return dict(row) if row else None
 
-
 def fetch_many(table: str, limit=50, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
         raise ValueError("Invalid table")
@@ -682,7 +728,6 @@ def fetch_many(table: str, limit=50, order_by="id DESC"):
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
-
 
 def insert_row(table: str, data: dict):
     if table not in ALLOWED_TABLES:
@@ -701,7 +746,6 @@ def insert_row(table: str, data: dict):
     conn.close()
     return new_id
 
-
 def add_event(ev_type: str, message: str, details=None):
     details = details or {}
     t = utc_now_iso()
@@ -712,7 +756,6 @@ def add_event(ev_type: str, message: str, details=None):
         "message": message,
         "details": json.dumps(details)
     })
-
 
 # ----------------------------
 # Control helpers
@@ -730,7 +773,6 @@ def get_control():
             "updated_time_utc": utc_now_iso()
         }
     return c
-
 
 def _set_control_state(state: str, reason: str = "", seconds: int = 0):
     state = (state or "ACTIVE").upper()
@@ -773,7 +815,6 @@ def _set_control_state(state: str, reason: str = "", seconds: int = 0):
 
     conn.close()
 
-
 def is_paused_or_cryo():
     c = get_control()
     now = datetime.now(timezone.utc)
@@ -805,7 +846,6 @@ def is_paused_or_cryo():
         state = "ACTIVE"
 
     return state, c
-
 
 # ----------------------------
 # OHLC aggregation
@@ -854,14 +894,12 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     out = [buckets[k] for k in sorted(buckets.keys())]
     return out[-limit:]
 
-
 # ==========================================================
 # Brain v1: EMA + RSI + ATR sizing
 # ==========================================================
 SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", "30"))
 _LAST_SIGNAL = {"time_epoch": 0, "market": "", "side": "hold", "confidence": 0.5, "reason": "init", "features": {}}
 _LAST_DECISION_BY_MARKET = {}
-
 
 def _ema(values, period: int):
     if not values:
@@ -872,7 +910,6 @@ def _ema(values, period: int):
     for v in values[1:]:
         ema = float(v) * k + ema * (1 - k)
     return ema
-
 
 def _rsi(closes, period: int = 14):
     period = max(2, int(period))
@@ -890,7 +927,6 @@ def _rsi(closes, period: int = 14):
         return 100.0
     rs = gains / max(1e-9, losses)
     return 100.0 - (100.0 / (1.0 + rs))
-
 
 def _atr(candles, period: int = 14):
     period = max(2, int(period))
@@ -911,13 +947,11 @@ def _atr(candles, period: int = 14):
     window = trs[-period:]
     return sum(window) / max(1, len(window))
 
-
 def _sigmoid(x: float) -> float:
     try:
         return 1.0 / (1.0 + math.exp(-float(x)))
     except Exception:
         return 0.5
-
 
 def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
@@ -963,7 +997,6 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
         rsi_bias = -0.45
 
     score = (trend * 35.0) + rsi_bias
-
     conf_strength = abs(_sigmoid(score) - 0.5) * 2.0
     confidence = 0.50 + (conf_strength * 0.45)
 
@@ -996,7 +1029,6 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
     return out
 
-
 def compute_position_size_usd(entry_price: float, stop_distance: float, settings_public: dict):
     bankroll_usd = float(settings_public.get("bankroll_usd") or 0.0)
     risk_pct = float(settings_public.get("risk_per_trade_pct") or DEFAULT_SETTINGS["risk_per_trade_pct"])
@@ -1007,7 +1039,6 @@ def compute_position_size_usd(entry_price: float, stop_distance: float, settings
         return 0.0, {"why": "invalid_inputs"}
 
     risk_usd = bankroll_usd * (risk_pct / 100.0)
-
     stop_distance = max(stop_distance, entry_price * 0.001)  # min 0.1% stop
     notional = risk_usd * (entry_price / stop_distance)
 
@@ -1025,7 +1056,6 @@ def compute_position_size_usd(entry_price: float, stop_distance: float, settings
         "min_notional": min_notional,
         "max_notional": max_notional,
     }
-
 
 def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
@@ -1156,7 +1186,6 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": action}
     return out
 
-
 def _list_candidate_markets(max_markets: int = 8):
     max_markets = max(1, min(50, int(max_markets)))
 
@@ -1185,7 +1214,6 @@ def _list_candidate_markets(max_markets: int = 8):
             break
     return out
 
-
 def _best_score(decision_obj: dict) -> float:
     if not isinstance(decision_obj, dict):
         return 0.0
@@ -1195,7 +1223,6 @@ def _best_score(decision_obj: dict) -> float:
     if action == "HOLD":
         return 0.0
     return (conf * 100.0) + min(25.0, size / 50.0)
-
 
 def build_best_decision(interval_sec: int = 60):
     settings = get_settings_public()
@@ -1249,14 +1276,568 @@ def build_best_decision(interval_sec: int = 60):
         "candidates": candidates,
     }
 
+# ==========================================================
+# VAULT (Passkeys + PIN fallback + encrypted keys)
+# ==========================================================
+VAULT_MASTER_KEY_B64 = os.getenv("VAULT_MASTER_KEY", "").strip()
+VAULT_SETUP_TOKEN = os.getenv("VAULT_SETUP_TOKEN", "").strip()  # bootstrap for first pin/passkey if needed
+
+RP_ID = os.getenv("RP_ID", "").strip()            # e.g. "crypto-ai-dashboard-delta.vercel.app" or your custom domain
+RP_ORIGIN = os.getenv("RP_ORIGIN", "").strip()    # e.g. "https://crypto-ai-dashboard-delta.vercel.app"
+VAULT_USER_ID = os.getenv("VAULT_USER_ID", "vault-user").strip()
+VAULT_DISPLAY_NAME = os.getenv("VAULT_DISPLAY_NAME", "Vault Owner").strip()
+VAULT_UNLOCK_TTL_SEC = int(os.getenv("VAULT_UNLOCK_TTL_SEC", "300"))  # 5 min
+
+_ph = PasswordHasher(time_cost=2, memory_cost=102400, parallelism=8)
+
+def _vault_enabled() -> bool:
+    return bool(VAULT_MASTER_KEY_B64 and RP_ID and RP_ORIGIN)
+
+def _vault_master_key_bytes() -> bytes:
+    # Must be 32 bytes base64
+    raw = base64.b64decode(VAULT_MASTER_KEY_B64.encode("utf-8"))
+    if len(raw) != 32:
+        raise ValueError("VAULT_MASTER_KEY must decode to 32 bytes")
+    return raw
+
+def _sha256_b64(s: str) -> str:
+    import hashlib
+    h = hashlib.sha256(s.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(h).decode("utf-8").rstrip("=")
+
+def _require_setup_or_unlocked():
+    # For endpoints like pin set / passkey register: allow if setup token is correct OR vault already unlocked
+    token = (request.headers.get("X-VAULT-SETUP") or "").strip()
+    if token and VAULT_SETUP_TOKEN and secrets.compare_digest(token, VAULT_SETUP_TOKEN):
+        return True
+    # otherwise require unlocked
+    return _is_vault_unlocked()
+
+def _get_vault_token() -> str:
+    return (request.headers.get("X-VAULT-TOKEN") or "").strip()
+
+def _is_vault_unlocked() -> bool:
+    token = _get_vault_token()
+    if not token:
+        return False
+    th = _sha256_b64(token)
+
+    now_epoch = int(time.time())
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT id, expires_epoch FROM vault_sessions WHERE token_hash=? ORDER BY id DESC LIMIT 1",
+            (th,)
+        ).fetchone()
+        if not row:
+            return False
+        return int(row["expires_epoch"]) > now_epoch
+    finally:
+        conn.close()
+
+def _issue_vault_session() -> Dict[str, Any]:
+    token = secrets.token_urlsafe(32)
+    th = _sha256_b64(token)
+    expires = int(time.time()) + VAULT_UNLOCK_TTL_SEC
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO vault_sessions (created_time_utc, token_hash, expires_epoch) VALUES (?, ?, ?)",
+            (utc_now_iso(), th, expires)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"vault_token": token, "expires_epoch": expires, "ttl_sec": VAULT_UNLOCK_TTL_SEC}
+
+def _vault_encrypt_json(payload: dict) -> str:
+    key = _vault_master_key_bytes()
+    aes = AESGCM(key)
+    nonce = secrets.token_bytes(12)
+    pt = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ct = aes.encrypt(nonce, pt, None)  # includes auth tag
+    blob = nonce + ct
+    return base64.urlsafe_b64encode(blob).decode("utf-8")
+
+def _vault_decrypt_json(cipher_b64: str) -> dict:
+    key = _vault_master_key_bytes()
+    aes = AESGCM(key)
+    blob = base64.urlsafe_b64decode(cipher_b64.encode("utf-8"))
+    nonce = blob[:12]
+    ct = blob[12:]
+    pt = aes.decrypt(nonce, ct, None)
+    return json.loads(pt.decode("utf-8"))
+
+def _mask_key(s: str) -> str:
+    s = (s or "").strip()
+    if len(s) <= 8:
+        return s[:2] + "…" + s[-2:]
+    return s[:4] + "…" + s[-4:]
+
+def _cleanup_expired_vault_challenges_and_sessions():
+    now = int(time.time())
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM vault_challenges WHERE expires_epoch <= ?", (now,))
+        conn.execute("DELETE FROM vault_sessions WHERE expires_epoch <= ?", (now,))
+        conn.commit()
+    finally:
+        conn.close()
+
+def _vault_has_passkey() -> bool:
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT id FROM vault_webauthn ORDER BY id DESC LIMIT 1").fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+def _vault_has_pin() -> bool:
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT id FROM vault_pin WHERE id=1").fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+def _save_challenge(purpose: str, challenge_bytes: bytes, ttl_sec: int = 180):
+    expires = int(time.time()) + int(ttl_sec)
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO vault_challenges (created_time_utc, purpose, challenge_b64, expires_epoch) VALUES (?, ?, ?, ?)",
+            (utc_now_iso(), purpose, base64.urlsafe_b64encode(challenge_bytes).decode("utf-8"), expires)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def _pop_challenge(purpose: str) -> Optional[bytes]:
+    now = int(time.time())
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT id, challenge_b64, expires_epoch FROM vault_challenges WHERE purpose=? ORDER BY id DESC LIMIT 1",
+            (purpose,)
+        ).fetchone()
+        if not row:
+            return None
+        if int(row["expires_epoch"]) <= now:
+            return None
+        conn.execute("DELETE FROM vault_challenges WHERE id=?", (int(row["id"]),))
+        conn.commit()
+        return base64.urlsafe_b64decode(row["challenge_b64"].encode("utf-8"))
+    finally:
+        conn.close()
 
 # ----------------------------
-# Base routes
+# Vault endpoints
 # ----------------------------
+@app.get("/vault/status")
+def vault_status():
+    _cleanup_expired_vault_challenges_and_sessions()
+    return jsonify({
+        "ok": True,
+        "enabled": _vault_enabled(),
+        "has_passkey": _vault_has_passkey(),
+        "has_pin": _vault_has_pin(),
+        "unlocked": _is_vault_unlocked(),
+        "ttl_sec": VAULT_UNLOCK_TTL_SEC,
+    })
+
+@app.post("/vault/webauthn/register/options")
+def vault_register_options():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _require_setup_or_unlocked():
+        return jsonify({"ok": False, "error": "requires_setup_token_or_unlock"}), 401
+
+    # Create registration options
+    options = generate_registration_options(
+        rp_id=RP_ID,
+        rp_name="Crypto AI Vault",
+        user_id=VAULT_USER_ID.encode("utf-8"),
+        user_name=VAULT_USER_ID,
+        user_display_name=VAULT_DISPLAY_NAME,
+        timeout=60000,
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+
+    # Store challenge
+    _save_challenge("register", options.challenge)
+
+    return jsonify({
+        "ok": True,
+        "publicKey": json.loads(options.json),
+        "rp_id": RP_ID,
+        "rp_origin": RP_ORIGIN,
+    })
+
+@app.post("/vault/webauthn/register/verify")
+def vault_register_verify():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _require_setup_or_unlocked():
+        return jsonify({"ok": False, "error": "requires_setup_token_or_unlock"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    challenge = _pop_challenge("register")
+    if not challenge:
+        return jsonify({"ok": False, "error": "missing_or_expired_challenge"}), 400
+
+    try:
+        cred = RegistrationCredential.parse_raw(json.dumps(body))
+        verification = verify_registration_response(
+            credential=cred,
+            expected_challenge=challenge,
+            expected_rp_id=RP_ID,
+            expected_origin=RP_ORIGIN,
+            require_user_verification=False,
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": "register_verify_failed", "details": str(e)}), 400
+
+    # Persist credential
+    conn = get_conn()
+    try:
+        conn.execute(
+            """
+            INSERT INTO vault_webauthn
+            (created_time_utc, credential_id_b64, public_key_b64, sign_count, transports)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                utc_now_iso(),
+                base64.urlsafe_b64encode(verification.credential_id).decode("utf-8"),
+                base64.urlsafe_b64encode(verification.credential_public_key).decode("utf-8"),
+                int(verification.sign_count or 0),
+                json.dumps(body.get("response", {}).get("transports", []) or []),
+            )
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    add_event("info", "Vault passkey registered", {"rp_id": RP_ID})
+
+    return jsonify({"ok": True})
+
+@app.post("/vault/webauthn/login/options")
+def vault_login_options():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT credential_id_b64 FROM vault_webauthn ORDER BY id DESC LIMIT 10"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    allow_credentials = []
+    for r in rows:
+        try:
+            cid = base64.urlsafe_b64decode(r["credential_id_b64"].encode("utf-8"))
+            allow_credentials.append({"id": cid, "type": "public-key"})
+        except Exception:
+            pass
+
+    options = generate_authentication_options(
+        rp_id=RP_ID,
+        timeout=60000,
+        allow_credentials=allow_credentials or None,
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+
+    _save_challenge("login", options.challenge)
+
+    return jsonify({"ok": True, "publicKey": json.loads(options.json), "rp_id": RP_ID, "rp_origin": RP_ORIGIN})
+
+@app.post("/vault/webauthn/login/verify")
+def vault_login_verify():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+
+    body = request.get_json(force=True, silent=True) or {}
+    challenge = _pop_challenge("login")
+    if not challenge:
+        return jsonify({"ok": False, "error": "missing_or_expired_challenge"}), 400
+
+    # Find stored credential by ID
+    try:
+        cred = AuthenticationCredential.parse_raw(json.dumps(body))
+        cred_id = cred.raw_id
+    except Exception:
+        return jsonify({"ok": False, "error": "bad_credential_payload"}), 400
+
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT id, credential_id_b64, public_key_b64, sign_count FROM vault_webauthn ORDER BY id DESC"
+        ).fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "no_passkey_registered"}), 400
+
+        stored_cred_id = base64.urlsafe_b64decode(row["credential_id_b64"].encode("utf-8"))
+        stored_pubkey = base64.urlsafe_b64decode(row["public_key_b64"].encode("utf-8"))
+        stored_sign = int(row["sign_count"] or 0)
+
+        # Basic safety: ensure user is authenticating with the stored credential
+        if cred_id != stored_cred_id:
+            return jsonify({"ok": False, "error": "credential_not_recognized"}), 401
+
+        try:
+            verification = verify_authentication_response(
+                credential=cred,
+                expected_challenge=challenge,
+                expected_rp_id=RP_ID,
+                expected_origin=RP_ORIGIN,
+                credential_public_key=stored_pubkey,
+                credential_current_sign_count=stored_sign,
+                require_user_verification=False,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": "login_verify_failed", "details": str(e)}), 401
+
+        # Update sign count
+        conn.execute("UPDATE vault_webauthn SET sign_count=? WHERE id=?", (int(verification.new_sign_count), int(row["id"])))
+        conn.commit()
+    finally:
+        conn.close()
+
+    add_event("info", "Vault unlocked (passkey)", {})
+    return jsonify({"ok": True, **_issue_vault_session()})
+
+@app.post("/vault/pin/set")
+def vault_pin_set():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _require_setup_or_unlocked():
+        return jsonify({"ok": False, "error": "requires_setup_token_or_unlock"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    pin = str(body.get("pin") or "").strip()
+    if not pin.isdigit() or len(pin) < 4 or len(pin) > 10:
+        return jsonify({"ok": False, "error": "pin_must_be_4_to_10_digits"}), 400
+
+    pin_hash = _ph.hash(pin)
+
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM vault_pin WHERE id=1")
+        conn.execute(
+            "INSERT INTO vault_pin (id, created_time_utc, pin_hash) VALUES (1, ?, ?)",
+            (utc_now_iso(), pin_hash)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    add_event("info", "Vault PIN set/rotated", {})
+    return jsonify({"ok": True})
+
+@app.post("/vault/pin/unlock")
+def vault_pin_unlock():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+
+    body = request.get_json(force=True, silent=True) or {}
+    pin = str(body.get("pin") or "").strip()
+
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT pin_hash FROM vault_pin WHERE id=1").fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "pin_not_set"}), 400
+        pin_hash = row["pin_hash"]
+    finally:
+        conn.close()
+
+    try:
+        _ph.verify(pin_hash, pin)
+    except VerifyMismatchError:
+        return jsonify({"ok": False, "error": "bad_pin"}), 401
+    except Exception:
+        return jsonify({"ok": False, "error": "pin_verify_failed"}), 401
+
+    add_event("info", "Vault unlocked (pin)", {})
+    return jsonify({"ok": True, **_issue_vault_session()})
+
+@app.post("/vault/lock")
+def vault_lock():
+    # Revokes all sessions (requires unlocked)
+    if not _is_vault_unlocked():
+        return jsonify({"ok": False, "error": "not_unlocked"}), 401
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM vault_sessions")
+        conn.commit()
+    finally:
+        conn.close()
+    add_event("warning", "Vault locked (sessions revoked)", {})
+    return jsonify({"ok": True})
+
+@app.get("/vault/keys")
+def vault_keys_list():
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _is_vault_unlocked():
+        return jsonify({"ok": False, "error": "not_unlocked"}), 401
+
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, created_time_utc, exchange, label, key_hint FROM vault_keys ORDER BY id DESC"
+        ).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "id": int(r["id"]),
+                "created_time_utc": r["created_time_utc"],
+                "exchange": r["exchange"],
+                "label": r["label"],
+                "key_hint": r["key_hint"],
+            })
+        return jsonify({"ok": True, "keys": out})
+    finally:
+        conn.close()
+
+@app.post("/vault/keys")
+def vault_keys_save():
+    """
+    Save exchange API keys encrypted.
+    IMPORTANT: Do NOT enable withdrawals on the exchange key.
+    """
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _is_vault_unlocked():
+        return jsonify({"ok": False, "error": "not_unlocked"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    exchange = (body.get("exchange") or "").strip().upper()
+    label = (body.get("label") or "").strip()
+    api_key = (body.get("api_key") or "").strip()
+    api_secret = (body.get("api_secret") or "").strip()
+    passphrase = (body.get("passphrase") or "").strip()  # for some exchanges (optional)
+
+    if not exchange or not api_key or not api_secret:
+        return jsonify({"ok": False, "error": "missing_exchange_or_key_or_secret"}), 400
+
+    payload = {
+        "exchange": exchange,
+        "api_key": api_key,
+        "api_secret": api_secret,
+        "passphrase": passphrase,
+        "created_time_utc": utc_now_iso(),
+        "permissions_note": "READ+TRADE only. WITHDRAW disabled.",
+    }
+    cipher_b64 = _vault_encrypt_json(payload)
+
+    hint = _mask_key(api_key)
+
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO vault_keys (created_time_utc, exchange, label, key_hint, cipher_b64) VALUES (?, ?, ?, ?, ?)",
+            (utc_now_iso(), exchange, label, hint, cipher_b64)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    add_event("info", "Vault key saved", {"exchange": exchange, "key_hint": hint})
+    return jsonify({"ok": True, "exchange": exchange, "key_hint": hint})
+
+@app.delete("/vault/keys/<int:key_id>")
+def vault_keys_delete(key_id: int):
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _is_vault_unlocked():
+        return jsonify({"ok": False, "error": "not_unlocked"}), 401
+
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM vault_keys WHERE id=?", (int(key_id),))
+        conn.commit()
+    finally:
+        conn.close()
+
+    add_event("warning", "Vault key deleted", {"id": int(key_id)})
+    return jsonify({"ok": True})
+
+@app.post("/vault/keys/test")
+def vault_keys_test():
+    """
+    Safe server-side “test”: decrypts and validates shape only.
+    (We can later add real exchange ping once you confirm which exchange library you want.)
+    """
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _is_vault_unlocked():
+        return jsonify({"ok": False, "error": "not_unlocked"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    key_id = int(body.get("id") or 0)
+    if key_id <= 0:
+        return jsonify({"ok": False, "error": "missing_id"}), 400
+
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT id, exchange, cipher_b64, key_hint FROM vault_keys WHERE id=?", (key_id,)).fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        blob = _vault_decrypt_json(row["cipher_b64"])
+    finally:
+        conn.close()
+
+    ok = bool(blob.get("api_key")) and bool(blob.get("api_secret")) and (blob.get("exchange") == row["exchange"])
+    return jsonify({
+        "ok": ok,
+        "exchange": row["exchange"],
+        "key_hint": row["key_hint"],
+        "checks": {
+            "has_api_key": bool(blob.get("api_key")),
+            "has_api_secret": bool(blob.get("api_secret")),
+            "exchange_match": (blob.get("exchange") == row["exchange"]),
+        }
+    })
+
+@app.get("/vault/mode")
+def vault_mode_get():
+    # Public read (safe)
+    return jsonify({"ok": True, "trade_mode": get_settings_public().get("trade_mode", "PAPER")})
+
+@app.post("/vault/mode")
+def vault_mode_set():
+    """
+    Trade mode setter.
+    For now: HARD LOCK to PAPER unless you explicitly add a live unlock policy later.
+    """
+    if not _vault_enabled():
+        return jsonify({"ok": False, "error": "vault_not_configured"}), 400
+    if not _is_vault_unlocked():
+        return jsonify({"ok": False, "error": "not_unlocked"}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    mode = (body.get("trade_mode") or "PAPER").upper().strip()
+
+    # Hard lock: only allow PAPER right now (exactly what you requested)
+    if mode != "PAPER":
+        return jsonify({"ok": False, "error": "live_and_testnet_locked", "allowed": ["PAPER"]}), 403
+
+    s = load_settings()
+    s["trade_mode"] = "PAPER"
+    save_settings(s)
+    add_event("info", "Trade mode set", {"trade_mode": "PAPER"})
+    return jsonify({"ok": True, "trade_mode": "PAPER"})
+
+# ==========================================================
+# Base routes
+# ==========================================================
 @app.get("/health")
 def health():
     return jsonify({"ok": True, "time_utc": utc_now_iso()})
-
 
 @app.get("/")
 def home():
@@ -1268,25 +1849,36 @@ def home():
         "db_parent_exists": os.path.exists(parent),
         "db_path": DB_PATH,
         "schema_version": fetch_one("meta", order_by="id ASC") or {},
+        "vault": {
+            "enabled": _vault_enabled(),
+            "has_passkey": _vault_has_passkey(),
+            "has_pin": _vault_has_pin(),
+        },
         "endpoints": {
             "GET": [
                 "/", "/health", "/schema",
                 "/signal", "/decision", "/decision/best",
                 "/paper/state", "/paper/trades",
                 "/data", "/heartbeat", "/pet", "/events", "/logs",
-                "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings"
+                "/equity", "/trades", "/prices", "/ohlc", "/deaths", "/control", "/settings",
+                "/vault/status", "/vault/keys", "/vault/mode"
             ],
             "POST": [
                 "/paper/reset", "/paper/tick",
                 "/ingest/heartbeat", "/ingest/pet", "/ingest/event", "/ingest/equity", "/ingest/trade",
                 "/ingest/prices", "/ingest/death",
                 "/control/pause", "/control/cryo", "/control/revive",
-                "/settings"
+                "/settings",
+                "/vault/webauthn/register/options", "/vault/webauthn/register/verify",
+                "/vault/webauthn/login/options", "/vault/webauthn/login/verify",
+                "/vault/pin/set", "/vault/pin/unlock",
+                "/vault/keys", "/vault/keys/test",
+                "/vault/lock",
+                "/vault/mode"
             ],
-            "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/prices", "/reset/deaths"]
+            "DELETE": ["/reset/all", "/reset/events", "/reset/trades", "/reset/equity", "/reset/prices", "/reset/deaths", "/vault/keys/<id>"]
         }
     })
-
 
 @app.get("/schema")
 def schema():
@@ -1302,11 +1894,9 @@ def schema():
         conn.close()
     return jsonify(out)
 
-
 @app.get("/control")
 def control_get():
     return jsonify(get_control())
-
 
 @app.get("/signal")
 def signal():
@@ -1314,19 +1904,16 @@ def signal():
     interval = int(request.args.get("interval", "60"))
     return jsonify(build_signal(market=market, interval_sec=interval))
 
-
 @app.get("/decision")
 def decision():
     market = request.args.get("market", "BTCUSDT")
     interval = int(request.args.get("interval", "60"))
     return jsonify(build_decision(market=market, interval_sec=interval))
 
-
 @app.get("/decision/best")
 def decision_best():
     interval = int(request.args.get("interval", "60"))
     return jsonify(build_best_decision(interval_sec=interval))
-
 
 # ----------------------------
 # Paper routes
@@ -1342,13 +1929,12 @@ def paper_state():
         "position": asdict(PAPER.position) if PAPER.position else None,
         "trades": len(PAPER_TRADES),
         "cfg": asdict(PAPER_CFG),
+        "trade_mode": get_settings_public().get("trade_mode", "PAPER"),
     })
-
 
 @app.get("/paper/trades")
 def paper_trades():
     return jsonify({"trades": PAPER_TRADES[-200:]})
-
 
 @app.post("/paper/reset")
 def paper_reset():
@@ -1364,14 +1950,20 @@ def paper_reset():
     PAPER_TRADES.clear()
     return jsonify({"ok": True, "start_cash_usd": start})
 
-
 @app.post("/paper/tick")
 def paper_tick():
     """
     1) check exits (stop/tp)
     2) get best decision
     3) if eligible BUY/SELL and no position -> open paper position
+
+    SAFETY: even if you later add live endpoints, trade_mode is hard locked to PAPER by vault/mode.
     """
+    # extra safety gate
+    if (get_settings_public().get("trade_mode") or "PAPER").upper() != "PAPER":
+        add_event("warning", "Trade blocked: mode not PAPER", {"trade_mode": get_settings_public().get("trade_mode")})
+        return jsonify({"ok": False, "error": "trade_mode_locked_to_paper"}), 403
+
     exit_result = _paper_check_exit()
 
     best_wrap = build_best_decision(interval_sec=60)
@@ -1394,7 +1986,6 @@ def paper_tick():
             "position": asdict(PAPER.position) if PAPER.position else None,
         }
     })
-
 
 # ----------------------------
 # Data routes (dashboard feeds)
@@ -1462,6 +2053,12 @@ def data():
             "drawdown_pct": PAPER.drawdown_pct,
             "position": asdict(PAPER.position) if PAPER.position else None,
         },
+        "vault": {
+            "enabled": _vault_enabled(),
+            "unlocked": _is_vault_unlocked(),
+            "has_passkey": _vault_has_passkey(),
+            "has_pin": _vault_has_pin(),
+        },
         "stats": {
             "paused": state in ("PAUSED", "CRYO"),
             "state": state,
@@ -1473,7 +2070,6 @@ def data():
         }
     })
 
-
 @app.get("/ohlc")
 def ohlc():
     market = request.args.get("market", "BTCUSDT")
@@ -1482,16 +2078,13 @@ def ohlc():
     candles = compute_ohlc(market=market, interval_sec=interval, limit=limit)
     return jsonify({"market": market, "interval_sec": interval, "candles": candles})
 
-
 @app.get("/heartbeat")
 def get_heartbeat():
     return jsonify(fetch_one("heartbeat") or {})
 
-
 @app.get("/pet")
 def get_pet():
     return jsonify(fetch_one("pet") or {})
-
 
 @app.get("/events")
 def get_events():
@@ -1499,7 +2092,6 @@ def get_events():
     for e in ev:
         e["details"] = _safe_json_loads(e.get("details"))
     return jsonify(ev)
-
 
 @app.get("/logs")
 def get_logs():
@@ -1516,23 +2108,19 @@ def get_logs():
 
     return jsonify(lines)
 
-
 @app.get("/equity")
 def get_equity():
     points = fetch_many("equity", limit=400, order_by="id DESC")
     points.reverse()
     return jsonify(points)
 
-
 @app.get("/trades")
 def get_trades():
     return jsonify(fetch_many("trades", limit=300))
 
-
 @app.get("/prices")
 def get_prices():
     return jsonify(fetch_many("prices", limit=1500))
-
 
 @app.get("/deaths")
 def get_deaths():
@@ -1541,14 +2129,12 @@ def get_deaths():
         x["details"] = _safe_json_loads(x.get("details"))
     return jsonify(d)
 
-
 # ----------------------------
 # Settings routes
 # ----------------------------
 @app.get("/settings")
 def get_settings_route():
     return jsonify(get_settings_public())
-
 
 @app.post("/settings")
 def set_settings_route():
@@ -1575,11 +2161,12 @@ def set_settings_route():
         if k in body:
             s[k] = body.get(k)
 
+    # DO NOT allow setting trade_mode via public settings route
+    # trade_mode changes must go through /vault/mode which is locked to PAPER
     save_settings(s)
     out = get_settings_public()
     add_event("info", "Settings updated", out)
     return jsonify({"ok": True, **out})
-
 
 # ----------------------------
 # Ingest endpoints
@@ -1591,7 +2178,6 @@ def ingest_equity():
     time_utc = body.get("time_utc") or utc_now_iso()
     insert_row("equity", {"time_utc": time_utc, "time_epoch": _to_epoch(time_utc), "equity_usd": equity_usd})
     return jsonify({"ok": True})
-
 
 @app.post("/ingest/heartbeat")
 def ingest_heartbeat():
@@ -1614,7 +2200,6 @@ def ingest_heartbeat():
     insert_row("heartbeat", row)
     return jsonify({"ok": True})
 
-
 @app.post("/ingest/pet")
 def ingest_pet():
     body = request.get_json(force=True, silent=True) or {}
@@ -1633,7 +2218,6 @@ def ingest_pet():
     insert_row("pet", row)
     return jsonify({"ok": True})
 
-
 @app.post("/ingest/trade")
 def ingest_trade():
     body = request.get_json(force=True, silent=True) or {}
@@ -1651,7 +2235,6 @@ def ingest_trade():
     }
     insert_row("trades", row)
     return jsonify({"ok": True})
-
 
 @app.post("/ingest/prices")
 def ingest_prices():
@@ -1679,7 +2262,6 @@ def ingest_prices():
 
     return jsonify({"ok": True, "count": count})
 
-
 @app.post("/ingest/event")
 def ingest_event():
     body = request.get_json(force=True, silent=True) or {}
@@ -1692,7 +2274,6 @@ def ingest_event():
         "details": json.dumps(body.get("details", {}))
     })
     return jsonify({"ok": True})
-
 
 @app.post("/ingest/death")
 def ingest_death():
@@ -1708,7 +2289,6 @@ def ingest_death():
     add_event("warning", "Death/Cryo record added", {"reason": body.get("reason", ""), "source": body.get("source", "bot")})
     return jsonify({"ok": True})
 
-
 # ----------------------------
 # Control endpoints
 # ----------------------------
@@ -1721,7 +2301,6 @@ def control_pause():
     c = get_control()
     return jsonify({"ok": True, "state": "PAUSED", "pause_until_utc": c.get("pause_until_utc", ""), "reason": reason})
 
-
 @app.post("/control/cryo")
 def control_cryo():
     body = request.get_json(force=True, silent=True) or {}
@@ -1731,7 +2310,6 @@ def control_cryo():
     c = get_control()
     return jsonify({"ok": True, "state": "CRYO", "cryo_until_utc": c.get("cryo_until_utc", ""), "reason": reason})
 
-
 @app.post("/control/revive")
 def control_revive():
     body = request.get_json(force=True, silent=True) or {}
@@ -1739,7 +2317,6 @@ def control_revive():
     _set_control_state("ACTIVE", reason=reason)
     add_event("info", "Revive executed", {"reason": reason})
     return jsonify({"ok": True, "state": "ACTIVE"})
-
 
 # ----------------------------
 # Reset endpoints
@@ -1753,7 +2330,6 @@ def wipe_table(name):
     conn.commit()
     conn.close()
 
-
 @app.delete("/reset/all")
 def reset_all():
     for t in ["heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"]:
@@ -1761,36 +2337,30 @@ def reset_all():
     _set_control_state("ACTIVE", reason="reset/all")
     return jsonify({"ok": True})
 
-
 @app.delete("/reset/events")
 def reset_events():
     wipe_table("events")
     return jsonify({"ok": True})
-
 
 @app.delete("/reset/trades")
 def reset_trades():
     wipe_table("trades")
     return jsonify({"ok": True})
 
-
 @app.delete("/reset/equity")
 def reset_equity():
     wipe_table("equity")
     return jsonify({"ok": True})
-
 
 @app.delete("/reset/prices")
 def reset_prices():
     wipe_table("prices")
     return jsonify({"ok": True})
 
-
 @app.delete("/reset/deaths")
 def reset_deaths():
     wipe_table("deaths")
     return jsonify({"ok": True})
-
 
 # ----------------------------
 # Main
