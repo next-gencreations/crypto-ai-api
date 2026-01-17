@@ -3,4 +3,3 @@ flask-cors
 gunicorn
 cryptography
 webauthn
-argon2-cffi
