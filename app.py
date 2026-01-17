@@ -31,7 +31,322 @@ from webauthn.helpers.structs import (
 )
 
 app = Flask(__name__)
+import os
+import json
+import sqlite3
+import math
+import time
+import base64
+import secrets
+import hashlib
+from datetime import datetime, timezone, timedelta
+from flask import Flask, request, jsonify
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+app = Flask(__name__)
+
+DB_PATH = os.getenv("DB_PATH", "/var/data/data.db")
+SETTINGS_PATH = os.getenv("SETTINGS_PATH", "/var/data/settings.json")
+VAULT_MASTER_KEY = base64.b64decode(os.getenv("VAULT_MASTER_KEY"))
+VAULT_SESSION_TTL_SEC = 300
+
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_vault():
+    db = get_db()
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS vault_keys(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exchange TEXT,
+        enc_key TEXT,
+        nonce TEXT,
+        created TEXT
+    )
+    """)
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS vault_state(
+        id INTEGER PRIMARY KEY CHECK (id=1),
+        pin_hash TEXT,
+        unlocked_until INTEGER
+    )
+    """)
+    db.execute("INSERT OR IGNORE INTO vault_state(id,pin_hash,unlocked_until) VALUES(1,NULL,0)")
+    db.commit()
+    db.close()
+
+
+init_vault()
+
+
+def encrypt_value(raw: str):
+    aes = AESGCM(VAULT_MASTER_KEY)
+    nonce = os.urandom(12)
+    enc = aes.encrypt(nonce, raw.encode(), None)
+    return base64.b64encode(enc).decode(), base64.b64encode(nonce).decode()
+
+
+def decrypt_value(enc: str, nonce: str):
+    aes = AESGCM(VAULT_MASTER_KEY)
+    return aes.decrypt(base64.b64decode(nonce), base64.b64decode(enc), None).decode()
+
+
+def vault_unlocked():
+    db = get_db()
+    row = db.execute("SELECT unlocked_until FROM vault_state WHERE id=1").fetchone()
+    db.close()
+    return row["unlocked_until"] > int(time.time())
+
+
+@app.get("/vault/status")
+def vault_status():
+    db = get_db()
+    r = db.execute("SELECT pin_hash, unlocked_until FROM vault_state WHERE id=1").fetchone()
+    db.close()
+    return jsonify({
+        "pin_set": bool(r["pin_hash"]),
+        "unlocked": r["unlocked_until"] > int(time.time()),
+        "expires": r["unlocked_until"]
+    })
+    # ----------------------------
+# Vault: PIN + session
+# ----------------------------
+
+def _now() -> int:
+    return int(time.time())
+
+def _pbkdf2_hash_pin(pin: str, salt: bytes) -> bytes:
+    # PBKDF2-HMAC-SHA256
+    return hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt, 200_000, dklen=32)
+
+def _format_pin_hash(pin: str) -> str:
+    salt = os.urandom(16)
+    h = _pbkdf2_hash_pin(pin, salt)
+    return f"{base64.b64encode(salt).decode()}${base64.b64encode(h).decode()}"
+
+def _verify_pin(pin: str, stored: str) -> bool:
+    try:
+        salt_b64, h_b64 = (stored or "").split("$", 1)
+        salt = base64.b64decode(salt_b64)
+        expected = base64.b64decode(h_b64)
+        got = _pbkdf2_hash_pin(pin, salt)
+        return secrets.compare_digest(got, expected)
+    except Exception:
+        return False
+
+def _get_vault_state():
+    db = get_db()
+    r = db.execute("SELECT pin_hash, unlocked_until FROM vault_state WHERE id=1").fetchone()
+    db.close()
+    return {
+        "pin_hash": r["pin_hash"],
+        "unlocked_until": int(r["unlocked_until"] or 0),
+    }
+
+def _set_unlocked_until(ts: int):
+    db = get_db()
+    db.execute("UPDATE vault_state SET unlocked_until=? WHERE id=1", (int(ts),))
+    db.commit()
+    db.close()
+
+def _set_pin_hash(pin_hash: str):
+    db = get_db()
+    db.execute("UPDATE vault_state SET pin_hash=? WHERE id=1", (pin_hash,))
+    db.commit()
+    db.close()
+
+def _require_unlocked():
+    if not vault_unlocked():
+        return jsonify({"ok": False, "error": "vault_locked"}), 401
+    return None
+
+
+# ----------------------------
+# Vault: key storage helpers
+# ----------------------------
+
+def _mask(s: str) -> str:
+    s = str(s or "")
+    if len(s) <= 4:
+        return "*" * len(s)
+    return ("*" * (len(s) - 4)) + s[-4:]
+
+def _encrypt_json(obj: dict):
+    raw = json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+    return encrypt_value(raw)
+
+def _decrypt_json(enc_key: str, nonce: str):
+    raw = decrypt_value(enc_key, nonce)
+    return json.loads(raw)
+
+
+# ----------------------------
+# Vault endpoints
+# ----------------------------
+
+@app.post("/vault/pin/set")
+def vault_pin_set():
+    """
+    First-time setup: allowed if no PIN exists yet.
+    After setup: requires vault unlocked to change PIN.
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    pin = str(body.get("pin") or "").strip()
+
+    if len(pin) < 4 or len(pin) > 12 or not pin.isdigit():
+        return jsonify({"ok": False, "error": "pin_must_be_4_to_12_digits"}), 400
+
+    st = _get_vault_state()
+    pin_exists = bool(st["pin_hash"])
+
+    if pin_exists and not vault_unlocked():
+        return jsonify({"ok": False, "error": "vault_locked"}), 401
+
+    _set_pin_hash(_format_pin_hash(pin))
+    # After setting/changing PIN, unlock for TTL
+    _set_unlocked_until(_now() + int(VAULT_SESSION_TTL_SEC))
+    return jsonify({"ok": True, "pin_set": True, "unlocked": True, "ttl_sec": VAULT_SESSION_TTL_SEC})
+
+
+@app.post("/vault/unlock")
+def vault_unlock():
+    body = request.get_json(force=True, silent=True) or {}
+    pin = str(body.get("pin") or "").strip()
+
+    st = _get_vault_state()
+    if not st["pin_hash"]:
+        return jsonify({"ok": False, "error": "pin_not_set"}), 400
+
+    if not _verify_pin(pin, st["pin_hash"]):
+        return jsonify({"ok": False, "error": "bad_pin"}), 401
+
+    exp = _now() + int(VAULT_SESSION_TTL_SEC)
+    _set_unlocked_until(exp)
+    return jsonify({"ok": True, "unlocked": True, "expires": exp, "ttl_sec": VAULT_SESSION_TTL_SEC})
+
+
+@app.post("/vault/lock")
+def vault_lock():
+    _set_unlocked_until(0)
+    return jsonify({"ok": True, "unlocked": False})
+
+
+@app.get("/vault/keys")
+def vault_keys_list():
+    """
+    Lists stored API keys (masked). Requires unlock.
+    """
+    gate = _require_unlocked()
+    if gate:
+        return gate
+
+    db = get_db()
+    rows = db.execute("SELECT id, exchange, enc_key, nonce, created FROM vault_keys ORDER BY id DESC LIMIT 200").fetchall()
+    db.close()
+
+    out = []
+    for r in rows:
+        try:
+            obj = _decrypt_json(r["enc_key"], r["nonce"])
+            out.append({
+                "id": int(r["id"]),
+                "exchange": r["exchange"] or obj.get("exchange") or "",
+                "created": r["created"] or "",
+                "api_key_masked": _mask(obj.get("api_key")),
+                "has_secret": bool(obj.get("api_secret")),
+                "has_passphrase": bool(obj.get("passphrase")),
+            })
+        except Exception:
+            out.append({
+                "id": int(r["id"]),
+                "exchange": r["exchange"] or "",
+                "created": r["created"] or "",
+                "api_key_masked": "****",
+                "has_secret": True,
+                "has_passphrase": False,
+                "error": "decrypt_failed",
+            })
+
+    return jsonify({"ok": True, "count": len(out), "keys": out})
+
+
+@app.post("/vault/keys/add")
+def vault_keys_add():
+    """
+    Stores exchange API keys encrypted-at-rest.
+    Requires unlock.
+    """
+    gate = _require_unlocked()
+    if gate:
+        return gate
+
+    body = request.get_json(force=True, silent=True) or {}
+    exchange = str(body.get("exchange") or "").strip().upper()
+    api_key = str(body.get("api_key") or "").strip()
+    api_secret = str(body.get("api_secret") or "").strip()
+    passphrase = str(body.get("passphrase") or "").strip()
+
+    if not exchange:
+        return jsonify({"ok": False, "error": "exchange_required"}), 400
+    if not api_key or not api_secret:
+        return jsonify({"ok": False, "error": "api_key_and_secret_required"}), 400
+
+    payload = {
+        "exchange": exchange,
+        "api_key": api_key,
+        "api_secret": api_secret,
+        "passphrase": passphrase or "",
+    }
+
+    enc, nonce = _encrypt_json(payload)
+
+    db = get_db()
+    created = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    cur = db.execute(
+        "INSERT INTO vault_keys(exchange, enc_key, nonce, created) VALUES(?,?,?,?)",
+        (exchange, enc, nonce, created),
+    )
+    db.commit()
+    new_id = cur.lastrowid
+    db.close()
+
+    return jsonify({"ok": True, "id": int(new_id), "exchange": exchange, "created": created})
+
+
+@app.delete("/vault/keys/delete/<int:key_id>")
+def vault_keys_delete(key_id: int):
+    gate = _require_unlocked()
+    if gate:
+        return gate
+
+    db = get_db()
+    db.execute("DELETE FROM vault_keys WHERE id=?", (int(key_id),))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "deleted": int(key_id)})
+
+
+@app.get("/vault/guardrails")
+def vault_guardrails():
+    """
+    Public statement of rules:
+    - This API NEVER exposes a withdrawal endpoint.
+    - Keys are only stored encrypted and can be used server-side by your trading service.
+    """
+    return jsonify({
+        "ok": True,
+        "withdrawals_supported": False,
+        "notes": [
+            "No withdrawal endpoints exist in this API.",
+            "Vault keys are encrypted-at-rest using VAULT_MASTER_KEY.",
+            "Unlock is time-limited (session TTL).",
+        ],
+        "ttl_sec": int(VAULT_SESSION_TTL_SEC),
+    })
 # ----------------------------
 # CORS
 # ----------------------------
