@@ -1,19 +1,3 @@
-
-def _safe_float(v, default=0.0):
-    try:
-        if v is None:
-            return default
-        if isinstance(v, (int, float)):
-            return float(v)
-        s = str(v).strip()
-        if s == "":
-            return default
-        # strip currency symbols/commas if user pasted them
-        s = s.replace("£","").replace("$","").replace(",","")
-        return float(s)
-    except Exception:
-        return default
-
 import os
 import json
 import sqlite3
@@ -29,6 +13,55 @@ from typing import Optional, Dict, Any, List
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+# ==========================================================
+# Safe parse helpers
+# ==========================================================
+def _safe_float(v, default=0.0):
+    try:
+        if v is None:
+            return default
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+        s = str(v).strip()
+        if s == "":
+            return default
+        # strip currency symbols/commas if user pasted them
+        s = s.replace("£", "").replace("$", "").replace(",", "")
+        return float(s)
+    except Exception:
+        return default
+
+
+def _safe_int(v, default=0):
+    try:
+        if v is None:
+            return default
+        if isinstance(v, bool):
+            return int(v)
+        if isinstance(v, int):
+            return int(v)
+        if isinstance(v, float):
+            return int(v)
+        s = str(v).strip()
+        if s == "":
+            return default
+        s = s.replace(",", "")
+        return int(float(s))
+    except Exception:
+        return default
+
+
+def _safe_json_loads(s):
+    if s is None:
+        return None
+    if isinstance(s, (dict, list)):
+        return s
+    try:
+        return json.loads(s)
+    except Exception:
+        return None
+
 
 # ==========================================================
 # App
@@ -49,7 +82,7 @@ else:
 # Settings (bankroll + brain controls)
 # ==========================================================
 SETTINGS_PATH = os.getenv("SETTINGS_PATH", "/var/data/settings.json")
-GBPUSD_RATE = float(os.getenv("GBPUSD_RATE", "1.27"))
+GBPUSD_RATE = _safe_float(os.getenv("GBPUSD_RATE", "1.27"), 1.27)
 
 DEFAULT_SETTINGS = {
     "bankroll_gbp": 100.0,
@@ -65,10 +98,12 @@ DEFAULT_SETTINGS = {
     "trade_mode": "PAPER",  # hard safety
 }
 
+
 def _ensure_parent_dir(path: str):
     parent = os.path.dirname(path)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
+
 
 def load_settings():
     try:
@@ -88,43 +123,66 @@ def load_settings():
     except Exception:
         return dict(DEFAULT_SETTINGS)
 
+
 def save_settings(data: dict):
     _ensure_parent_dir(SETTINGS_PATH)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+        json.dump(data, f, ensure_ascii=False)
+
 
 def get_settings_public():
     s = load_settings()
-    bankroll_gbp = float(s.get("bankroll_gbp", DEFAULT_SETTINGS["bankroll_gbp"]))
-    bankroll_usd = bankroll_gbp * GBPUSD_RATE
+    bankroll_gbp = _safe_float(s.get("bankroll_gbp"), DEFAULT_SETTINGS["bankroll_gbp"])
+    bankroll_usd = bankroll_gbp * (GBPUSD_RATE or 0.0)
+
     return {
         "bankroll_gbp": bankroll_gbp,
         "gbpusd_rate": GBPUSD_RATE,
         "bankroll_usd": bankroll_usd,
-        "trade_mode": (s.get("trade_mode") or "PAPER").upper(),
-        "risk_per_trade_pct": float(s.get("risk_per_trade_pct", DEFAULT_SETTINGS["risk_per_trade_pct"])),
-        "max_open_positions": int(s.get("max_open_positions", DEFAULT_SETTINGS["max_open_positions"])),
-        "min_trade_interval_sec": int(s.get("min_trade_interval_sec", DEFAULT_SETTINGS["min_trade_interval_sec"])),
-        "atr_period": int(s.get("atr_period", DEFAULT_SETTINGS["atr_period"])),
-        "atr_stop_mult": float(s.get("atr_stop_mult", DEFAULT_SETTINGS["atr_stop_mult"])),
-        "min_notional_usd": float(s.get("min_notional_usd", DEFAULT_SETTINGS["min_notional_usd"])),
-        "max_notional_usd": float(s.get("max_notional_usd", DEFAULT_SETTINGS["max_notional_usd"])),
-        "best_max_markets": int(s.get("best_max_markets", DEFAULT_SETTINGS["best_max_markets"])),
-        "best_min_confidence": float(s.get("best_min_confidence", DEFAULT_SETTINGS["best_min_confidence"])),
+        "trade_mode": (str(s.get("trade_mode") or "PAPER")).upper(),
+        "risk_per_trade_pct": _safe_float(
+            s.get("risk_per_trade_pct"), DEFAULT_SETTINGS["risk_per_trade_pct"]
+        ),
+        "max_open_positions": _safe_int(
+            s.get("max_open_positions"), DEFAULT_SETTINGS["max_open_positions"]
+        ),
+        "min_trade_interval_sec": _safe_int(
+            s.get("min_trade_interval_sec"), DEFAULT_SETTINGS["min_trade_interval_sec"]
+        ),
+        "atr_period": _safe_int(s.get("atr_period"), DEFAULT_SETTINGS["atr_period"]),
+        "atr_stop_mult": _safe_float(
+            s.get("atr_stop_mult"), DEFAULT_SETTINGS["atr_stop_mult"]
+        ),
+        "min_notional_usd": _safe_float(
+            s.get("min_notional_usd"), DEFAULT_SETTINGS["min_notional_usd"]
+        ),
+        "max_notional_usd": _safe_float(
+            s.get("max_notional_usd"), DEFAULT_SETTINGS["max_notional_usd"]
+        ),
+        "best_max_markets": _safe_int(
+            s.get("best_max_markets"), DEFAULT_SETTINGS["best_max_markets"]
+        ),
+        "best_min_confidence": _safe_float(
+            s.get("best_min_confidence"), DEFAULT_SETTINGS["best_min_confidence"]
+        ),
     }
+
 
 # ==========================================================
 # Database
 # ==========================================================
 DB_PATH = os.getenv("DB_PATH", "/var/data/data.db")
 
+
 def utc_now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
 
 def ensure_db_dir():
     parent = os.path.dirname(DB_PATH)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
+
 
 def get_conn():
     ensure_db_dir()
@@ -139,15 +197,6 @@ def get_conn():
         pass
     return conn
 
-def _safe_json_loads(s):
-    if s is None:
-        return None
-    if isinstance(s, (dict, list)):
-        return s
-    try:
-        return json.loads(s)
-    except Exception:
-        return None
 
 def _to_epoch(iso_utc: str) -> int:
     try:
@@ -159,11 +208,17 @@ def _to_epoch(iso_utc: str) -> int:
     except Exception:
         return int(datetime.now(timezone.utc).timestamp())
 
+
 def _epoch_to_iso(epoch_s: int) -> str:
     try:
-        return datetime.fromtimestamp(int(epoch_s), tz=timezone.utc).replace(microsecond=0).isoformat()
+        return (
+            datetime.fromtimestamp(int(epoch_s), tz=timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+        )
     except Exception:
         return utc_now_iso()
+
 
 def _safe_markets_list(m):
     if m is None:
@@ -180,10 +235,11 @@ def _safe_markets_list(m):
         return [s.upper()]
     return []
 
+
 # ----------------------------
 # Schema (core)
 # ----------------------------
-SCHEMA_VERSION = int(os.getenv("SCHEMA_VERSION", "3"))
+SCHEMA_VERSION = _safe_int(os.getenv("SCHEMA_VERSION", "3"), 3)
 
 SCHEMA = [
     """
@@ -288,6 +344,7 @@ SCHEMA = [
     """,
 ]
 
+
 def migrate_schema():
     conn = get_conn()
     try:
@@ -298,6 +355,7 @@ def migrate_schema():
     finally:
         conn.close()
 
+
 def init_db():
     migrate_schema()
     conn = get_conn()
@@ -307,12 +365,12 @@ def init_db():
         if cur.fetchone() is None:
             cur.execute(
                 "INSERT INTO meta (id, schema_version, updated_time_utc) VALUES (1, ?, ?)",
-                (SCHEMA_VERSION, utc_now_iso())
+                (SCHEMA_VERSION, utc_now_iso()),
             )
         else:
             cur.execute(
                 "UPDATE meta SET schema_version=?, updated_time_utc=? WHERE id=1",
-                (SCHEMA_VERSION, utc_now_iso())
+                (SCHEMA_VERSION, utc_now_iso()),
             )
 
         cur.execute("SELECT id FROM control WHERE id=1")
@@ -320,38 +378,57 @@ def init_db():
             cur.execute(
                 "INSERT INTO control (id, state, pause_reason, pause_until_utc, cryo_reason, cryo_until_utc, updated_time_utc) "
                 "VALUES (1, 'ACTIVE', '', '', '', '', ?)",
-                (utc_now_iso(),)
+                (utc_now_iso(),),
             )
         conn.commit()
     finally:
         conn.close()
+
 
 init_db()
 
 # ----------------------------
 # Helpers: fetch/insert
 # ----------------------------
-ALLOWED_TABLES = {"meta", "control", "heartbeat", "pet", "prices", "equity", "trades", "events", "deaths"}
+ALLOWED_TABLES = {
+    "meta",
+    "control",
+    "heartbeat",
+    "pet",
+    "prices",
+    "equity",
+    "trades",
+    "events",
+    "deaths",
+}
+
 
 def fetch_one(table: str, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
         raise ValueError("Invalid table")
     conn = get_conn()
     try:
-        row = conn.execute(f"SELECT * FROM {table} ORDER BY {order_by} LIMIT 1").fetchone()
+        row = conn.execute(
+            f"SELECT * FROM {table} ORDER BY {order_by} LIMIT 1"
+        ).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
+
 
 def fetch_many(table: str, limit=50, order_by="id DESC"):
     if table not in ALLOWED_TABLES:
         raise ValueError("Invalid table")
     conn = get_conn()
     try:
-        rows = conn.execute(f"SELECT * FROM {table} ORDER BY {order_by} LIMIT ?", (int(limit),)).fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM {table} ORDER BY {order_by} LIMIT ?",
+            (_safe_int(limit, 50),),
+        ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
 
 def insert_row(table: str, data: dict):
     if table not in ALLOWED_TABLES:
@@ -361,22 +438,29 @@ def insert_row(table: str, data: dict):
         cols = list(data.keys())
         vals = [data[c] for c in cols]
         placeholders = ",".join(["?"] * len(cols))
-        cur = conn.execute(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})", vals)
+        cur = conn.execute(
+            f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})", vals
+        )
         conn.commit()
         return cur.lastrowid
     finally:
         conn.close()
 
+
 def add_event(ev_type: str, message: str, details=None):
     details = details or {}
     t = utc_now_iso()
-    insert_row("events", {
-        "time_utc": t,
-        "time_epoch": _to_epoch(t),
-        "type": ev_type,
-        "message": message,
-        "details": json.dumps(details)
-    })
+    insert_row(
+        "events",
+        {
+            "time_utc": t,
+            "time_epoch": _to_epoch(t),
+            "type": ev_type,
+            "message": message,
+            "details": json.dumps(details, ensure_ascii=False),
+        },
+    )
+
 
 # ==========================================================
 # Control helpers
@@ -385,12 +469,16 @@ def get_control():
     c = fetch_one("control", order_by="id ASC")
     if not c:
         return {
-            "id": 1, "state": "ACTIVE",
-            "pause_reason": "", "pause_until_utc": "",
-            "cryo_reason": "", "cryo_until_utc": "",
-            "updated_time_utc": utc_now_iso()
+            "id": 1,
+            "state": "ACTIVE",
+            "pause_reason": "",
+            "pause_until_utc": "",
+            "cryo_reason": "",
+            "cryo_until_utc": "",
+            "updated_time_utc": utc_now_iso(),
         }
     return c
+
 
 def _set_control_state(state: str, reason: str = "", seconds: int = 0):
     state = (state or "ACTIVE").upper()
@@ -401,33 +489,46 @@ def _set_control_state(state: str, reason: str = "", seconds: int = 0):
         if state == "ACTIVE":
             conn.execute(
                 "UPDATE control SET state='ACTIVE', pause_reason='', pause_until_utc='', cryo_reason='', cryo_until_utc='', updated_time_utc=? WHERE id=1",
-                (now_iso,)
+                (now_iso,),
             )
             conn.commit()
             add_event("info", "State -> ACTIVE", {"reason": reason})
             return
 
         if state == "PAUSED":
-            until = (datetime.now(timezone.utc) + timedelta(seconds=int(seconds or 0))).replace(microsecond=0).isoformat()
+            until = (
+                datetime.now(timezone.utc) + timedelta(seconds=_safe_int(seconds, 0))
+            ).replace(microsecond=0).isoformat()
             conn.execute(
                 "UPDATE control SET state='PAUSED', pause_reason=?, pause_until_utc=?, updated_time_utc=? WHERE id=1",
-                (reason or "manual pause", until, now_iso)
+                (reason or "manual pause", until, now_iso),
             )
             conn.commit()
-            add_event("warning", "State -> PAUSED", {"pause_until_utc": until, "reason": reason})
+            add_event(
+                "warning",
+                "State -> PAUSED",
+                {"pause_until_utc": until, "reason": reason},
+            )
             return
 
         if state == "CRYO":
-            until = (datetime.now(timezone.utc) + timedelta(seconds=int(seconds or 0))).replace(microsecond=0).isoformat()
+            until = (
+                datetime.now(timezone.utc) + timedelta(seconds=_safe_int(seconds, 0))
+            ).replace(microsecond=0).isoformat()
             conn.execute(
                 "UPDATE control SET state='CRYO', cryo_reason=?, cryo_until_utc=?, updated_time_utc=? WHERE id=1",
-                (reason or "cryo safety", until, now_iso)
+                (reason or "cryo safety", until, now_iso),
             )
             conn.commit()
-            add_event("warning", "State -> CRYO", {"cryo_until_utc": until, "reason": reason})
+            add_event(
+                "warning",
+                "State -> CRYO",
+                {"cryo_until_utc": until, "reason": reason},
+            )
             return
     finally:
         conn.close()
+
 
 def is_paused_or_cryo():
     c = get_control()
@@ -461,13 +562,14 @@ def is_paused_or_cryo():
 
     return state, c
 
+
 # ==========================================================
 # OHLC aggregation
 # ==========================================================
 def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     market = (market or "").strip().upper()
-    interval_sec = max(10, int(interval_sec))
-    limit = max(10, min(1000, int(limit)))
+    interval_sec = max(10, _safe_int(interval_sec, 60))
+    limit = max(10, min(1000, _safe_int(limit, 200)))
 
     conn = get_conn()
     try:
@@ -479,7 +581,7 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
             ORDER BY time_epoch DESC
             LIMIT ?
             """,
-            (market, 5000)
+            (market, 5000),
         ).fetchall()
     finally:
         conn.close()
@@ -487,7 +589,9 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     if not rows:
         return []
 
-    ticks = [{"t": int(r["time_epoch"]), "p": float(r["price"])} for r in rows][::-1]
+    ticks = [{"t": _safe_int(r["time_epoch"], 0), "p": _safe_float(r["price"], 0.0)} for r in rows][
+        ::-1
+    ]
 
     buckets = {}
     for tick in ticks:
@@ -510,25 +614,35 @@ def compute_ohlc(market: str, interval_sec: int = 60, limit: int = 200):
     out = [buckets[k] for k in sorted(buckets.keys())]
     return out[-limit:]
 
+
 # ==========================================================
 # Brain v1: EMA + RSI + ATR sizing
 # ==========================================================
-SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", "30"))
-_LAST_SIGNAL = {"time_epoch": 0, "market": "", "side": "hold", "confidence": 0.5, "reason": "init", "features": {}}
+SIGNAL_COOLDOWN_SEC = _safe_int(os.getenv("SIGNAL_COOLDOWN_SEC", "30"), 30)
+_LAST_SIGNAL = {
+    "time_epoch": 0,
+    "market": "",
+    "side": "hold",
+    "confidence": 0.5,
+    "reason": "init",
+    "features": {},
+}
 _LAST_DECISION_BY_MARKET: Dict[str, Dict[str, Any]] = {}
+
 
 def _ema(values, period: int):
     if not values:
         return None
-    period = max(1, int(period))
+    period = max(1, _safe_int(period, 1))
     k = 2 / (period + 1)
     ema = float(values[0])
     for v in values[1:]:
         ema = float(v) * k + ema * (1 - k)
     return ema
 
+
 def _rsi(closes, period: int = 14):
-    period = max(2, int(period))
+    period = max(2, _safe_int(period, 14))
     if len(closes) < period + 1:
         return None
     gains = 0.0
@@ -544,8 +658,9 @@ def _rsi(closes, period: int = 14):
     rs = gains / max(1e-9, losses)
     return 100.0 - (100.0 / (1.0 + rs))
 
+
 def _atr(candles, period: int = 14):
-    period = max(2, int(period))
+    period = max(2, _safe_int(period, 14))
     if not candles or len(candles) < period + 2:
         return None
 
@@ -563,20 +678,22 @@ def _atr(candles, period: int = 14):
     window = trs[-period:]
     return sum(window) / max(1, len(window))
 
+
 def _sigmoid(x: float) -> float:
     try:
         return 1.0 / (1.0 + math.exp(-float(x)))
     except Exception:
         return 0.5
 
+
 def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
-    interval_sec = max(10, int(interval_sec))
+    interval_sec = max(10, _safe_int(interval_sec, 60))
 
     now_epoch = int(datetime.now(timezone.utc).timestamp())
     if (
         _LAST_SIGNAL.get("market") == market
-        and (now_epoch - int(_LAST_SIGNAL.get("time_epoch") or 0)) < SIGNAL_COOLDOWN_SEC
+        and (now_epoch - _safe_int(_LAST_SIGNAL.get("time_epoch"), 0)) < SIGNAL_COOLDOWN_SEC
     ):
         return dict(_LAST_SIGNAL)
 
@@ -585,8 +702,11 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
 
     if len(closes) < 80:
         out = {
-            "market": market, "side": "hold", "confidence": 0.50, "reason": "not_enough_data",
-            "features": {"closes": len(closes), "interval_sec": interval_sec}
+            "market": market,
+            "side": "hold",
+            "confidence": 0.50,
+            "reason": "not_enough_data",
+            "features": {"closes": len(closes), "interval_sec": interval_sec},
         }
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
@@ -597,8 +717,11 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
 
     if ema_fast is None or ema_slow is None or rsi14 is None:
         out = {
-            "market": market, "side": "hold", "confidence": 0.50, "reason": "indicator_nan",
-            "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14}
+            "market": market,
+            "side": "hold",
+            "confidence": 0.50,
+            "reason": "indicator_nan",
+            "features": {"ema_fast": ema_fast, "ema_slow": ema_slow, "rsi14": rsi14},
         }
         _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
         return out
@@ -644,11 +767,12 @@ def build_signal(market: str = "BTCUSDT", interval_sec: int = 60):
     _LAST_SIGNAL.update({"time_epoch": now_epoch, **out})
     return out
 
+
 def compute_position_size_usd(entry_price: float, stop_distance: float, settings_public: dict):
-    bankroll_usd = float(settings_public.get("bankroll_usd") or 0.0)
-    risk_pct = float(settings_public.get("risk_per_trade_pct") or DEFAULT_SETTINGS["risk_per_trade_pct"])
-    min_notional = float(settings_public.get("min_notional_usd") or DEFAULT_SETTINGS["min_notional_usd"])
-    max_notional = float(settings_public.get("max_notional_usd") or DEFAULT_SETTINGS["max_notional_usd"])
+    bankroll_usd = _safe_float(settings_public.get("bankroll_usd"), 0.0)
+    risk_pct = _safe_float(settings_public.get("risk_per_trade_pct"), DEFAULT_SETTINGS["risk_per_trade_pct"])
+    min_notional = _safe_float(settings_public.get("min_notional_usd"), DEFAULT_SETTINGS["min_notional_usd"])
+    max_notional = _safe_float(settings_public.get("max_notional_usd"), DEFAULT_SETTINGS["max_notional_usd"])
 
     if bankroll_usd <= 0 or entry_price <= 0 or stop_distance <= 0:
         return 0.0, {"why": "invalid_inputs"}
@@ -672,9 +796,10 @@ def compute_position_size_usd(entry_price: float, stop_distance: float, settings
         "max_notional": max_notional,
     }
 
+
 def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     market = (market or "BTCUSDT").strip().upper()
-    interval_sec = max(10, int(interval_sec))
+    interval_sec = max(10, _safe_int(interval_sec, 60))
 
     state, _ = is_paused_or_cryo()
     if state in ("PAUSED", "CRYO"):
@@ -692,8 +817,8 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     now_epoch = int(datetime.now(timezone.utc).timestamp())
 
     last = _LAST_DECISION_BY_MARKET.get(market) or {}
-    min_gap = int(settings_public.get("min_trade_interval_sec") or DEFAULT_SETTINGS["min_trade_interval_sec"])
-    if last.get("time_epoch") and (now_epoch - int(last.get("time_epoch"))) < min_gap:
+    min_gap = _safe_int(settings_public.get("min_trade_interval_sec"), DEFAULT_SETTINGS["min_trade_interval_sec"])
+    if last.get("time_epoch") and (now_epoch - _safe_int(last.get("time_epoch"), 0)) < min_gap:
         return {
             "market": market,
             "action": "HOLD",
@@ -703,7 +828,7 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
             "stop_distance": 0.0,
             "features": {
                 "interval_sec": interval_sec,
-                "cooldown_remaining_sec": max(0, min_gap - (now_epoch - int(last.get("time_epoch")))),
+                "cooldown_remaining_sec": max(0, min_gap - (now_epoch - _safe_int(last.get("time_epoch"), 0))),
             },
         }
 
@@ -720,8 +845,8 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
             "features": {"interval_sec": interval_sec},
         }
 
-    entry = float(candles[-1]["c"])
-    atr_period = int(settings_public.get("atr_period") or DEFAULT_SETTINGS["atr_period"])
+    entry = _safe_float(candles[-1].get("c"), 0.0)
+    atr_period = _safe_int(settings_public.get("atr_period"), DEFAULT_SETTINGS["atr_period"])
     atr = _atr(candles, period=atr_period)
     if atr is None or not (atr > 0):
         return {
@@ -734,14 +859,14 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
             "features": {"interval_sec": interval_sec, "entry": entry},
         }
 
-    stop_mult = float(settings_public.get("atr_stop_mult") or DEFAULT_SETTINGS["atr_stop_mult"])
+    stop_mult = _safe_float(settings_public.get("atr_stop_mult"), DEFAULT_SETTINGS["atr_stop_mult"])
     stop_distance = float(atr * stop_mult)
 
     side = (sig.get("side") or "hold").lower()
-    conf = float(sig.get("confidence") or 0.0)
+    conf = _safe_float(sig.get("confidence"), 0.0)
     reason = str(sig.get("reason") or "no_reason")
 
-    min_conf = float(settings_public.get("best_min_confidence", DEFAULT_SETTINGS["best_min_confidence"]))
+    min_conf = _safe_float(settings_public.get("best_min_confidence"), DEFAULT_SETTINGS["best_min_confidence"])
     if side == "hold" or conf < min_conf:
         _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": "HOLD"}
         return {
@@ -782,8 +907,9 @@ def build_decision(market: str = "BTCUSDT", interval_sec: int = 60):
     _LAST_DECISION_BY_MARKET[market] = {"time_epoch": now_epoch, "action": action}
     return out
 
+
 def _list_candidate_markets(max_markets: int = 8):
-    max_markets = max(1, min(50, int(max_markets)))
+    max_markets = max(1, min(50, _safe_int(max_markets, 8)))
 
     hb = fetch_one("heartbeat")
     if hb:
@@ -810,33 +936,35 @@ def _list_candidate_markets(max_markets: int = 8):
             break
     return out
 
+
 def _best_score(decision_obj: dict) -> float:
     action = (decision_obj.get("action") or "HOLD").upper()
-    conf = float(decision_obj.get("confidence") or 0.0)
-    size = float(decision_obj.get("size_usd") or 0.0)
+    conf = _safe_float(decision_obj.get("confidence"), 0.0)
+    size = _safe_float(decision_obj.get("size_usd"), 0.0)
     if action == "HOLD":
         return 0.0
     return (conf * 100.0) + min(25.0, size / 50.0)
 
+
 def build_best_decision(interval_sec: int = 60):
     settings = get_settings_public()
-    max_mk = int(settings.get("best_max_markets") or DEFAULT_SETTINGS["best_max_markets"])
-    min_conf = float(settings.get("best_min_confidence") or DEFAULT_SETTINGS["best_min_confidence"])
+    max_mk = _safe_int(settings.get("best_max_markets"), DEFAULT_SETTINGS["best_max_markets"])
+    min_conf = _safe_float(settings.get("best_min_confidence"), DEFAULT_SETTINGS["best_min_confidence"])
 
     markets = _list_candidate_markets(max_markets=max_mk)
     candidates = []
     for m in markets:
         d = build_decision(market=m, interval_sec=interval_sec)
         action = (d.get("action") or "HOLD").upper()
-        conf = float(d.get("confidence") or 0.0)
+        conf = _safe_float(d.get("confidence"), 0.0)
         eligible = (action != "HOLD") and (conf >= min_conf)
         candidates.append({
             "market": m,
             "action": action,
             "confidence": conf,
             "reason": d.get("reason") or "",
-            "size_usd": float(d.get("size_usd") or 0.0),
-            "stop_distance": float(d.get("stop_distance") or 0.0),
+            "size_usd": _safe_float(d.get("size_usd"), 0.0),
+            "stop_distance": _safe_float(d.get("stop_distance"), 0.0),
             "eligible": bool(eligible),
             "score": float(_best_score(d)) if eligible else 0.0,
             "features": d.get("features") or {},
@@ -846,12 +974,12 @@ def build_best_decision(interval_sec: int = 60):
     for c in candidates:
         if not c.get("eligible"):
             continue
-        if best is None or float(c.get("score") or 0.0) > float(best.get("score") or 0.0):
+        if best is None or _safe_float(c.get("score"), 0.0) > _safe_float(best.get("score"), 0.0):
             best = c
 
     return {
         "ok": True,
-        "interval_sec": int(interval_sec),
+        "interval_sec": _safe_int(interval_sec, 60),
         "markets_checked": markets,
         "best": best or {
             "market": markets[0] if markets else "BTCUSDT",
@@ -867,6 +995,7 @@ def build_best_decision(interval_sec: int = 60):
         "candidates": candidates,
     }
 
+
 # ==========================================================
 # Paper Trading Engine
 # ==========================================================
@@ -879,6 +1008,7 @@ class PaperPosition:
     stop: float
     opened_ts: int
 
+
 @dataclass
 class PaperState:
     cash_usd: float = 1000.0
@@ -886,6 +1016,7 @@ class PaperState:
     peak_equity_usd: float = 1000.0
     drawdown_pct: float = 0.0
     position: Optional[PaperPosition] = None
+
 
 @dataclass
 class PaperConfig:
@@ -897,15 +1028,19 @@ class PaperConfig:
     allow_shorts: bool = True
     one_position_only: bool = True
 
+
 PAPER_CFG = PaperConfig()
 PAPER = PaperState()
 PAPER_TRADES: List[Dict[str, Any]] = []
 
+
 def _bps(x: float) -> float:
     return float(x) / 10000.0
 
+
 def _paper_fee(notional: float) -> float:
     return abs(float(notional)) * _bps(PAPER_CFG.fee_bps)
+
 
 def _paper_apply_slippage(price: float, side: str, is_entry: bool) -> float:
     slip = _bps(PAPER_CFG.slippage_bps)
@@ -915,9 +1050,11 @@ def _paper_apply_slippage(price: float, side: str, is_entry: bool) -> float:
     else:
         return price * (1.0 - slip) if is_entry else price * (1.0 + slip)
 
+
 def _paper_mark_price(market: str) -> float:
     candles = compute_ohlc(market=market, interval_sec=60, limit=2)
     return float(candles[-1]["c"]) if candles else 0.0
+
 
 def _paper_update_equity():
     PAPER.equity_usd = PAPER.cash_usd
@@ -937,11 +1074,13 @@ def _paper_update_equity():
             (PAPER.peak_equity_usd - PAPER.equity_usd) / PAPER.peak_equity_usd * 100.0
         )
 
+
 def _paper_block_new_entries() -> Optional[str]:
     _paper_update_equity()
     if PAPER_CFG.max_drawdown_pct and PAPER.drawdown_pct >= PAPER_CFG.max_drawdown_pct:
         return "max_drawdown"
     return None
+
 
 def _paper_tp_price(pos: PaperPosition) -> Optional[float]:
     rr = float(PAPER_CFG.rr_takeprofit or 0.0)
@@ -953,6 +1092,7 @@ def _paper_tp_price(pos: PaperPosition) -> Optional[float]:
     if pos.side == "LONG":
         return float(pos.entry + rr * r)
     return float(pos.entry - rr * r)
+
 
 def _paper_close_position(exit_price: float, reason: str) -> Dict[str, Any]:
     pos = PAPER.position
@@ -992,6 +1132,7 @@ def _paper_close_position(exit_price: float, reason: str) -> Dict[str, Any]:
     _paper_update_equity()
     return {"ok": True, "closed_at": float(exit_exec), "pnl": float(pnl), "reason": reason}
 
+
 def _paper_check_exit() -> Optional[Dict[str, Any]]:
     if not PAPER.position:
         return None
@@ -1016,16 +1157,17 @@ def _paper_check_exit() -> Optional[Dict[str, Any]]:
 
     return None
 
+
 def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
     if not PAPER_CFG.enabled:
         return {"ok": False, "why": "paper_disabled"}
 
     market = (decision.get("market") or "").strip().upper()
     action = (decision.get("action") or "HOLD").upper()
-    size_usd = float(decision.get("size_usd") or 0.0)
-    stop_distance = float(decision.get("stop_distance") or 0.0)
+    size_usd = _safe_float(decision.get("size_usd"), 0.0)
+    stop_distance = _safe_float(decision.get("stop_distance"), 0.0)
 
-    entry = float((decision.get("features") or {}).get("entry") or 0.0)
+    entry = _safe_float((decision.get("features") or {}).get("entry"), 0.0)
     if entry <= 0:
         entry = _paper_mark_price(market)
 
@@ -1079,10 +1221,12 @@ def _paper_open_from_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
     _paper_update_equity()
     return {"ok": True, "opened": asdict(PAPER.position)}
 
+
 # ===================== END OF PART 1 ======================
 # ===== PART 2 START =====
 
-VAULT_SESSION_TTL_SEC = int(os.getenv("VAULT_SESSION_TTL_SEC", "300"))
+VAULT_SESSION_TTL_SEC = _safe_int(os.getenv("VAULT_SESSION_TTL_SEC", "300"), 300)
+
 
 def _vault_key_bytes() -> Optional[bytes]:
     b64 = (os.getenv("VAULT_MASTER_KEY") or "").strip()
@@ -1094,19 +1238,24 @@ def _vault_key_bytes() -> Optional[bytes]:
     except Exception:
         return None
 
+
 def vault_enabled() -> bool:
     return _vault_key_bytes() is not None
+
 
 def _vault_now() -> int:
     return int(time.time())
 
+
 def _pbkdf2_hash_pin(pin: str, salt: bytes) -> bytes:
     return hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt, 200_000, dklen=32)
+
 
 def _format_pin_hash(pin: str) -> str:
     salt = os.urandom(16)
     h = _pbkdf2_hash_pin(pin, salt)
     return f"{base64.b64encode(salt).decode()}${base64.b64encode(h).decode()}"
+
 
 def _verify_pin(pin: str, stored: str) -> bool:
     try:
@@ -1117,6 +1266,7 @@ def _verify_pin(pin: str, stored: str) -> bool:
         return secrets.compare_digest(got, expected)
     except Exception:
         return False
+
 
 def init_vault_tables():
     conn = get_conn()
@@ -1142,15 +1292,18 @@ def init_vault_tables():
     finally:
         conn.close()
 
+
 init_vault_tables()
+
 
 def vault_unlocked() -> bool:
     conn = get_conn()
     try:
         row = conn.execute("SELECT unlocked_until FROM vault_state WHERE id=1").fetchone()
-        return int(row["unlocked_until"] or 0) > _vault_now()
+        return _safe_int(row["unlocked_until"], 0) > _vault_now()
     finally:
         conn.close()
+
 
 def _vault_encrypt_value(raw: str):
     key = _vault_key_bytes()
@@ -1161,12 +1314,14 @@ def _vault_encrypt_value(raw: str):
     enc = aes.encrypt(nonce, raw.encode("utf-8"), None)
     return base64.b64encode(enc).decode(), base64.b64encode(nonce).decode()
 
+
 def _vault_decrypt_value(enc: str, nonce: str):
     key = _vault_key_bytes()
     if not key:
         raise ValueError("vault_not_configured")
     aes = AESGCM(key)
     return aes.decrypt(base64.b64decode(nonce), base64.b64decode(enc), None).decode("utf-8")
+
 
 def _require_unlocked():
     if not vault_enabled():
@@ -1175,11 +1330,13 @@ def _require_unlocked():
         return jsonify({"ok": False, "error": "vault_locked"}), 401
     return None
 
+
 def _mask(s: str) -> str:
     s = str(s or "")
     if len(s) <= 4:
         return "*" * len(s)
     return ("*" * (len(s) - 4)) + s[-4:]
+
 
 @app.get("/vault/status")
 def vault_status():
@@ -1190,21 +1347,24 @@ def vault_status():
             "ok": True,
             "enabled": vault_enabled(),
             "pin_set": bool(r["pin_hash"]),
-            "unlocked": int(r["unlocked_until"] or 0) > _vault_now(),
-            "expires": int(r["unlocked_until"] or 0),
+            "unlocked": _safe_int(r["unlocked_until"], 0) > _vault_now(),
+            "expires": _safe_int(r["unlocked_until"], 0),
             "ttl_sec": int(VAULT_SESSION_TTL_SEC),
         })
     finally:
         conn.close()
+
 
 # Legacy routes kept for backward compatibility with older dashboards
 @app.post("/vault/set-pin")
 def vault_set_pin_legacy():
     return vault_pin_set()
 
+
 @app.post("/vault/use-pin")
 def vault_use_pin_legacy():
     return vault_unlock()
+
 
 @app.post("/vault/pin/set")
 def vault_pin_set():
@@ -1231,6 +1391,7 @@ def vault_pin_set():
     finally:
         conn.close()
 
+
 @app.post("/vault/unlock")
 def vault_unlock():
     if not vault_enabled():
@@ -1254,6 +1415,7 @@ def vault_unlock():
     finally:
         conn.close()
 
+
 @app.post("/vault/lock")
 def vault_lock():
     if not vault_enabled():
@@ -1265,6 +1427,7 @@ def vault_lock():
         return jsonify({"ok": True, "unlocked": False})
     finally:
         conn.close()
+
 
 @app.get("/vault/keys")
 def vault_keys_list():
@@ -1306,6 +1469,7 @@ def vault_keys_list():
     finally:
         conn.close()
 
+
 @app.post("/vault/keys/add")
 def vault_keys_add():
     gate = _require_unlocked()
@@ -1340,6 +1504,7 @@ def vault_keys_add():
 
     return jsonify({"ok": True, "id": int(new_id), "exchange": exchange, "created": created})
 
+
 @app.delete("/vault/keys/delete/<int:key_id>")
 def vault_keys_delete(key_id: int):
     gate = _require_unlocked()
@@ -1353,6 +1518,7 @@ def vault_keys_delete(key_id: int):
     finally:
         conn.close()
 
+
 @app.get("/vault/guardrails")
 def vault_guardrails():
     return jsonify({
@@ -1361,33 +1527,39 @@ def vault_guardrails():
         "ttl_sec": int(VAULT_SESSION_TTL_SEC),
     })
 
+
 @app.get("/health")
 def health():
     return jsonify({"ok": True, "time_utc": utc_now_iso()})
 
+
 @app.get("/signal")
 def signal():
     market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
+    interval = _safe_int(request.args.get("interval", "60"), 60)
     return jsonify(build_signal(market=market, interval_sec=interval))
+
 
 @app.get("/decision")
 def decision():
     market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
+    interval = _safe_int(request.args.get("interval", "60"), 60)
     return jsonify(build_decision(market=market, interval_sec=interval))
+
 
 @app.get("/decision/best")
 def decision_best():
-    interval = int(request.args.get("interval", "60"))
+    interval = _safe_int(request.args.get("interval", "60"), 60)
     return jsonify(build_best_decision(interval_sec=interval))
+
 
 @app.get("/ohlc")
 def ohlc():
     market = request.args.get("market", "BTCUSDT")
-    interval = int(request.args.get("interval", "60"))
-    limit = int(request.args.get("limit", "200"))
+    interval = _safe_int(request.args.get("interval", "60"), 60)
+    limit = _safe_int(request.args.get("limit", "200"), 200)
     return jsonify({"market": market, "interval_sec": interval, "candles": compute_ohlc(market, interval, limit)})
+
 
 @app.get("/paper/state")
 def paper_state():
@@ -1403,14 +1575,16 @@ def paper_state():
         "trade_mode": get_settings_public().get("trade_mode", "PAPER"),
     })
 
+
 @app.get("/paper/trades")
 def paper_trades():
     return jsonify({"trades": PAPER_TRADES[-200:]})
 
+
 @app.post("/paper/reset")
 def paper_reset():
     body = request.get_json(silent=True) or {}
-    start = float(body.get("start_cash_usd") or 1000.0)
+    start = _safe_float(body.get("start_cash_usd"), 1000.0)
     PAPER.cash_usd = start
     PAPER.equity_usd = start
     PAPER.peak_equity_usd = start
@@ -1418,6 +1592,7 @@ def paper_reset():
     PAPER.position = None
     PAPER_TRADES.clear()
     return jsonify({"ok": True, "start_cash_usd": start})
+
 
 @app.post("/paper/tick")
 def paper_tick():
@@ -1446,9 +1621,11 @@ def paper_tick():
         }
     })
 
+
 @app.get("/settings")
 def get_settings_route():
     return jsonify(get_settings_public())
+
 
 @app.post("/settings")
 def set_settings_route():
@@ -1458,41 +1635,47 @@ def set_settings_route():
     if "bankroll_gbp" in body:
         s["bankroll_gbp"] = max(0.0, _safe_float(body.get("bankroll_gbp"), 0.0))
     elif "bankroll_usd" in body:
-        bankroll_usd = float(body.get("bankroll_usd", 0))
+        bankroll_usd = _safe_float(body.get("bankroll_usd"), 0.0)
         s["bankroll_gbp"] = max(0.0, (bankroll_usd / GBPUSD_RATE) if GBPUSD_RATE else 0.0)
 
-    for k in [
-        "risk_per_trade_pct", "max_open_positions", "min_trade_interval_sec",
-        "atr_period", "atr_stop_mult", "min_notional_usd", "max_notional_usd",
-        "best_max_markets", "best_min_confidence",
-    ]:
+    FLOAT_KEYS = {"risk_per_trade_pct", "atr_stop_mult", "min_notional_usd", "max_notional_usd", "best_min_confidence"}
+    INT_KEYS = {"max_open_positions", "min_trade_interval_sec", "atr_period", "best_max_markets"}
+
+    for k in (FLOAT_KEYS | INT_KEYS):
         if k in body:
-            s[k] = body.get(k)
+            if k in FLOAT_KEYS:
+                s[k] = _safe_float(body.get(k), DEFAULT_SETTINGS.get(k, 0.0))
+            else:
+                s[k] = _safe_int(body.get(k), DEFAULT_SETTINGS.get(k, 0))
 
     save_settings(s)
     return jsonify({"ok": True, **get_settings_public()})
+
 
 @app.get("/control")
 def control_get():
     return jsonify(get_control())
 
+
 @app.post("/control/pause")
 def control_pause():
     body = request.get_json(force=True, silent=True) or {}
-    seconds = int(body.get("seconds", 600))
+    seconds = _safe_int(body.get("seconds", 600), 600)
     reason = body.get("reason", "manual pause")
     _set_control_state("PAUSED", reason=reason, seconds=seconds)
     c = get_control()
     return jsonify({"ok": True, "state": "PAUSED", "pause_until_utc": c.get("pause_until_utc", ""), "reason": reason})
 
+
 @app.post("/control/cryo")
 def control_cryo():
     body = request.get_json(force=True, silent=True) or {}
-    seconds = int(body.get("seconds", 600))
+    seconds = _safe_int(body.get("seconds", 600), 600)
     reason = body.get("reason", "cryo safety")
     _set_control_state("CRYO", reason=reason, seconds=seconds)
     c = get_control()
     return jsonify({"ok": True, "state": "CRYO", "cryo_until_utc": c.get("cryo_until_utc", ""), "reason": reason})
+
 
 @app.post("/control/revive")
 def control_revive():
@@ -1500,6 +1683,7 @@ def control_revive():
     reason = body.get("reason", "revive")
     _set_control_state("ACTIVE", reason=reason)
     return jsonify({"ok": True, "state": "ACTIVE"})
+
 
 @app.post("/ingest/prices")
 def ingest_prices():
@@ -1524,7 +1708,7 @@ def ingest_prices():
                     continue
                 conn.execute(
                     "INSERT INTO prices(time_utc,time_epoch,market,price) VALUES(?,?,?,?)",
-                    (time_utc, time_epoch, m, float(price))
+                    (time_utc, time_epoch, m, float(price)),
                 )
                 count += 1
             except Exception:
@@ -1534,6 +1718,7 @@ def ingest_prices():
         conn.close()
 
     return jsonify({"ok": True, "count": count})
+
 
 @app.get("/data")
 def data():
@@ -1562,7 +1747,7 @@ def data():
         "state": state,
         "heartbeat": hb or {},
         "pet": pet or {},
-        "equity": [{"equity_usd": float(p["equity_usd"]), "time_utc": p["time_utc"]} for p in equity_points],
+        "equity": [{"equity_usd": _safe_float(p.get("equity_usd"), 0.0), "time_utc": p.get("time_utc")} for p in equity_points],
         "trades": recent_trades,
         "prices": latest_prices,
         "events": events,
@@ -1576,6 +1761,7 @@ def data():
         "vault": {"enabled": vault_enabled(), "unlocked": vault_unlocked()},
     })
 
+
 @app.get("/")
 def home():
     return jsonify({
@@ -1586,8 +1772,7 @@ def home():
         "vault_unlocked": vault_unlocked(),
     })
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "10000"))
-    app.run(host="0.0.0.0", port=port)
 
-# ===== PART 2 END =====
+if __name__ == "__main__":
+    port = _safe_int(os.environ.get("PORT", "10000"), 10000)
+    app.run(host="0.0.0.0", port=port)
