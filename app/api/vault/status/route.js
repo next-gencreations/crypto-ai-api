@@ -6,13 +6,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const [state] = await db.select().from(vaultState).limit(1);
+  const [row] = await db.select().from(vaultState).limit(1);
 
   return NextResponse.json(
-    state ?? {
-      isPinSet: false,
-      isLocked: true,
-      isEnabled: true,
-    }
+    row ?? { id: 0, isPinSet: false, isLocked: true, pinHash: null, isEnabled: true },
+    { status: 200 }
   );
 }
