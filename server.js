@@ -9,15 +9,14 @@ const app = express();
 // ---------- ENV ----------
 const PORT = Number(process.env.PORT || 10000);
 
-// Persisted storage directory on Render (you already use /var/data)
+// Persisted storage directory on Render
 const DATA_DIR = process.env.DATA_DIR || "/var/data";
-const SETTINGS_FILE =
-  process.env.SETTINGS_PATH || path.join(DATA_DIR, "settings.json");
+const SETTINGS_FILE = process.env.SETTINGS_PATH || path.join(DATA_DIR, "settings.json");
 const STATE_FILE = process.env.STATE_PATH || path.join(DATA_DIR, "state.json");
 
 const GBPUSD_RATE = Number(process.env.GBPUSD_RATE || "1.27");
 
-// CORS (safe default: allow all; you can tighten later)
+// CORS
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
 // ---------- Helpers ----------
@@ -106,23 +105,47 @@ function pushEvent(st, type, message, extra = {}) {
   if (st.events.length > 200) st.events = st.events.slice(-200);
 }
 
-function isVaultEnabled(settings) {
-  return settings.vault_enabled !== false;
+function vaultEnabledOr403(res) {
+  const settings = loadSettings();
+  if (settings.vault_enabled === false) {
+    res.status(403).json({ ok: false, error: "vault_disabled" });
+    return false;
+  }
+  return true;
 }
 
-function isSessionValid(st) {
-  const token = st.vault.session_token;
-  const exp = st.vault.session_expires_utc;
-  if (!token || !exp) return false;
-  return Date.now() < new Date(exp).getTime();
+function normalizePinInputs(body) {
+  // Dashboard may send different keys. We accept all of them.
+  const pin =
+    body?.pin ??
+    body?.current_pin ??
+    body?.old_pin ??
+    body?.existing_pin ??
+    "";
+
+  const newPin =
+    body?.new_pin ??
+    body?.newPin ??
+    body?.pin_new ??
+    body?.set_pin ??
+    body?.pin ??
+    "";
+
+  return { pin: String(pin), newPin: String(newPin) };
 }
 
-function issueSession(st, minutes = 30) {
-  st.vault.locked = false;
+function validatePinFormat(pin) {
+  // Keep it simple: 4–8 digits (adjust if you want)
+  if (!pin) return false;
+  if (pin.length < 4 || pin.length > 8) return false;
+  if (!/^\d+$/.test(pin)) return false;
+  return true;
+}
+
+function makeSession(st, minutes = 30) {
   st.vault.session_token = crypto.randomBytes(16).toString("hex");
-  st.vault.session_expires_utc = new Date(
-    Date.now() + minutes * 60 * 1000
-  ).toISOString();
+  st.vault.session_expires_utc = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+  return { token: st.vault.session_token, expires_utc: st.vault.session_expires_utc };
 }
 
 // ---------- Middleware ----------
@@ -133,6 +156,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Always respond to OPTIONS (helps Vercel/proxy/browser)
+app.options("*", (_req, res) => res.sendStatus(204));
 
 // ---------- Routes ----------
 
@@ -145,17 +171,15 @@ app.get("/", (_req, res) => {
 app.get("/health", (_req, res) => {
   const settings = loadSettings();
   const st = loadState();
-
-  const enabled = isVaultEnabled(settings);
-  const unlocked = enabled ? (!st.vault.locked && isSessionValid(st)) : false;
+  const vaultEnabled = settings.vault_enabled !== false;
 
   res.json({
     ok: true,
     status: 200,
     service: "crypto-ai-api",
     time_utc: nowUtc(),
-    vault_enabled: enabled,
-    vault_unlocked: unlocked,
+    vault_enabled: vaultEnabled,
+    vault_unlocked: vaultEnabled ? !st.vault.locked : false,
   });
 });
 
@@ -217,8 +241,7 @@ app.get("/data", (_req, res) => {
   const bankroll = st.bankroll?.amount_gbp ?? 1000;
   const equityUsd = (Number(bankroll) * GBPUSD_RATE).toFixed(2);
 
-  const enabled = isVaultEnabled(settings);
-  const unlocked = enabled ? (!st.vault.locked && isSessionValid(st)) : false;
+  const vaultEnabled = settings.vault_enabled !== false;
 
   res.json({
     ok: true,
@@ -231,9 +254,9 @@ app.get("/data", (_req, res) => {
     events: st.events || [],
     trades: st.trades || [],
     vault: {
-      enabled,
+      enabled: vaultEnabled,
       pin_set: !!st.vault.pin_set,
-      locked: enabled ? !unlocked : true,
+      locked: vaultEnabled ? !!st.vault.locked : true,
     },
   });
 });
@@ -243,13 +266,11 @@ app.get("/logs", (_req, res) => {
   const st = loadState();
   res.json({
     ok: true,
-    lines: (st.events || [])
-      .slice(-120)
-      .map((e) => `${e.time_utc} | ${e.type} | ${e.message}`),
+    lines: (st.events || []).slice(-120).map((e) => `${e.time_utc} | ${e.type} | ${e.message}`),
   });
 });
 
-// OHLC (stub)
+// OHLC (placeholder)
 app.get("/ohlc", (req, res) => {
   const market = String(req.query.market || "BTCUSDT");
   const interval = String(req.query.interval || "60");
@@ -269,105 +290,91 @@ app.get("/ohlc", (req, res) => {
 app.get("/vault/status", (_req, res) => {
   const settings = loadSettings();
   const st = loadState();
-
-  const enabled = isVaultEnabled(settings);
-  const unlocked = enabled ? (!st.vault.locked && isSessionValid(st)) : false;
+  const enabled = settings.vault_enabled !== false;
+  const locked = enabled ? !!st.vault.locked : true;
 
   res.json({
     ok: true,
     enabled,
     pin_set: !!st.vault.pin_set,
-    locked: enabled ? !unlocked : true,
+    locked,
   });
 });
 
-// ✅ MAIN endpoint your UI hits: POST /vault/pin/set
-// Supports UI body: { pin, newPin }
-// - If no PIN exists yet -> SET PIN using newPin
-// - If PIN exists -> CHANGE PIN (requires correct pin)
-app.post("/vault/pin/set", (req, res) => {
-  const settings = loadSettings();
-  if (!isVaultEnabled(settings)) {
-    return res.status(403).json({ ok: false, error: "vault_disabled" });
-  }
+// NEW: Dashboard endpoint(s) for setting pin
+// Supports: POST /vault/pin/set  and POST /vault/pin (alias)
+function handleSetPin(req, res) {
+  if (!vaultEnabledOr403(res)) return;
 
   const st = loadState();
+  const { pin, newPin } = normalizePinInputs(req.body);
 
-  const currentPin = String(
-    req.body?.pin ?? req.body?.current_pin ?? req.body?.old_pin ?? ""
-  );
-  const newPin = String(req.body?.newPin ?? req.body?.new_pin ?? "");
-
-  // CASE 1: PIN not set yet -> set it
+  // If PIN not set yet: accept newPin (or pin if they send just "pin")
   if (!st.vault.pin_set) {
-    if (!newPin) {
-      return res.status(400).json({ ok: false, error: "new_pin_required" });
-    }
-    if (newPin.length < 4 || newPin.length > 8) {
+    if (!validatePinFormat(newPin)) {
       return res.status(400).json({ ok: false, error: "invalid_pin" });
     }
-
     st.vault.pin_hash = hashPin(newPin);
     st.vault.pin_set = true;
     st.vault.locked = true;
     st.vault.session_token = null;
     st.vault.session_expires_utc = null;
-
     pushEvent(st, "vault", "PIN set");
     saveState(st);
     return res.json({ ok: true });
   }
 
-  // CASE 2: PIN already set -> change it (requires current pin)
-  if (!currentPin) {
-    return res.status(400).json({ ok: false, error: "current_pin_required" });
-  }
-  if (hashPin(currentPin) !== st.vault.pin_hash) {
+  // If PIN already set: require current pin to change it
+  if (!validatePinFormat(pin) || hashPin(pin) !== st.vault.pin_hash) {
     return res.status(401).json({ ok: false, error: "bad_pin" });
   }
-  if (!newPin) {
-    return res.status(400).json({ ok: false, error: "new_pin_required" });
-  }
-  if (newPin.length < 4 || newPin.length > 8) {
+  if (!validatePinFormat(newPin)) {
     return res.status(400).json({ ok: false, error: "invalid_pin" });
   }
 
   st.vault.pin_hash = hashPin(newPin);
+  st.vault.pin_set = true;
   st.vault.locked = true;
   st.vault.session_token = null;
   st.vault.session_expires_utc = null;
-
   pushEvent(st, "vault", "PIN changed");
   saveState(st);
   return res.json({ ok: true });
-});
+}
 
-// ✅ Unlock endpoint your UI may hit: POST /vault/unlock
-app.post("/vault/unlock", (req, res) => {
-  const settings = loadSettings();
-  if (!isVaultEnabled(settings)) {
-    return res.status(403).json({ ok: false, error: "vault_disabled" });
-  }
+app.post("/vault/pin/set", handleSetPin);
+app.post("/vault/pin", handleSetPin);
+
+// Keep your legacy endpoint too (alias)
+app.post("/vault/set-pin", handleSetPin);
+
+// Unlock endpoints
+function handleUnlock(req, res) {
+  if (!vaultEnabledOr403(res)) return;
 
   const st = loadState();
-  const pin = String(req.body?.pin ?? "");
+  const pin = String(req.body?.pin ?? req.body?.current_pin ?? "");
 
   if (!st.vault.pin_set || !st.vault.pin_hash) {
     return res.status(400).json({ ok: false, error: "pin_not_set" });
   }
 
-  if (hashPin(pin) !== st.vault.pin_hash) {
+  if (!validatePinFormat(pin) || hashPin(pin) !== st.vault.pin_hash) {
     return res.status(401).json({ ok: false, error: "bad_pin" });
   }
 
-  issueSession(st);
+  st.vault.locked = false;
+  const session = makeSession(st, 30);
   pushEvent(st, "vault", "Vault unlocked");
   saveState(st);
 
-  res.json({ ok: true, token: st.vault.session_token, expires_utc: st.vault.session_expires_utc });
-});
+  res.json({ ok: true, ...session });
+}
 
-// Lock
+app.post("/vault/unlock", handleUnlock);
+app.post("/vault/pin/use", handleUnlock);
+app.post("/vault/use-pin", handleUnlock);
+
 app.post("/vault/lock", (_req, res) => {
   const st = loadState();
   st.vault.locked = true;
@@ -376,38 +383,6 @@ app.post("/vault/lock", (_req, res) => {
   pushEvent(st, "vault", "Vault locked");
   saveState(st);
   res.json({ ok: true });
-});
-
-// ------- Backwards compatibility routes (older UI/API paths) -------
-
-// Legacy: /vault/set-pin -> uses new PIN only
-app.post("/vault/set-pin", (req, res) => {
-  req.body = { ...(req.body || {}), newPin: req.body?.pin ?? req.body?.newPin ?? req.body?.new_pin };
-  return app._router.handle({ ...req, url: "/vault/pin/set", method: "POST" }, res, () => {});
-});
-
-// Legacy: /vault/use-pin -> unlock with pin
-app.post("/vault/use-pin", (req, res) => {
-  const settings = loadSettings();
-  if (!isVaultEnabled(settings)) {
-    return res.status(403).json({ ok: false, error: "vault_disabled" });
-  }
-
-  const st = loadState();
-  const pin = String(req.body?.pin ?? "");
-
-  if (!st.vault.pin_set || !st.vault.pin_hash) {
-    return res.status(400).json({ ok: false, error: "pin_not_set" });
-  }
-  if (hashPin(pin) !== st.vault.pin_hash) {
-    return res.status(401).json({ ok: false, error: "bad_pin" });
-  }
-
-  issueSession(st);
-  pushEvent(st, "vault", "Vault unlocked");
-  saveState(st);
-
-  res.json({ ok: true, token: st.vault.session_token, expires_utc: st.vault.session_expires_utc });
 });
 
 // ---------- Start ----------
