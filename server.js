@@ -476,7 +476,31 @@ app.post("/bot/run", async (req, res) => {
     return res.status(502).json({ ok: false, error: "bot_run_failed", detail: String(e) });
   }
 });
+// --- Coinbase endpoints (requires you have the key stored as name: "coinbase_main") ---
 
+app.get("/coinbase/ping", async (req, res) => {
+  try {
+    return res.json({ ok: true, message: "route_exists" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
+app.get("/coinbase/accounts", async (req, res) => {
+  try {
+    return res.json({ ok: true, message: "route_exists" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
+app.post("/bot/run", async (req, res) => {
+  try {
+    return res.json({ ok: true, message: "route_exists" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e) });
+  }
+});
 // ---------- Start ----------
 app.listen(PORT, "0.0.0.0", () => {
   ensureDir();
