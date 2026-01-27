@@ -10,20 +10,24 @@ const app = express();
 /* ===================== ENV ===================== */
 const PORT = Number(process.env.PORT || 10000);
 
+// Render persistent disk (recommended)
 const DATA_DIR = process.env.DATA_DIR || "/var/data";
 const SETTINGS_FILE = process.env.SETTINGS_PATH || path.join(DATA_DIR, "settings.json");
 const STATE_FILE = process.env.STATE_PATH || path.join(DATA_DIR, "state.json");
 
+// CORS
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
+// Vault encryption master key (MUST set on Render)
 const VAULT_MASTER_KEY = process.env.VAULT_MASTER_KEY || process.env.VAULT_KEY || "";
 const VAULT_TTL_SECONDS = Number(process.env.VAULT_TTL_SECONDS || "1800");
 
+// Coinbase
 const COINBASE_HOST = "api.coinbase.com";
 const COINBASE_BASE = `https://${COINBASE_HOST}`;
 const COINBASE_ACCOUNTS_PATH = "/api/v3/brokerage/accounts";
 
-/* ===================== Helpers ===================== */
+/* ===================== File helpers ===================== */
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -46,8 +50,12 @@ function nowUtc() {
   return new Date().toISOString();
 }
 
+/* ===================== Settings/State ===================== */
 function defaultSettings() {
-  return { vault_enabled: true, build_tag: process.env.NEXT_PUBLIC_BUILD_TAG || "v1" };
+  return {
+    vault_enabled: true,
+    build_tag: process.env.NEXT_PUBLIC_BUILD_TAG || "v1",
+  };
 }
 
 function defaultState() {
@@ -59,7 +67,8 @@ function defaultState() {
       session_token: null,
       session_expires_utc: null,
     },
-    vault_keys: [], // [{id,name,exchange,enc,created_utc}]
+    // [{id,name,exchange,enc,created_utc}]
+    vault_keys: [],
   };
 }
 
@@ -80,10 +89,10 @@ function saveState(st) {
   writeJson(STATE_FILE, st);
 }
 
+/* ===================== Hashing ===================== */
 function sha256Hex(s) {
   return crypto.createHash("sha256").update(String(s)).digest("hex");
 }
-
 function hashPin(pin) {
   return sha256Hex(pin);
 }
@@ -91,23 +100,26 @@ function hashPin(pin) {
 /* ===================== AES-256-GCM ===================== */
 function requireVaultMasterKey() {
   if (!VAULT_MASTER_KEY || VAULT_MASTER_KEY.length < 16) {
-    throw new Error("VAULT_MASTER_KEY is missing/too short. Set VAULT_MASTER_KEY in Render.");
+    throw new Error("VAULT_MASTER_KEY is missing/too short. Set VAULT_MASTER_KEY in Render env vars.");
   }
 }
-
 function keyBytes() {
-  return crypto.createHash("sha256").update(VAULT_MASTER_KEY).digest(); // 32 bytes
+  // Derive 32 bytes from master key string
+  return crypto.createHash("sha256").update(VAULT_MASTER_KEY).digest();
 }
-
 function aesGcmEncrypt(plaintext) {
   requireVaultMasterKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", keyBytes(), iv);
   const enc = Buffer.concat([cipher.update(String(plaintext), "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return { iv: iv.toString("base64"), tag: tag.toString("base64"), data: enc.toString("base64"), alg: "aes-256-gcm" };
+  return {
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64"),
+    data: enc.toString("base64"),
+    alg: "aes-256-gcm",
+  };
 }
-
 function aesGcmDecrypt(encObj) {
   requireVaultMasterKey();
   const iv = Buffer.from(encObj.iv, "base64");
@@ -119,11 +131,17 @@ function aesGcmDecrypt(encObj) {
   return out.toString("utf8");
 }
 
-/* ===================== Vault helpers ===================== */
+/* ===================== Vault auth ===================== */
 function isVaultUnlocked(st) {
   if (!st?.vault?.session_token) return false;
   if (!st?.vault?.session_expires_utc) return false;
   return new Date(st.vault.session_expires_utc).getTime() > Date.now();
+}
+
+function vaultTtlSec(st) {
+  if (!isVaultUnlocked(st)) return 0;
+  const ms = new Date(st.vault.session_expires_utc).getTime() - Date.now();
+  return Math.max(0, Math.floor(ms / 1000));
 }
 
 function requireVaultToken(req, st) {
@@ -134,33 +152,61 @@ function requireVaultToken(req, st) {
   return { ok: true };
 }
 
+/* ===================== Key selection (FIX) ===================== */
+/**
+ * IMPORTANT FIX:
+ * If multiple keys share the same name, always use the newest one (by created_utc).
+ * This solves your "coinbase_main duplicated" issue.
+ */
 function findVaultKey(st, { name, id }) {
   if (!st?.vault_keys?.length) return null;
-  if (name) return st.vault_keys.find((k) => k.name === name) || null;
+
   if (id) return st.vault_keys.find((k) => k.id === id) || null;
+
+  if (name) {
+    const matches = st.vault_keys.filter((k) => k.name === name);
+    if (!matches.length) return null;
+
+    matches.sort((a, b) => {
+      const ta = Date.parse(a.created_utc || 0) || 0;
+      const tb = Date.parse(b.created_utc || 0) || 0;
+      return tb - ta;
+    });
+
+    return matches[0];
+  }
+
   return null;
 }
 
 /* ===================== Coinbase JWT ===================== */
 /**
- * Coinbase requires:
- * uri = "{METHOD} {HOST}{PATH}"
- * headers: kid = key name, nonce = random
- * exp within ~2 minutes
+ * Coinbase REST JWT:
+ * - payload: {sub:key_name, iss:"cdp", nbf, exp, uri:"METHOD host/path"}
+ * - header: {kid:key_name, nonce: random}
  */
 function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
   const now = Math.floor(Date.now() / 1000);
   const uri = `${method.toUpperCase()} ${COINBASE_HOST}${requestPath}`;
 
-  const payload = { sub: keyName, iss: "cdp", nbf: now, exp: now + 120, uri };
-
-  const header = { kid: keyName, nonce: crypto.randomBytes(16).toString("hex") };
-
-  // Normalize PEM: turn \n into newlines and ensure it ends with newline
+  // Normalize PEM: replace literal "\n" with newlines and ensure it ends with newline
   const pem1 = String(privateKeyPem).includes("\\n")
     ? String(privateKeyPem).replace(/\\n/g, "\n")
     : String(privateKeyPem);
   const pem = pem1.endsWith("\n") ? pem1 : pem1 + "\n";
+
+  const payload = {
+    sub: keyName,
+    iss: "cdp",
+    nbf: now,
+    exp: now + 120,
+    uri,
+  };
+
+  const header = {
+    kid: keyName,
+    nonce: crypto.randomBytes(16).toString("hex"),
+  };
 
   return jwt.sign(payload, pem, { algorithm: "ES256", header });
 }
@@ -174,8 +220,10 @@ app.use(
   })
 );
 
-/* ===================== Routes ===================== */
-app.get("/", (_req, res) => res.json({ ok: true, service: "crypto-ai-api", time_utc: nowUtc() }));
+/* ===================== Base routes ===================== */
+app.get("/", (_req, res) => {
+  res.json({ ok: true, service: "crypto-ai-api", time_utc: nowUtc() });
+});
 
 app.get("/health", (_req, res) => {
   const settings = loadSettings();
@@ -187,29 +235,41 @@ app.get("/health", (_req, res) => {
     time_utc: nowUtc(),
     vault_enabled: settings.vault_enabled !== false,
     vault_unlocked: isVaultUnlocked(st),
+    ttl_sec: vaultTtlSec(st),
   });
 });
 
-/* ---------- Settings ---------- */
+/* ===================== Settings ===================== */
 app.get("/settings", (_req, res) => res.json(loadSettings()));
 
 app.post("/settings", (req, res) => {
-  const merged = { ...loadSettings(), ...(req.body && typeof req.body === "object" ? req.body : {}) };
+  const current = loadSettings();
+  const patch = req.body && typeof req.body === "object" ? req.body : {};
+  const merged = { ...current, ...patch };
   saveSettings(merged);
   res.json({ ok: true, settings: merged });
 });
 
-/* ---------- Vault ---------- */
+/* ===================== Vault ===================== */
 app.get("/vault/status", (_req, res) => {
+  const settings = loadSettings();
   const st = loadState();
-  const unlocked = isVaultUnlocked(st);
-  const ttl = unlocked
-    ? Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000))
-    : 0;
-  res.json({ ok: true, enabled: true, pin_set: !!st.vault.pin_set, unlocked, ttl_sec: ttl });
+  const enabled = settings.vault_enabled !== false;
+  const unlocked = enabled ? isVaultUnlocked(st) : false;
+
+  res.json({
+    ok: true,
+    enabled,
+    pin_set: !!st.vault.pin_set,
+    unlocked,
+    ttl_sec: unlocked ? vaultTtlSec(st) : 0,
+  });
 });
 
 app.post("/vault/set-pin", (req, res) => {
+  const settings = loadSettings();
+  if (settings.vault_enabled === false) return res.status(403).json({ ok: false, error: "vault_disabled" });
+
   const pin = String(req.body?.pin || "");
   if (pin.length < 4 || pin.length > 8) return res.status(400).json({ ok: false, error: "invalid_pin" });
 
@@ -225,6 +285,9 @@ app.post("/vault/set-pin", (req, res) => {
 });
 
 app.post("/vault/unlock", (req, res) => {
+  const settings = loadSettings();
+  if (settings.vault_enabled === false) return res.status(403).json({ ok: false, error: "vault_disabled" });
+
   const pin = String(req.body?.pin || "");
   const st = loadState();
 
@@ -236,7 +299,12 @@ app.post("/vault/unlock", (req, res) => {
   st.vault.session_expires_utc = new Date(Date.now() + VAULT_TTL_SECONDS * 1000).toISOString();
   saveState(st);
 
-  res.json({ ok: true, token: st.vault.session_token, ttl_sec: VAULT_TTL_SECONDS, expires_utc: st.vault.session_expires_utc });
+  res.json({
+    ok: true,
+    token: st.vault.session_token,
+    ttl_sec: VAULT_TTL_SECONDS,
+    expires_utc: st.vault.session_expires_utc,
+  });
 });
 
 app.post("/vault/lock", (_req, res) => {
@@ -248,7 +316,7 @@ app.post("/vault/lock", (_req, res) => {
   res.json({ ok: true });
 });
 
-/* ---------- Vault Keys ---------- */
+/* ===================== Vault Keys ===================== */
 app.post("/vault/keys", (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
@@ -282,7 +350,7 @@ app.post("/vault/keys", (req, res) => {
     id,
     name,
     created_utc: nowUtc(),
-    ttl_sec: Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000)),
+    ttl_sec: vaultTtlSec(st),
     encryption: "aes-256-gcm",
   });
 });
@@ -295,12 +363,12 @@ app.get("/vault/keys", (req, res) => {
   res.json({
     ok: true,
     keys: (st.vault_keys || []).map((k) => ({ id: k.id, name: k.name, created_utc: k.created_utc })),
-    ttl_sec: Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000)),
+    ttl_sec: vaultTtlSec(st),
     encryption: "aes-256-gcm",
   });
 });
 
-/* KEEP FOR DEBUGGING: returns secrets only when unlocked + token */
+// KEEP FOR DEBUGGING (returns decrypted secret) — requires vault token
 app.get("/vault/keys/:id", (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
@@ -323,19 +391,35 @@ app.get("/vault/keys/:id", (req, res) => {
   });
 });
 
-/* ---------- Coinbase (1) Ping + Debug ---------- */
+// DELETE old keys (so you can remove duplicates)
+app.delete("/vault/keys/:id", (req, res) => {
+  const st = loadState();
+  const chk = requireVaultToken(req, st);
+  if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
+
+  const id = String(req.params.id);
+  const before = (st.vault_keys || []).length;
+  st.vault_keys = (st.vault_keys || []).filter((k) => k.id !== id);
+  const after = st.vault_keys.length;
+
+  saveState(st);
+  res.json({ ok: true, removed: before - after });
+});
+
+/* ===================== Coinbase ===================== */
 app.get("/coinbase/ping", async (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
   if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
 
+  // Always uses newest "coinbase_main" because findVaultKey sorts by created_utc
   const entry = findVaultKey(st, { name: "coinbase_main" });
   if (!entry) return res.status(404).json({ ok: false, error: "coinbase_key_not_found" });
 
   const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
 
   const method = "GET";
-  const pathOnly = COINBASE_ACCOUNTS_PATH; // no query, no trailing slash
+  const pathOnly = COINBASE_ACCOUNTS_PATH;
   const uri = `${method} ${COINBASE_HOST}${pathOnly}`;
 
   const token = buildCoinbaseRestJwt(api_key, api_secret, method, pathOnly);
@@ -346,7 +430,7 @@ app.get("/coinbase/ping", async (req, res) => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    // debug=1 returns header/payload (no signature) + uri + server time
+    // Debug mode: returns JWT header/payload (NO signature), uri, server time
     if (req.query.debug === "1") {
       const [h, p] = token.split(".");
       const jwt_header = JSON.parse(Buffer.from(h, "base64url").toString("utf8"));
@@ -354,27 +438,32 @@ app.get("/coinbase/ping", async (req, res) => {
       return res.status(r.ok ? 200 : 502).json({
         ok: r.ok,
         coinbase_status: r.status,
+        using_key_id: entry.id,
+        using_key_created_utc: entry.created_utc,
         uri,
         jwt_header,
         jwt_payload,
         server_time_utc: nowUtc(),
-        note:
-          "If coinbase_status=401: check Coinbase key permissions and IP allowlist; ensure api_key matches the private key pair; uri must match EXACT endpoint.",
       });
     }
 
     if (!r.ok) {
       const txt = await r.text();
-      return res.status(502).json({ ok: false, error: "coinbase_auth_failed", status: r.status, detail: txt.slice(0, 300) });
+      return res.status(502).json({
+        ok: false,
+        error: "coinbase_auth_failed",
+        status: r.status,
+        using_key_id: entry.id,
+        detail: txt.slice(0, 300),
+      });
     }
 
-    return res.json({ ok: true, coinbase: "authenticated" });
+    return res.json({ ok: true, coinbase: "authenticated", using_key_id: entry.id });
   } catch (e) {
     return res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
   }
 });
 
-/* ---------- Coinbase (2) Accounts ---------- */
 app.get("/coinbase/accounts", async (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
@@ -394,39 +483,19 @@ app.get("/coinbase/accounts", async (req, res) => {
 
     const data = await r.json().catch(async () => ({ raw: await r.text() }));
 
-    if (!r.ok) return res.status(502).json({ ok: false, error: "coinbase_accounts_failed", status: r.status, detail: data });
+    if (!r.ok) {
+      return res.status(502).json({
+        ok: false,
+        error: "coinbase_accounts_failed",
+        status: r.status,
+        using_key_id: entry.id,
+        detail: data,
+      });
+    }
 
-    return res.json({ ok: true, data });
+    return res.json({ ok: true, using_key_id: entry.id, data });
   } catch (e) {
     return res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
-  }
-});
-
-/* ---------- (3) Bot runner (read-only template) ---------- */
-app.post("/bot/run", async (req, res) => {
-  const st = loadState();
-  const chk = requireVaultToken(req, st);
-  if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
-
-  const entry = findVaultKey(st, { name: "coinbase_main" });
-  if (!entry) return res.status(404).json({ ok: false, error: "coinbase_key_not_found" });
-
-  const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
-  const token = buildCoinbaseRestJwt(api_key, api_secret, "GET", COINBASE_ACCOUNTS_PATH);
-
-  try {
-    const r = await fetch(COINBASE_BASE + COINBASE_ACCOUNTS_PATH, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    const data = await r.json().catch(async () => ({ raw: await r.text() }));
-    if (!r.ok) return res.status(502).json({ ok: false, error: "bot_coinbase_failed", status: r.status, detail: data });
-
-    const accounts = data?.accounts || data?.data?.accounts || [];
-    return res.json({ ok: true, bot: { ran_utc: nowUtc(), accounts_found: Array.isArray(accounts) ? accounts.length : 0 } });
-  } catch (e) {
-    return res.status(502).json({ ok: false, error: "bot_run_failed", detail: String(e) });
   }
 });
 
