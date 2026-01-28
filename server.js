@@ -5,36 +5,34 @@ import fs from "fs";
 import path from "path";
 import jwt from "jsonwebtoken";
 
+// ---------------- App ----------------
 const app = express();
-
-// ---------------- ENV ----------------
 const PORT = Number(process.env.PORT || 10000);
 
 // Persisted storage directory on Render
 const DATA_DIR = process.env.DATA_DIR || "/var/data";
 const SETTINGS_FILE = process.env.SETTINGS_PATH || path.join(DATA_DIR, "settings.json");
 const STATE_FILE = process.env.STATE_PATH || path.join(DATA_DIR, "state.json");
-const LOG_FILE = process.env.LOG_PATH || path.join(DATA_DIR, "logs.jsonl");
 
 // CORS
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
-// Coinbase (Advanced Trade REST)
-const COINBASE_HOST = "api.coinbase.com";
-const COINBASE_BASE = `https://${COINBASE_HOST}`;
-const COINBASE_ACCOUNTS_PATH = "/api/v3/brokerage/accounts";
-
-// Vault master key (encrypt keys at rest)
+// Vault master (used to encrypt keys at rest)
 const VAULT_MASTER_KEY = process.env.VAULT_MASTER_KEY || process.env.VAULT_KEY || "";
 const VAULT_TTL_SECONDS = Number(process.env.VAULT_TTL_SECONDS || "1800");
+
+// Coinbase
+const COINBASE_HOST = "api.coinbase.com";
+const COINBASE_BASE = `https://${COINBASE_HOST}`;
+// Advanced Trade REST
+const COINBASE_ACCOUNTS_PATH = "/api/v3/brokerage/accounts";
+
+// Binance public (for chart candles)
+const BINANCE_BASE = "https://api.binance.com";
 
 // ---------------- Helpers ----------------
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function nowUtc() {
-  return new Date().toISOString();
 }
 
 function readJson(file, fallback) {
@@ -51,25 +49,16 @@ function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-function appendLog(lineObj) {
-  try {
-    ensureDir();
-    fs.appendFileSync(LOG_FILE, JSON.stringify({ t: nowUtc(), ...lineObj }) + "\n");
-  } catch {
-    // ignore logging errors
-  }
+function nowUtc() {
+  return new Date().toISOString();
 }
 
 function defaultSettings() {
   return {
     vault_enabled: true,
-
-    // Dashboard settings
-    markets: ["BTCUSDT", "ETHUSDT"],
-    bankroll_gbp: 100,
-
-    // “Companion” config
+    bankroll_gbp: 1000,
     companion_name: "Vault Girl",
+    build_tag: process.env.NEXT_PUBLIC_BUILD_TAG || "v1",
   };
 }
 
@@ -78,31 +67,30 @@ function defaultState() {
     vault: {
       enabled: true,
       pin_set: false,
+      locked: true,
       pin_hash: null,
       session_token: null,
       session_expires_utc: null,
     },
     vault_keys: [], // [{id,name,exchange,enc,created_utc}]
-
-    // Paper trading state (fake trading)
-    paper: {
-      equity_usd: 0,
+    bot: {
+      markets: ["BTCUSDT", "ETHUSDT"],
       open_positions: 0,
-      wins: 0,
-      losses: 0,
+      survival: "cryo",
       last_heartbeat_utc: null,
+      equity: { usd: 0 },
+      updated_utc: null,
     },
-
-    // Companion state (Vault Girl / Boy reactions)
-    companion: {
+    pet: {
+      name: "Vault Girl",
       stage: "cryo",
       mood: "idle",
       health: 100,
       hunger: 100,
       growth: 0,
       updated_utc: null,
-      last_reaction: null,
     },
+    logs: [], // [{t, level, msg, data?}]
   };
 }
 
@@ -121,21 +109,31 @@ function saveState(st) {
   writeJson(STATE_FILE, st);
 }
 
+function logLine(level, msg, data) {
+  const st = loadState();
+  st.logs = Array.isArray(st.logs) ? st.logs : [];
+  st.logs.push({ t: nowUtc(), level, msg, data });
+  // keep last 500
+  if (st.logs.length > 500) st.logs = st.logs.slice(st.logs.length - 500);
+  saveState(st);
+}
+
 function sha256Hex(s) {
   return crypto.createHash("sha256").update(String(s)).digest("hex");
 }
+function hashPin(pin) {
+  return sha256Hex(pin);
+}
 
+// --- AES-256-GCM encryption for key material ---
 function requireVaultMasterKey() {
   if (!VAULT_MASTER_KEY || VAULT_MASTER_KEY.length < 16) {
     throw new Error("VAULT_MASTER_KEY missing/too short. Set it in Render env vars.");
   }
 }
-
 function keyBytes() {
   return crypto.createHash("sha256").update(VAULT_MASTER_KEY).digest(); // 32 bytes
 }
-
-// AES-256-GCM encrypt/decrypt for key material
 function aesGcmEncrypt(plaintext) {
   requireVaultMasterKey();
   const iv = crypto.randomBytes(12);
@@ -144,7 +142,6 @@ function aesGcmEncrypt(plaintext) {
   const tag = cipher.getAuthTag();
   return { iv: iv.toString("base64"), tag: tag.toString("base64"), data: enc.toString("base64"), alg: "aes-256-gcm" };
 }
-
 function aesGcmDecrypt(encObj) {
   requireVaultMasterKey();
   const iv = Buffer.from(encObj.iv, "base64");
@@ -170,15 +167,7 @@ function requireVaultToken(req, st) {
   return { ok: true };
 }
 
-// Find stored key by name or id
-function findVaultKey(st, { name, id }) {
-  if (!Array.isArray(st?.vault_keys)) return null;
-  if (name) return st.vault_keys.find((k) => k.name === name) || null;
-  if (id) return st.vault_keys.find((k) => k.id === id) || null;
-  return null;
-}
-
-// Coinbase JWT generation (ES256)
+// Coinbase JWT (Advanced Trade REST)
 function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
   const now = Math.floor(Date.now() / 1000);
   const uri = `${method.toUpperCase()} ${COINBASE_HOST}${requestPath}`;
@@ -195,10 +184,9 @@ function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
   const header = {
     kid: keyName,
     nonce: crypto.randomBytes(16).toString("hex"),
-    typ: "JWT",
   };
 
-  // If stored key has "\n" sequences, convert to real newlines.
+  // normalize if stored with \n sequences
   const pem = String(privateKeyPem).includes("\\n")
     ? String(privateKeyPem).replace(/\\n/g, "\n")
     : String(privateKeyPem);
@@ -206,53 +194,31 @@ function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
   return jwt.sign(payload, pem, { algorithm: "ES256", header });
 }
 
-// Companion reaction to paper P&L
-function applyCompanionReaction(st, pnl) {
-  const c = st.companion || defaultState().companion;
-  const p = st.paper || defaultState().paper;
-
-  // basic “feelings”
-  if (pnl > 0) {
-    c.mood = "happy";
-    c.hunger = Math.min(100, c.hunger + 3);
-    c.health = Math.min(100, c.health + 2);
-    c.growth = Math.min(100, c.growth + 1);
-    c.last_reaction = `Win +$${pnl.toFixed(2)} (feeds companion)`;
-  } else if (pnl < 0) {
-    c.mood = "sad";
-    c.hunger = Math.max(0, c.hunger - 4);
-    c.health = Math.max(0, c.health - 2);
-    c.growth = Math.max(0, c.growth - 1);
-    c.last_reaction = `Loss -$${Math.abs(pnl).toFixed(2)} (companion feels it)`;
-  } else {
-    c.mood = "idle";
-    c.last_reaction = "No change";
-  }
-
-  // stage logic
-  if (c.health <= 25 || c.hunger <= 25) c.stage = "cryo";
-  else if (c.growth >= 50) c.stage = "active";
-  else c.stage = "warming";
-
-  c.updated_utc = nowUtc();
-  st.companion = c;
-  st.paper = p;
+// Find newest key by name (handles duplicates)
+function findNewestKeyByName(st, name) {
+  const keys = Array.isArray(st?.vault_keys) ? st.vault_keys : [];
+  const matches = keys.filter((k) => k.name === name);
+  if (!matches.length) return null;
+  matches.sort((a, b) => new Date(b.created_utc).getTime() - new Date(a.created_utc).getTime());
+  return matches[0];
 }
 
 // ---------------- Middleware ----------------
 app.use(express.json({ limit: "2mb" }));
-app.use(cors({ origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN, credentials: true }));
+app.use(
+  cors({
+    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN,
+    credentials: true,
+  })
+);
 
 // ---------------- Basic ----------------
-app.get("/", (_req, res) => {
-  res.json({ ok: true, service: "crypto-ai-api", time_utc: nowUtc() });
-});
+app.get("/", (_req, res) => res.json({ ok: true, service: "crypto-ai-api", time_utc: nowUtc() }));
 
 app.get("/health", (_req, res) => {
   const settings = loadSettings();
   const st = loadState();
   const vaultEnabled = settings.vault_enabled !== false;
-
   res.json({
     ok: true,
     status: 200,
@@ -263,7 +229,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ---------------- Settings (used by dashboard “SAVE”) ----------------
+// ---------------- Settings ----------------
 app.get("/settings", (_req, res) => res.json(loadSettings()));
 
 app.post("/settings", (req, res) => {
@@ -271,7 +237,178 @@ app.post("/settings", (req, res) => {
   const patch = req.body && typeof req.body === "object" ? req.body : {};
   const merged = { ...current, ...patch };
   saveSettings(merged);
-  appendLog({ level: "info", msg: "settings_updated", patch: Object.keys(patch) });
+
+  // also keep pet name aligned
+  const st = loadState();
+  if (typeof merged.companion_name === "string" && merged.companion_name.trim()) {
+    st.pet.name = merged.companion_name.trim();
+    saveState(st);
+  }
+
+  logLine("info", "settings_updated", patch);
+  res.json({ ok: true, settings: merged });
+});
+
+// ---------------- Data + Logs (for Dashboard) ----------------
+app.get("/data", (_req, res) => {
+  const settings = loadSettings();
+  const st = loadState();
+  res.json({
+    ok: true,
+    time_utc: nowUtc(),
+    markets: st.bot?.markets || ["BTCUSDT"],
+    open_positions: st.bot?.open_positions ?? 0,
+    survival: st.bot?.survival || "cryo",
+    last_heartbeat_utc: st.bot?.last_heartbeat_utc || null,
+    equity: st.bot?.equity || { usd: 0 },
+    settings: {
+      bankroll_gbp: settings.bankroll_gbp ?? 1000,
+      companion_name: settings.companion_name ?? "Vault Girl",
+    },
+    pet: st.pet,
+    bot: st.bot,
+  });
+});
+
+app.get("/logs", (req, res) => {
+  const st = loadState();
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit || "120")));
+  const lines = (st.logs || []).slice(-limit);
+  res.json({ ok: true, lines });
+});
+
+// ---------------- OHLC (candles for TradingView tab) ----------------
+function secToBinanceInterval(sec) {
+  const s = Number(sec);
+  if (s <= 60) return "1m";
+  if (s <= 180) return "3m";
+  if (s <= 300) return "5m";
+  if (s <= 900) return "15m";
+  if (s <= 1800) return "30m";
+  if (s <= 3600) return "1h";
+  if (s <= 14400) return "4h";
+  if (s <= 86400) return "1d";
+  return "1m";
+}
+
+app.get("/ohlc", async (req, res) => {
+  const market = String(req.query.market || "BTCUSDT").toUpperCase();
+  const intervalSec = Number(req.query.interval || "60");
+  const limit = Math.max(1, Math.min(1000, Number(req.query.limit || "600")));
+  const interval = secToBinanceInterval(intervalSec);
+
+  try {
+    const url = `${BINANCE_BASE}/api/v3/klines?symbol=${encodeURIComponent(market)}&interval=${interval}&limit=${limit}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      const txt = await r.text();
+      return res.status(502).json({ ok: false, error: "binance_failed", status: r.status, detail: txt.slice(0, 200) });
+    }
+    const k = await r.json();
+    // Map into common OHLC objects
+    const out = k.map((row) => ({
+      t: row[0], // open time ms
+      o: Number(row[1]),
+      h: Number(row[2]),
+      l: Number(row[3]),
+      c: Number(row[4]),
+      v: Number(row[5]),
+    }));
+    res.json({ ok: true, market, interval, limit, candles: out });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: "ohlc_fetch_failed", detail: String(e) });
+  }
+});
+
+// ---------------- Bot ingest/control ----------------
+// Bot heartbeat: updates what the dashboard shows
+app.post("/ingest/heartbeat", (req, res) => {
+  const st = loadState();
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+
+  // Accept either style of fields
+  const markets = Array.isArray(body.markets) ? body.markets : st.bot.markets;
+  const open_positions = Number.isFinite(Number(body.open_positions)) ? Number(body.open_positions) : st.bot.open_positions;
+  const equityUsd =
+    body.equity?.usd != null ? Number(body.equity.usd) : body.equity_usd != null ? Number(body.equity_usd) : st.bot.equity.usd;
+  const survival = typeof body.survival === "string" ? body.survival : st.bot.survival;
+
+  st.bot.markets = markets;
+  st.bot.open_positions = open_positions;
+  st.bot.equity = { usd: Number.isFinite(equityUsd) ? equityUsd : st.bot.equity.usd };
+  st.bot.survival = survival;
+  st.bot.last_heartbeat_utc = nowUtc();
+  st.bot.updated_utc = nowUtc();
+
+  saveState(st);
+  logLine("info", "heartbeat", { open_positions, equityUsd, survival });
+
+  res.json({ ok: true, stored: true, time_utc: nowUtc() });
+});
+
+// Bot trade event (paper trade result)
+app.post("/ingest/trade", (req, res) => {
+  const st = loadState();
+  const b = req.body && typeof req.body === "object" ? req.body : {};
+
+  const pnl = Number(b.pnl ?? b.realized_pnl ?? 0);
+  const win = pnl > 0;
+
+  // Simple “pet reaction” shaping:
+  // wins: hunger decreases a bit, growth increases, mood happy
+  // losses: health decreases a bit, mood sad
+  if (win) {
+    st.pet.mood = "happy";
+    st.pet.hunger = Math.min(100, st.pet.hunger + 2);     // “fed”
+    st.pet.growth = Math.min(100, st.pet.growth + 1.5);
+    st.pet.health = Math.min(100, st.pet.health + 0.5);
+  } else if (pnl < 0) {
+    st.pet.mood = "sad";
+    st.pet.health = Math.max(0, st.pet.health - 1.2);
+    st.pet.hunger = Math.max(0, st.pet.hunger - 0.6);
+    // if repeated losses, show “cryo” / “hurt” vibe
+    if (st.pet.health < 35) st.pet.stage = "cryo";
+  } else {
+    st.pet.mood = "idle";
+  }
+
+  st.pet.updated_utc = nowUtc();
+  saveState(st);
+
+  logLine("info", "trade", { pnl, market: b.market, side: b.side, paper: b.paper ?? true });
+  res.json({ ok: true });
+});
+
+// Optional direct pet update (if your Brain v2 wants full control)
+app.post("/ingest/pet", (req, res) => {
+  const st = loadState();
+  const b = req.body && typeof req.body === "object" ? req.body : {};
+
+  if (typeof b.name === "string" && b.name.trim()) st.pet.name = b.name.trim();
+  if (typeof b.stage === "string") st.pet.stage = b.stage;
+  if (typeof b.mood === "string") st.pet.mood = b.mood;
+
+  if (b.health != null) st.pet.health = Math.max(0, Math.min(100, Number(b.health)));
+  if (b.hunger != null) st.pet.hunger = Math.max(0, Math.min(100, Number(b.hunger)));
+  if (b.growth != null) st.pet.growth = Math.max(0, Math.min(100, Number(b.growth)));
+
+  st.pet.updated_utc = nowUtc();
+  saveState(st);
+  logLine("info", "pet_update", b);
+
+  res.json({ ok: true, pet: st.pet });
+});
+
+// Bankroll control (dashboard can call this OR /settings)
+app.post("/control/bankroll", (req, res) => {
+  const settings = loadSettings();
+  const v = Number(req.body?.bankroll_gbp);
+  if (!Number.isFinite(v) || v <= 0) return res.status(400).json({ ok: false, error: "bad_bankroll" });
+
+  const merged = { ...settings, bankroll_gbp: v };
+  saveSettings(merged);
+  logLine("info", "bankroll_set", { bankroll_gbp: v });
+
   res.json({ ok: true, settings: merged });
 });
 
@@ -281,6 +418,7 @@ app.get("/vault/status", (_req, res) => {
   const st = loadState();
   const enabled = settings.vault_enabled !== false;
   const unlocked = enabled ? isVaultUnlocked(st) : false;
+
   const ttl = unlocked
     ? Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000))
     : 0;
@@ -296,13 +434,14 @@ app.post("/vault/set-pin", (req, res) => {
   if (pin.length < 4 || pin.length > 8) return res.status(400).json({ ok: false, error: "invalid_pin" });
 
   const st = loadState();
-  st.vault.pin_hash = sha256Hex(pin);
+  st.vault.pin_hash = hashPin(pin);
   st.vault.pin_set = true;
+  st.vault.locked = true;
   st.vault.session_token = null;
   st.vault.session_expires_utc = null;
   saveState(st);
 
-  appendLog({ level: "info", msg: "pin_set" });
+  logLine("info", "pin_set", {});
   res.json({ ok: true });
 });
 
@@ -314,33 +453,30 @@ app.post("/vault/unlock", (req, res) => {
   const st = loadState();
 
   if (!st.vault.pin_set || !st.vault.pin_hash) return res.status(400).json({ ok: false, error: "pin_not_set" });
-  if (sha256Hex(pin) !== st.vault.pin_hash) return res.status(401).json({ ok: false, error: "bad_pin" });
+  if (hashPin(pin) !== st.vault.pin_hash) return res.status(401).json({ ok: false, error: "bad_pin" });
 
+  st.vault.locked = false;
   st.vault.session_token = crypto.randomBytes(16).toString("hex");
   st.vault.session_expires_utc = new Date(Date.now() + VAULT_TTL_SECONDS * 1000).toISOString();
   saveState(st);
 
-  appendLog({ level: "info", msg: "vault_unlocked", ttl_sec: VAULT_TTL_SECONDS });
+  logLine("info", "vault_unlocked", { ttl_sec: VAULT_TTL_SECONDS });
 
-  res.json({
-    ok: true,
-    token: st.vault.session_token,
-    ttl_sec: VAULT_TTL_SECONDS,
-    expires_utc: st.vault.session_expires_utc,
-  });
+  res.json({ ok: true, token: st.vault.session_token, ttl_sec: VAULT_TTL_SECONDS, expires_utc: st.vault.session_expires_utc });
 });
 
 app.post("/vault/lock", (_req, res) => {
   const st = loadState();
+  st.vault.locked = true;
   st.vault.session_token = null;
   st.vault.session_expires_utc = null;
   saveState(st);
 
-  appendLog({ level: "info", msg: "vault_locked" });
+  logLine("info", "vault_locked", {});
   res.json({ ok: true });
 });
 
-// Store key (encrypted)
+// Store a key
 app.post("/vault/keys", (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
@@ -368,12 +504,10 @@ app.post("/vault/keys", (req, res) => {
   const entry = { id, name, exchange, enc, created_utc: nowUtc() };
 
   st.vault_keys = Array.isArray(st.vault_keys) ? st.vault_keys : [];
-  // replace any existing key with same name (keep it simple)
-  st.vault_keys = st.vault_keys.filter((k) => k.name !== name);
   st.vault_keys.push(entry);
   saveState(st);
 
-  appendLog({ level: "info", msg: "key_saved", exchange, name });
+  logLine("info", "vault_key_added", { id, name, exchange });
 
   res.json({
     ok: true,
@@ -399,55 +533,45 @@ app.get("/vault/keys", (req, res) => {
   });
 });
 
-// Debug (optional): get one key with secrets (keep only while debugging)
+// Debug key read (KEEP FOR DEBUGGING)
 app.get("/vault/keys/:id", (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
   if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
 
-  const entry = findVaultKey(st, { id: String(req.params.id) });
+  const entry = (st.vault_keys || []).find((k) => k.id === String(req.params.id));
   if (!entry) return res.status(404).json({ ok: false, error: "not_found" });
 
   const decrypted = JSON.parse(aesGcmDecrypt(entry.enc));
   res.json({
     ok: true,
-    key: { id: entry.id, name: entry.name, exchange: entry.exchange, ...decrypted, created_utc: entry.created_utc },
+    key: { id: entry.id, name: entry.name, exchange: entry.exchange, api_key: decrypted.api_key, api_secret: decrypted.api_secret, created_utc: entry.created_utc },
   });
 });
 
-// ---------------- Coinbase (read-only) ----------------
-async function coinbaseAuthedFetch(st, method, requestPath) {
-  const entry = findVaultKey(st, { name: "coinbase_main" });
-  if (!entry) return { ok: false, status: 404, error: "coinbase_key_not_found" };
-
-  const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
-  const token = buildCoinbaseRestJwt(api_key, api_secret, method, requestPath);
-
-  const r = await fetch(COINBASE_BASE + requestPath, {
-    method,
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  return { ok: r.ok, status: r.status, entry_id: entry.id, entry_created_utc: entry.created_utc, response: r };
-}
-
+// ---------------- Coinbase (requires vault token + stored key) ----------------
 app.get("/coinbase/ping", async (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
   if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
 
+  const entry = findNewestKeyByName(st, "coinbase_main");
+  if (!entry) return res.status(404).json({ ok: false, error: "coinbase_key_not_found" });
+
+  const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
+  const token = buildCoinbaseRestJwt(api_key, api_secret, "GET", COINBASE_ACCOUNTS_PATH);
+
   try {
-    const out = await coinbaseAuthedFetch(st, "GET", COINBASE_ACCOUNTS_PATH);
-    if (!out.ok) {
-      const txt = await out.response.text().catch(() => "");
-      appendLog({ level: "warn", msg: "coinbase_ping_failed", status: out.status });
-      return res.status(502).json({ ok: false, error: "coinbase_auth_failed", status: out.status, detail: txt.slice(0, 300) });
+    const r = await fetch(COINBASE_BASE + COINBASE_ACCOUNTS_PATH, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
+
+    if (!r.ok) {
+      const txt = await r.text();
+      return res.status(502).json({ ok: false, error: "coinbase_auth_failed", status: r.status, detail: txt.slice(0, 300) });
     }
-    appendLog({ level: "info", msg: "coinbase_ping_ok" });
-    return res.json({ ok: true, coinbase: "authenticated", using_key_id: out.entry_id });
+
+    res.json({ ok: true, coinbase: "authenticated", using_key_id: entry.id });
   } catch (e) {
-    appendLog({ level: "error", msg: "coinbase_ping_exception", detail: String(e) });
-    return res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
+    res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
   }
 });
 
@@ -456,150 +580,27 @@ app.get("/coinbase/accounts", async (req, res) => {
   const chk = requireVaultToken(req, st);
   if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
 
+  const entry = findNewestKeyByName(st, "coinbase_main");
+  if (!entry) return res.status(404).json({ ok: false, error: "coinbase_key_not_found" });
+
+  const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
+  const token = buildCoinbaseRestJwt(api_key, api_secret, "GET", COINBASE_ACCOUNTS_PATH);
+
   try {
-    const out = await coinbaseAuthedFetch(st, "GET", COINBASE_ACCOUNTS_PATH);
-    const data = await out.response.json().catch(async () => ({ raw: await out.response.text() }));
+    const r = await fetch(COINBASE_BASE + COINBASE_ACCOUNTS_PATH, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
 
-    if (!out.ok) {
-      appendLog({ level: "warn", msg: "coinbase_accounts_failed", status: out.status });
-      return res.status(502).json({ ok: false, error: "coinbase_accounts_failed", status: out.status, detail: data });
-    }
+    const data = await r.json().catch(async () => ({ raw: await r.text() }));
+    if (!r.ok) return res.status(502).json({ ok: false, error: "coinbase_accounts_failed", status: r.status, detail: data });
 
-    appendLog({ level: "info", msg: "coinbase_accounts_ok" });
-    return res.json({ ok: true, using_key_id: out.entry_id, data });
+    res.json({ ok: true, using_key_id: entry.id, data });
   } catch (e) {
-    appendLog({ level: "error", msg: "coinbase_accounts_exception", detail: String(e) });
-    return res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
+    res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
   }
-});
-
-// ---------------- Logs (dashboard expects { lines: [] }) ----------------
-app.get("/logs", (_req, res) => {
-  try {
-    if (!fs.existsSync(LOG_FILE)) return res.json({ ok: true, lines: [] });
-    const lines = fs
-      .readFileSync(LOG_FILE, "utf-8")
-      .split("\n")
-      .filter(Boolean)
-      .slice(-200)
-      .map((l) => {
-        try { return JSON.parse(l); } catch { return { t: nowUtc(), raw: l }; }
-      });
-    return res.json({ ok: true, lines });
-  } catch (e) {
-    return res.json({ ok: true, lines: [{ t: nowUtc(), level: "error", msg: "logs_read_failed", detail: String(e) }] });
-  }
-});
-
-// ---------------- DATA (this fixes your dashboard “Cannot GET /data”) ----------------
-app.get("/data", async (_req, res) => {
-  const settings = loadSettings();
-  const st = loadState();
-
-  // heartbeat
-  st.paper.last_heartbeat_utc = nowUtc();
-  saveState(st);
-
-  const vaultUnlocked = isVaultUnlocked(st);
-
-  // Try to attach a lightweight Coinbase snapshot if unlocked
-  let coinbase = { ok: false, note: "vault_locked" };
-  if (vaultUnlocked) {
-    try {
-      const out = await coinbaseAuthedFetch(st, "GET", COINBASE_ACCOUNTS_PATH);
-      if (out.ok) {
-        const data = await out.response.json().catch(() => null);
-        coinbase = { ok: true, using_key_id: out.entry_id, accounts: data?.accounts || null };
-      } else {
-        const txt = await out.response.text().catch(() => "");
-        coinbase = { ok: false, status: out.status, detail: txt.slice(0, 120) };
-      }
-    } catch (e) {
-      coinbase = { ok: false, error: String(e) };
-    }
-  }
-
-  // Dashboard-friendly shape
-  const payload = {
-    ok: true,
-    time_utc: nowUtc(),
-
-    markets: settings.markets || ["BTCUSDT"],
-    open_positions: st.paper.open_positions || 0,
-
-    survival: st.companion?.stage || "cryo",
-    last_heartbeat_utc: st.paper.last_heartbeat_utc,
-
-    equity: { usd: st.paper.equity_usd || 0 },
-
-    settings: {
-      bankroll_gbp: settings.bankroll_gbp ?? 100,
-      companion_name: settings.companion_name ?? "Vault Girl",
-    },
-
-    pet: {
-      name: settings.companion_name ?? "Vault Girl",
-      stage: st.companion?.stage ?? "cryo",
-      mood: st.companion?.mood ?? "idle",
-      health: st.companion?.health ?? 100,
-      hunger: st.companion?.hunger ?? 100,
-      growth: st.companion?.growth ?? 0,
-      updated_utc: st.companion?.updated_utc ?? null,
-      last_reaction: st.companion?.last_reaction ?? null,
-    },
-
-    stats: {
-      wins: st.paper.wins || 0,
-      losses: st.paper.losses || 0,
-    },
-
-    vault: {
-      enabled: settings.vault_enabled !== false,
-      unlocked: vaultUnlocked,
-    },
-
-    coinbase,
-  };
-
-  return res.json(payload);
-});
-
-// ---------------- Paper trading (simple “feel wins/losses”) ----------------
-app.post("/paper/reset", (req, res) => {
-  const st = loadState();
-  st.paper.equity_usd = Number(req.body?.equity_usd ?? 0);
-  st.paper.open_positions = 0;
-  st.paper.wins = 0;
-  st.paper.losses = 0;
-
-  st.companion = defaultState().companion;
-  st.companion.updated_utc = nowUtc();
-
-  saveState(st);
-  appendLog({ level: "info", msg: "paper_reset", equity_usd: st.paper.equity_usd });
-  res.json({ ok: true });
-});
-
-// Step with a fake pnl value (e.g. +5 or -3)
-app.post("/paper/step", (req, res) => {
-  const st = loadState();
-  const pnl = Number(req.body?.pnl ?? 0);
-
-  st.paper.equity_usd = Number(st.paper.equity_usd || 0) + pnl;
-  if (pnl > 0) st.paper.wins = (st.paper.wins || 0) + 1;
-  if (pnl < 0) st.paper.losses = (st.paper.losses || 0) + 1;
-
-  applyCompanionReaction(st, pnl);
-
-  saveState(st);
-  appendLog({ level: "info", msg: "paper_step", pnl, equity_usd: st.paper.equity_usd, mood: st.companion.mood });
-
-  res.json({ ok: true, pnl, equity_usd: st.paper.equity_usd, pet: st.companion });
 });
 
 // ---------------- Start ----------------
 app.listen(PORT, "0.0.0.0", () => {
   ensureDir();
-  appendLog({ level: "info", msg: "server_started", port: PORT });
+  logLine("info", "server_started", { port: PORT });
   console.log(`crypto-ai-api listening on :${PORT}`);
 });
