@@ -5,15 +5,12 @@ import fs from "fs";
 import path from "path";
 import jwt from "jsonwebtoken";
 
-// Node 18+ has global fetch; Node 22 definitely does.
-// If you ever run locally on older node, install node-fetch.
-
 const app = express();
 
-// ---------- ENV ----------
+/* ---------------- ENV ---------------- */
 const PORT = Number(process.env.PORT || 10000);
 
-// Persisted storage directory on Render
+// Render persistent disk mount (recommended)
 const DATA_DIR = process.env.DATA_DIR || "/var/data";
 const SETTINGS_FILE = process.env.SETTINGS_PATH || path.join(DATA_DIR, "settings.json");
 const STATE_FILE = process.env.STATE_PATH || path.join(DATA_DIR, "state.json");
@@ -21,19 +18,20 @@ const STATE_FILE = process.env.STATE_PATH || path.join(DATA_DIR, "state.json");
 // CORS
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
+// Vault master key (encrypt at rest)
+const VAULT_MASTER_KEY = process.env.VAULT_MASTER_KEY || process.env.VAULT_KEY || "";
+const VAULT_TTL_SECONDS = Number(process.env.VAULT_TTL_SECONDS || "1800");
+
 // Coinbase
 const COINBASE_HOST = "api.coinbase.com";
 const COINBASE_BASE = `https://${COINBASE_HOST}`;
 const COINBASE_ACCOUNTS_PATH = "/api/v3/brokerage/accounts";
 
-// Vault master (used to encrypt keys at rest)
-const VAULT_MASTER_KEY = process.env.VAULT_MASTER_KEY || process.env.VAULT_KEY || "";
-const VAULT_TTL_SECONDS = Number(process.env.VAULT_TTL_SECONDS || "1800");
+// Binance public candles (for dashboard chart)
+const BINANCE_BASE = "https://api.binance.com";
+const BINANCE_KLINES_PATH = "/api/v3/klines";
 
-// Logs
-const MAX_LOG_LINES = Number(process.env.MAX_LOG_LINES || "600");
-
-// ---------- Helpers ----------
+/* ---------------- Helpers ---------------- */
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -59,16 +57,26 @@ function nowUtc() {
 function defaultSettings() {
   return {
     vault_enabled: true,
-    build_tag: process.env.NEXT_PUBLIC_BUILD_TAG || "v1",
-    bankroll_gbp: 1000,
-    companion_name: "Vault Girl",
+
+    // Dashboard + bot tuning defaults
     markets: ["BTCUSDT", "ETHUSDT"],
+    timeframe: "5m",
+    bankroll_gbp: 1000,
+
+    companion_name: "Vault Girl",
+    companion_sex: "girl",
+    vault_number: "13",
+
+    // “Game” knobs (safe defaults)
+    paper_enabled: true,
+    risk_mode: "safe", // safe | balanced | spicy (still paper by default)
   };
 }
 
 function defaultState() {
   return {
     vault: {
+      enabled: true,
       pin_set: false,
       locked: true,
       pin_hash: null,
@@ -76,27 +84,30 @@ function defaultState() {
       session_expires_utc: null,
     },
 
-    vault_keys: [], // [{id,name,exchange,enc,created_utc}]
+    // stored exchange keys (encrypted)
+    vault_keys: [],
 
-    // Dashboard/bot state
+    // system state for dashboard
+    system: {
+      open_positions: 0,
+      last_heartbeat_utc: null,
+      equity: { usd: 0 },
+      last_pnl_usd: 0,
+    },
+
+    // companion / pet state that UI renders
     pet: {
       name: "Vault Girl",
-      stage: "cryo", // cryo | awake | ...
-      mood: "idle",
+      stage: "cryo", // cryo | active | ...
+      mood: "cryo", // cryo | idle | weak | sick | thriving | ...
       health: 100,
       hunger: 100,
       growth: 0,
       updated_utc: null,
     },
 
-    bot: {
-      last_heartbeat_utc: null,
-      open_positions: 0,
-      survival: "cryo",
-      equity: { usd: 0 },
-    },
-
-    logs: [], // [{t, level, msg, extra?}]
+    // rolling logs for /logs
+    logs: [],
   };
 }
 
@@ -118,12 +129,17 @@ function saveState(st) {
 function logLine(level, msg, extra = null) {
   const st = loadState();
   st.logs = Array.isArray(st.logs) ? st.logs : [];
-  st.logs.push({ t: nowUtc(), level, msg, extra });
-  if (st.logs.length > MAX_LOG_LINES) st.logs = st.logs.slice(st.logs.length - MAX_LOG_LINES);
+  st.logs.push({
+    t: nowUtc(),
+    level,
+    msg,
+    extra,
+  });
+  // keep last 300
+  if (st.logs.length > 300) st.logs = st.logs.slice(-300);
   saveState(st);
 }
 
-// ---------- Crypto helpers ----------
 function sha256Hex(s) {
   return crypto.createHash("sha256").update(String(s)).digest("hex");
 }
@@ -131,10 +147,10 @@ function hashPin(pin) {
   return sha256Hex(pin);
 }
 
-// --- AES-256-GCM encryption for key material ---
+/* -------- AES-256-GCM encryption -------- */
 function requireVaultMasterKey() {
   if (!VAULT_MASTER_KEY || VAULT_MASTER_KEY.length < 16) {
-    throw new Error("VAULT_MASTER_KEY missing/too short. Set it in Render env vars.");
+    throw new Error("VAULT_MASTER_KEY missing/too short. Set VAULT_MASTER_KEY on Render.");
   }
 }
 function keyBytes() {
@@ -164,6 +180,7 @@ function aesGcmDecrypt(encObj) {
   return out.toString("utf8");
 }
 
+/* -------- Vault session helpers -------- */
 function isVaultUnlocked(st) {
   if (!st?.vault?.session_token) return false;
   if (!st?.vault?.session_expires_utc) return false;
@@ -179,7 +196,18 @@ function requireVaultToken(req, st) {
   return { ok: true };
 }
 
-// Coinbase JWT generation
+function ttlSec(st) {
+  if (!isVaultUnlocked(st)) return 0;
+  return Math.max(
+    0,
+    Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000)
+  );
+}
+
+/* -------- Coinbase JWT builder --------
+payload: {sub:keyName, iss:"cdp", nbf, exp, uri:"METHOD host/path"}
+header:  {kid:keyName, nonce:random}
+*/
 function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
   const now = Math.floor(Date.now() / 1000);
   const uri = `${method.toUpperCase()} ${COINBASE_HOST}${requestPath}`;
@@ -190,7 +218,6 @@ function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
     nbf: now,
     exp: now + 120,
     uri,
-    iat: now,
   };
 
   const header = {
@@ -199,7 +226,7 @@ function buildCoinbaseRestJwt(keyName, privateKeyPem, method, requestPath) {
     typ: "JWT",
   };
 
-  // Normalize \n sequences into real newlines
+  // accept either real PEM or PEM with \n sequences
   const pem = String(privateKeyPem).includes("\\n")
     ? String(privateKeyPem).replace(/\\n/g, "\n")
     : String(privateKeyPem);
@@ -214,16 +241,15 @@ function findVaultKey(st, { name, id }) {
   return null;
 }
 
-// Prefer newest key if multiple share same name
-function findNewestKeyByName(st, name) {
+function pickLatestKeyByName(st, name) {
   const keys = (st.vault_keys || []).filter((k) => k.name === name);
   if (!keys.length) return null;
-  keys.sort((a, b) => new Date(b.created_utc).getTime() - new Date(a.created_utc).getTime());
+  keys.sort((a, b) => String(b.created_utc).localeCompare(String(a.created_utc)));
   return keys[0];
 }
 
-// ---------- Middleware ----------
-app.use(express.json({ limit: "2mb" }));
+/* ---------------- Middleware ---------------- */
+app.use(express.json({ limit: "3mb" }));
 app.use(
   cors({
     origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN,
@@ -231,7 +257,7 @@ app.use(
   })
 );
 
-// ---------- Basic ----------
+/* ---------------- Basic ---------------- */
 app.get("/", (_req, res) => {
   res.json({ ok: true, service: "crypto-ai-api", time_utc: nowUtc() });
 });
@@ -251,8 +277,10 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ---------- Settings ----------
-app.get("/settings", (_req, res) => res.json(loadSettings()));
+/* ---------------- Settings ---------------- */
+app.get("/settings", (_req, res) => {
+  res.json({ ok: true, settings: loadSettings() });
+});
 
 app.post("/settings", (req, res) => {
   const current = loadSettings();
@@ -260,105 +288,31 @@ app.post("/settings", (req, res) => {
   const merged = { ...current, ...patch };
   saveSettings(merged);
 
-  // keep pet name synced if companion_name changes
+  // keep pet name in sync if changed
   const st = loadState();
-  if (merged.companion_name && st.pet) {
-    st.pet.name = String(merged.companion_name);
+  if (typeof merged.companion_name === "string" && merged.companion_name.trim()) {
+    st.pet.name = merged.companion_name.trim();
     saveState(st);
   }
 
-  logLine("info", "settings_updated", { patch });
+  logLine("info", "settings_updated", { keys: Object.keys(patch || {}) });
   res.json({ ok: true, settings: merged });
 });
 
-// ---------- Logs ----------
-app.get("/logs", (_req, res) => {
-  const st = loadState();
-  res.json({ ok: true, lines: st.logs || [] });
-});
-
-// ---------- Data (dashboard expects this) ----------
-app.get("/data", (_req, res) => {
-  const settings = loadSettings();
-  const st = loadState();
-
-  res.json({
-    ok: true,
-    time_utc: nowUtc(),
-    markets: settings.markets || ["BTCUSDT", "ETHUSDT"],
-    open_positions: st.bot?.open_positions ?? 0,
-    survival: st.bot?.survival ?? (st.pet?.stage || "cryo"),
-    last_heartbeat_utc: st.bot?.last_heartbeat_utc,
-    equity: st.bot?.equity || { usd: 0 },
-    settings: {
-      bankroll_gbp: settings.bankroll_gbp ?? 1000,
-      companion_name: settings.companion_name ?? "Vault Girl",
-    },
-    pet: st.pet || defaultState().pet,
-  });
-});
-
-// ---------- Pet ----------
-app.get("/pet", (_req, res) => {
-  const st = loadState();
-  res.json({ ok: true, pet: st.pet || defaultState().pet });
-});
-
-app.post("/pet", (req, res) => {
-  const st = loadState();
-  st.pet = st.pet || defaultState().pet;
-
-  const patch = req.body && typeof req.body === "object" ? req.body : {};
-  const safeNumber = (v, d) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : d;
-  };
-
-  if (typeof patch.stage === "string") st.pet.stage = patch.stage;
-  if (typeof patch.mood === "string") st.pet.mood = patch.mood;
-  if (typeof patch.name === "string") st.pet.name = patch.name;
-
-  if (patch.health != null) st.pet.health = Math.max(0, Math.min(100, safeNumber(patch.health, st.pet.health)));
-  if (patch.hunger != null) st.pet.hunger = Math.max(0, Math.min(100, safeNumber(patch.hunger, st.pet.hunger)));
-  if (patch.growth != null) st.pet.growth = Math.max(0, safeNumber(patch.growth, st.pet.growth));
-
-  st.pet.updated_utc = nowUtc();
-  saveState(st);
-
-  logLine("info", "pet_updated", { pet: st.pet });
-  res.json({ ok: true, pet: st.pet });
-});
-
-// ---------- Bot heartbeat (runner posts here) ----------
-app.post("/bot/heartbeat", (req, res) => {
-  const st = loadState();
-  st.bot = st.bot || defaultState().bot;
-
-  const body = req.body && typeof req.body === "object" ? req.body : {};
-
-  if (body.open_positions != null) st.bot.open_positions = Number(body.open_positions) || 0;
-  if (body.survival != null) st.bot.survival = String(body.survival);
-  if (body.equity && typeof body.equity === "object") st.bot.equity = body.equity;
-
-  st.bot.last_heartbeat_utc = nowUtc();
-  saveState(st);
-
-  logLine("info", "bot_heartbeat", { open_positions: st.bot.open_positions, equity: st.bot.equity });
-  res.json({ ok: true, time_utc: st.bot.last_heartbeat_utc });
-});
-
-// ---------- Vault ----------
+/* ---------------- Vault ---------------- */
 app.get("/vault/status", (_req, res) => {
   const settings = loadSettings();
   const st = loadState();
   const enabled = settings.vault_enabled !== false;
   const unlocked = enabled ? isVaultUnlocked(st) : false;
 
-  const ttl = unlocked
-    ? Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000))
-    : 0;
-
-  res.json({ ok: true, enabled, pin_set: !!st.vault.pin_set, unlocked, ttl_sec: ttl });
+  res.json({
+    ok: true,
+    enabled,
+    pin_set: !!st.vault.pin_set,
+    unlocked,
+    ttl_sec: unlocked ? ttlSec(st) : 0,
+  });
 });
 
 app.post("/vault/set-pin", (req, res) => {
@@ -411,11 +365,12 @@ app.post("/vault/lock", (_req, res) => {
   st.vault.session_token = null;
   st.vault.session_expires_utc = null;
   saveState(st);
+
   logLine("info", "vault_locked");
   res.json({ ok: true });
 });
 
-// Store a key
+// Store a key (encrypted)
 app.post("/vault/keys", (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
@@ -440,19 +395,26 @@ app.post("/vault/keys", (req, res) => {
   const id = crypto.randomBytes(8).toString("hex");
   const enc = aesGcmEncrypt(JSON.stringify({ api_key, api_secret }));
 
-  const entry = { id, name, exchange, enc, created_utc: nowUtc() };
+  const entry = {
+    id,
+    name,
+    exchange,
+    enc,
+    created_utc: nowUtc(),
+  };
+
   st.vault_keys = Array.isArray(st.vault_keys) ? st.vault_keys : [];
   st.vault_keys.push(entry);
   saveState(st);
 
-  logLine("info", "vault_key_added", { id, name, exchange });
+  logLine("info", "vault_key_added", { exchange, name, id });
 
   res.json({
     ok: true,
     id,
     name,
     created_utc: entry.created_utc,
-    ttl_sec: Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000)),
+    ttl_sec: ttlSec(st),
     encryption: "aes-256-gcm",
   });
 });
@@ -466,22 +428,57 @@ app.get("/vault/keys", (req, res) => {
   res.json({
     ok: true,
     keys: (st.vault_keys || []).map((k) => ({ id: k.id, name: k.name, created_utc: k.created_utc })),
-    ttl_sec: Math.max(0, Math.floor((new Date(st.vault.session_expires_utc).getTime() - Date.now()) / 1000)),
+    ttl_sec: ttlSec(st),
     encryption: "aes-256-gcm",
   });
 });
 
-// ---------- Coinbase ----------
+// Debug: read one key with secrets (KEEP FOR DEBUGGING)
+app.get("/vault/keys/:id", (req, res) => {
+  const st = loadState();
+  const chk = requireVaultToken(req, st);
+  if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
+
+  const entry = findVaultKey(st, { id: String(req.params.id) });
+  if (!entry) return res.status(404).json({ ok: false, error: "not_found" });
+
+  const decrypted = JSON.parse(aesGcmDecrypt(entry.enc));
+  res.json({
+    ok: true,
+    key: {
+      id: entry.id,
+      name: entry.name,
+      exchange: entry.exchange,
+      api_key: decrypted.api_key,
+      api_secret: decrypted.api_secret,
+      created_utc: entry.created_utc,
+    },
+  });
+});
+
+/* ---------------- Coinbase ---------------- */
 app.get("/coinbase/ping", async (req, res) => {
   const st = loadState();
   const chk = requireVaultToken(req, st);
   if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
 
-  const entry = findNewestKeyByName(st, "coinbase_main");
+  const entry = pickLatestKeyByName(st, "coinbase_main");
   if (!entry) return res.status(404).json({ ok: false, error: "coinbase_key_not_found" });
 
   const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
   const token = buildCoinbaseRestJwt(api_key, api_secret, "GET", COINBASE_ACCOUNTS_PATH);
+
+  // optional debug
+  const debug = String(req.query?.debug || "") === "1";
+  let jwt_header = null;
+  let jwt_payload = null;
+  if (debug) {
+    const [h, p] = token.split(".").slice(0, 2);
+    try {
+      jwt_header = JSON.parse(Buffer.from(h, "base64").toString("utf8"));
+      jwt_payload = JSON.parse(Buffer.from(p, "base64").toString("utf8"));
+    } catch {}
+  }
 
   try {
     const r = await fetch(COINBASE_BASE + COINBASE_ACCOUNTS_PATH, {
@@ -493,13 +490,25 @@ app.get("/coinbase/ping", async (req, res) => {
       const txt = await r.text();
       return res.status(502).json({
         ok: false,
-        error: "coinbase_auth_failed",
-        status: r.status,
-        detail: txt.slice(0, 300),
+        coinbase_status: r.status,
+        using_key_id: entry.id,
+        using_key_created_utc: entry.created_utc,
+        uri: `GET ${COINBASE_HOST}${COINBASE_ACCOUNTS_PATH}`,
+        jwt_header,
+        jwt_payload,
+        detail: txt.slice(0, 400),
+        server_time_utc: nowUtc(),
       });
     }
 
-    return res.json({ ok: true, coinbase: "authenticated", using_key_id: entry.id });
+    return res.json({
+      ok: true,
+      coinbase: "authenticated",
+      coinbase_status: r.status,
+      using_key_id: entry.id,
+      using_key_created_utc: entry.created_utc,
+      ...(debug ? { uri: `GET ${COINBASE_HOST}${COINBASE_ACCOUNTS_PATH}`, jwt_header, jwt_payload, server_time_utc: nowUtc() } : {}),
+    });
   } catch (e) {
     return res.status(502).json({ ok: false, error: "coinbase_fetch_failed", detail: String(e) });
   }
@@ -510,7 +519,7 @@ app.get("/coinbase/accounts", async (req, res) => {
   const chk = requireVaultToken(req, st);
   if (!chk.ok) return res.status(chk.status).json({ ok: false, error: chk.error });
 
-  const entry = findNewestKeyByName(st, "coinbase_main");
+  const entry = pickLatestKeyByName(st, "coinbase_main");
   if (!entry) return res.status(404).json({ ok: false, error: "coinbase_key_not_found" });
 
   const { api_key, api_secret } = JSON.parse(aesGcmDecrypt(entry.enc));
@@ -523,14 +532,7 @@ app.get("/coinbase/accounts", async (req, res) => {
     });
 
     const data = await r.json().catch(async () => ({ raw: await r.text() }));
-    if (!r.ok) {
-      return res.status(502).json({
-        ok: false,
-        error: "coinbase_accounts_failed",
-        status: r.status,
-        detail: data,
-      });
-    }
+    if (!r.ok) return res.status(502).json({ ok: false, error: "coinbase_accounts_failed", status: r.status, detail: data });
 
     return res.json({ ok: true, using_key_id: entry.id, data });
   } catch (e) {
@@ -538,53 +540,196 @@ app.get("/coinbase/accounts", async (req, res) => {
   }
 });
 
-// ---------- OHLC (Binance klines for Candles page) ----------
-// Example: /ohlc?market=BTCUSDT&interval=300&limit=600
-app.get("/ohlc", async (req, res) => {
-  const market = String(req.query.market || "BTCUSDT").toUpperCase();
-  const intervalSec = Number(req.query.interval || "300");
-  const limit = Math.min(1000, Math.max(10, Number(req.query.limit || "600")));
+/* ---------------- Dashboard endpoints ---------------- */
+// /status: small summary (dashboard “STATUS” tab)
+app.get("/status", (_req, res) => {
+  const settings = loadSettings();
+  const st = loadState();
 
-  // Binance interval mapping
-  const map = {
-    60: "1m",
-    300: "5m",
-    900: "15m",
-    3600: "1h",
-    14400: "4h",
-    86400: "1d",
-  };
-  const interval = map[intervalSec] || "5m";
+  res.json({
+    ok: true,
+    time_utc: nowUtc(),
+    markets: settings.markets || [],
+    open_positions: st.system?.open_positions || 0,
+    survival: st.pet?.stage || "cryo",
+    last_heartbeat_utc: st.system?.last_heartbeat_utc || null,
+    equity: st.system?.equity || { usd: 0 },
+  });
+});
+
+// /logs: rolling log lines
+app.get("/logs", (_req, res) => {
+  const st = loadState();
+  res.json({ ok: true, lines: st.logs || [] });
+});
+
+// /data: what your dashboard renders (DATA tab + VAULT tab)
+app.get("/data", (_req, res) => {
+  const settings = loadSettings();
+  const st = loadState();
+
+  res.json({
+    ok: true,
+    time_utc: nowUtc(),
+    markets: settings.markets || [],
+    open_positions: st.system?.open_positions || 0,
+    survival: st.pet?.stage || "cryo",
+    last_heartbeat_utc: st.system?.last_heartbeat_utc || null,
+    equity: st.system?.equity || { usd: 0 },
+    settings: {
+      bankroll_gbp: settings.bankroll_gbp,
+      companion_name: settings.companion_name,
+      companion_sex: settings.companion_sex,
+      vault_number: settings.vault_number,
+      risk_mode: settings.risk_mode,
+      paper_enabled: settings.paper_enabled,
+    },
+    pet: st.pet,
+    last_pnl_usd: st.system?.last_pnl_usd || 0,
+  });
+});
+
+// /ohlc: Binance candles (market=BTCUSDT tf=1m|5m|15m|1h limit=500)
+app.get("/ohlc", async (req, res) => {
+  const market = String(req.query?.market || "BTCUSDT").toUpperCase();
+  const tf = String(req.query?.tf || req.query?.timeframe || "5m");
+  const limit = Math.min(1000, Math.max(10, Number(req.query?.limit || 500)));
 
   try {
-    const url =
-      "https://api.binance.com/api/v3/klines?" +
-      new URLSearchParams({ symbol: market, interval, limit: String(limit) }).toString();
+    const url = new URL(BINANCE_BASE + BINANCE_KLINES_PATH);
+    url.searchParams.set("symbol", market);
+    url.searchParams.set("interval", tf);
+    url.searchParams.set("limit", String(limit));
 
-    const r = await fetch(url, { method: "GET" });
-    const raw = await r.json();
+    const r = await fetch(url.toString());
+    const rows = await r.json();
 
-    if (!r.ok) {
-      return res.status(502).json({ ok: false, error: "binance_ohlc_failed", status: r.status, detail: raw });
-    }
+    if (!r.ok) return res.status(502).json({ ok: false, error: "binance_failed", status: r.status, detail: rows });
 
-    // Convert into {t,o,h,l,c,v}
-    const candles = raw.map((k) => ({
-      t: k[0],
-      o: Number(k[1]),
-      h: Number(k[2]),
-      l: Number(k[3]),
-      c: Number(k[4]),
-      v: Number(k[5]),
-    }));
+    // Binance format: [openTime, open, high, low, close, volume, closeTime, ...]
+    const candles = Array.isArray(rows)
+      ? rows.map((k) => ({
+          t: k[0],
+          o: Number(k[1]),
+          h: Number(k[2]),
+          l: Number(k[3]),
+          c: Number(k[4]),
+          v: Number(k[5]),
+        }))
+      : [];
 
-    return res.json({ ok: true, market, interval_sec: intervalSec, candles });
+    res.json({ ok: true, market, tf, candles });
   } catch (e) {
-    return res.status(502).json({ ok: false, error: "binance_fetch_failed", detail: String(e) });
+    res.status(502).json({ ok: false, error: "ohlc_fetch_failed", detail: String(e) });
   }
 });
 
-// ---------- Start ----------
+/* ---------------- Bot ↔ Companion loop ---------------- */
+/**
+ * Bot heartbeat: update status shown in dashboard.
+ * POST /bot/heartbeat
+ * body: { open_positions, equity_usd, last_pnl_usd }
+ */
+app.post("/bot/heartbeat", (req, res) => {
+  const st = loadState();
+  const open_positions = Number(req.body?.open_positions || 0);
+  const equity_usd = Number(req.body?.equity_usd || 0);
+  const last_pnl_usd = Number(req.body?.last_pnl_usd || 0);
+
+  st.system = st.system || {};
+  st.system.open_positions = Number.isFinite(open_positions) ? open_positions : 0;
+  st.system.equity = { usd: Number.isFinite(equity_usd) ? equity_usd : 0 };
+  st.system.last_pnl_usd = Number.isFinite(last_pnl_usd) ? last_pnl_usd : 0;
+  st.system.last_heartbeat_utc = nowUtc();
+
+  // nudge companion mood a bit based on pnl (paper)
+  if (last_pnl_usd > 0) {
+    st.pet.mood = "thriving";
+    st.pet.stage = "active";
+  } else if (last_pnl_usd < 0) {
+    st.pet.mood = st.pet.health < 60 ? "sick" : "weak";
+    st.pet.stage = "active";
+  } else {
+    if (st.pet.stage !== "cryo") st.pet.mood = "idle";
+  }
+
+  st.pet.updated_utc = nowUtc();
+  saveState(st);
+
+  logLine("info", "bot_heartbeat", { open_positions, equity_usd, last_pnl_usd });
+
+  res.json({ ok: true });
+});
+
+/**
+ * Companion update from bot (simple “needs” system).
+ * POST /companion/update
+ * body: { health, hunger, growth, mood, stage }
+ */
+app.post("/companion/update", (req, res) => {
+  const st = loadState();
+
+  const patch = req.body && typeof req.body === "object" ? req.body : {};
+  const h = Number(patch.health);
+  const hu = Number(patch.hunger);
+  const g = Number(patch.growth);
+
+  if (Number.isFinite(h)) st.pet.health = Math.max(0, Math.min(100, h));
+  if (Number.isFinite(hu)) st.pet.hunger = Math.max(0, Math.min(100, hu));
+  if (Number.isFinite(g)) st.pet.growth = Math.max(0, g);
+
+  if (typeof patch.mood === "string" && patch.mood.trim()) st.pet.mood = patch.mood.trim();
+  if (typeof patch.stage === "string" && patch.stage.trim()) st.pet.stage = patch.stage.trim();
+
+  st.pet.updated_utc = nowUtc();
+  saveState(st);
+
+  logLine("info", "companion_update", { health: st.pet.health, hunger: st.pet.hunger, mood: st.pet.mood, stage: st.pet.stage });
+  res.json({ ok: true, pet: st.pet });
+});
+
+/**
+ * Paper trading event feed:
+ * POST /paper/event
+ * body: { pnl_usd, reason }
+ */
+app.post("/paper/event", (req, res) => {
+  const st = loadState();
+
+  const pnl = Number(req.body?.pnl_usd || 0);
+  const reason = String(req.body?.reason || "trade");
+
+  // hunger/health drift
+  // - losses drain health/hunger a bit
+  // - wins restore a bit
+  const delta = pnl > 0 ? 2 : pnl < 0 ? -3 : 0;
+
+  st.pet.hunger = Math.max(0, Math.min(100, st.pet.hunger + delta));
+  st.pet.health = Math.max(0, Math.min(100, st.pet.health + (delta > 0 ? 1 : delta < 0 ? -2 : 0)));
+
+  if (st.pet.health <= 20 || st.pet.hunger <= 15) {
+    st.pet.mood = "sick";
+    st.pet.stage = "cryo";
+  } else if (pnl > 0) {
+    st.pet.mood = "happy";
+    st.pet.stage = "active";
+  } else if (pnl < 0) {
+    st.pet.mood = "weak";
+    st.pet.stage = "active";
+  } else {
+    st.pet.mood = "idle";
+    st.pet.stage = "active";
+  }
+
+  st.pet.updated_utc = nowUtc();
+  saveState(st);
+
+  logLine("info", "paper_event", { pnl_usd: pnl, reason, pet: { health: st.pet.health, hunger: st.pet.hunger, mood: st.pet.mood, stage: st.pet.stage } });
+
+  res.json({ ok: true, pet: st.pet });
+});
+
+/* ---------------- Start ---------------- */
 app.listen(PORT, "0.0.0.0", () => {
   ensureDir();
   logLine("info", "server_started", { port: PORT });
